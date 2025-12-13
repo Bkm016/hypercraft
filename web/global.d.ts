@@ -6,3 +6,13 @@ declare module 'react' {
     [key: `--${string}`]: string | number;
   }
 }
+
+interface RuntimeConfig {
+  apiUrl?: string;
+}
+
+declare global {
+  interface Window {
+    __RUNTIME_CONFIG__?: RuntimeConfig;
+  }
+}

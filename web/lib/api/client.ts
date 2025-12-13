@@ -23,7 +23,14 @@ import type {
   ProcessStatsResponse,
 } from "./types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+function getApiBaseUrl(): string {
+  // Runtime config takes precedence (from public/config.js)
+  if (typeof window !== "undefined" && window.__RUNTIME_CONFIG__?.apiUrl) {
+    return window.__RUNTIME_CONFIG__.apiUrl;
+  }
+  // Fallback to build-time env or default
+  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+}
 
 class ApiClient {
   private accessToken: string | null = null;
@@ -39,7 +46,7 @@ class ApiClient {
   }
 
   getBaseUrl(): string {
-    return API_BASE_URL;
+    return getApiBaseUrl();
   }
 
   // ==================== Token 管理 ====================
@@ -98,7 +105,7 @@ class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = `${getApiBaseUrl()}${endpoint}`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...(options.headers as Record<string, string>),
@@ -192,7 +199,7 @@ class ApiClient {
 
   async authRefresh(req: RefreshRequest): Promise<AuthToken> {
     // 刷新 token 时不使用 Authorization header
-    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    const response = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
@@ -412,7 +419,7 @@ class ApiClient {
 
   // 下载服务配置的日志文件
   async downloadServiceLogFile(id: string): Promise<void> {
-    const url = `${API_BASE_URL}/services/${id}/log-file`;
+    const url = `${getApiBaseUrl()}/services/${id}/log-file`;
     const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${this.accessToken}`,

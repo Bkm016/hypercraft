@@ -1,6 +1,7 @@
 import "./globals.css";
 import Header from "@/components/header";
 import localFont from "next/font/local";
+import Script from "next/script";
 import type { Metadata } from "next";
 import { AuthProvider } from "@/lib/auth";
 import { Inter as FontSans } from "next/font/google";
@@ -40,6 +41,9 @@ export default function RootLayout({
       suppressHydrationWarning
       className={cn(inter.variable, geistMono.variable, "antialiased")}
     >
+      <head>
+        <Script src="/config.js" strategy="beforeInteractive" />
+      </head>
       <body className="bg-bg-white-0 text-text-strong-950">
         <ThemeProvider
           attribute="class"

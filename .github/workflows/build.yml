@@ -175,9 +175,9 @@ jobs:
           cat > "$OUT/start.sh" <<'EOF'
           #!/usr/bin/env bash
           DIR="$(cd "$(dirname "$0")" && pwd)"
-          PORT="${PORT:-3000}"
-          HOSTNAME="${HOSTNAME:-0.0.0.0}"
-          "$DIR/node" "$DIR/server.js" --hostname "$HOSTNAME" --port "$PORT"
+          export PORT="${PORT:-3000}"
+          export HOSTNAME="${HOSTNAME:-0.0.0.0}"
+          exec "$DIR/node" "$DIR/server.js"
           EOF
           chmod +x "$OUT/start.sh"
           tar -czf "$ROOT/$BUNDLE_NAME.tar.gz" -C "$ROOT/dist" "$BUNDLE_NAME"
@@ -265,19 +265,16 @@ jobs:
           $ps1 = Join-Path $out "start.ps1"
           @'
           $p = Split-Path -Parent $MyInvocation.MyCommand.Definition
-          $port = $env:PORT
-          if (-not $port) { $port = 3000 }
-          $hostname = $env:HOSTNAME
-          if (-not $hostname) { $hostname = "0.0.0.0" }
-          & "$p\node.exe" "$p\server.js" --hostname $hostname --port $port
+          if (-not $env:PORT) { $env:PORT = "3000" }
+          if (-not $env:HOSTNAME) { $env:HOSTNAME = "0.0.0.0" }
+          & "$p\node.exe" "$p\server.js"
           '@ | Set-Content -Path $ps1 -Encoding ASCII
           $cmd = Join-Path $out "start.cmd"
           @'
           @echo off
-          setlocal
           if "%PORT%"=="" set PORT=3000
           if "%HOSTNAME%"=="" set HOSTNAME=0.0.0.0
-          "%~dp0node.exe" "%~dp0server.js" --hostname %HOSTNAME% --port %PORT%
+          "%~dp0node.exe" "%~dp0server.js"
           '@ | Set-Content -Path $cmd -Encoding ASCII
           $zipPath = Join-Path $root ($env:BUNDLE_NAME + ".zip")
           if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
