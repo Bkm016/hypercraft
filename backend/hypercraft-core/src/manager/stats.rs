@@ -95,7 +95,6 @@ impl ServiceManager {
         let mut sys = self.system.lock().ok()?;
         let pid_sysinfo = Pid::from(pid as usize);
 
-        // 刷新指定进程的 CPU 和内存信息
         let refresh_kind = ProcessRefreshKind::new().with_cpu().with_memory();
         let found = sys.refresh_process_specifics(pid_sysinfo, refresh_kind);
 
@@ -111,31 +110,86 @@ impl ServiceManager {
     }
 
     /// 批量获取多个进程的资源统计
+    /// 会累加整个进程树（包括子进程）的资源使用，以正确统计通过 shell/sudo 启动的服务。
     pub fn get_processes_stats(&self, pids: &[u32]) -> HashMap<u32, ProcessStats> {
         let mut result = HashMap::new();
+        if pids.is_empty() {
+            return result;
+        }
+
         let mut sys = match self.system.lock() {
             Ok(guard) => guard,
             Err(e) => e.into_inner(),
         };
 
-        // 刷新所有进程以获取准确的 CPU 使用率
+        // 刷新所有进程以获取 CPU 使用率和完整的父子关系
+        // 注意：sysinfo 的 cpu_usage() 需要两次采样才能准确，
+        // 但如果后台刷新任务在运行，这里直接返回已有数据即可
         let refresh_kind = ProcessRefreshKind::new().with_cpu().with_memory();
         sys.refresh_processes_specifics(refresh_kind);
 
         for &pid in pids {
             let pid_sysinfo = Pid::from(pid as usize);
-            if let Some(proc) = sys.process(pid_sysinfo) {
-                result.insert(
-                    pid,
-                    ProcessStats {
-                        pid,
-                        cpu_usage: proc.cpu_usage(),
-                        memory_bytes: proc.memory(),
-                    },
-                );
+
+            // 收集整个进程树
+            let mut tree_pids = Vec::new();
+            Self::collect_process_tree_static(&sys, pid_sysinfo, &mut tree_pids);
+
+            if tree_pids.is_empty() {
+                continue;
             }
+
+            // 累加进程树中所有进程的 CPU 和内存
+            let mut total_cpu: f32 = 0.0;
+            let mut total_memory: u64 = 0;
+
+            for tree_pid in &tree_pids {
+                if let Some(proc) = sys.process(*tree_pid) {
+                    total_cpu += proc.cpu_usage();
+                    total_memory += proc.memory();
+                }
+            }
+
+            result.insert(
+                pid,
+                ProcessStats {
+                    pid,
+                    cpu_usage: total_cpu,
+                    memory_bytes: total_memory,
+                },
+            );
         }
 
         result
+    }
+
+    /// 递归收集进程树中的所有进程 ID（静态版本，用于 stats）
+    fn collect_process_tree_static(sys: &sysinfo::System, pid: Pid, result: &mut Vec<Pid>) {
+        if sys.process(pid).is_some() {
+            result.push(pid);
+        }
+
+        for (child_pid, process) in sys.processes() {
+            if process.parent() == Some(pid) {
+                Self::collect_process_tree_static(sys, *child_pid, result);
+            }
+        }
+    }
+
+    /// 启动后台进程统计刷新任务
+    /// sysinfo 的 cpu_usage() 需要两次采样才能计算准确值，
+    /// 此任务定期刷新进程信息，使 API 调用时能获取准确数据。
+    pub fn start_stats_refresh_task(self: &Arc<Self>, interval_secs: u64) {
+        let manager = Arc::clone(self);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+            loop {
+                interval.tick().await;
+                if let Ok(mut sys) = manager.system.lock() {
+                    let refresh_kind = ProcessRefreshKind::new().with_cpu().with_memory();
+                    sys.refresh_processes_specifics(refresh_kind);
+                }
+            }
+        });
     }
 }

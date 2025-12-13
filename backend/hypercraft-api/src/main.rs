@@ -143,6 +143,9 @@ async fn main() -> anyhow::Result<()> {
     ));
     manager.ensure_base_dirs()?;
 
+    // 启动后台进程统计刷新任务（sysinfo 需要两次采样才能获取准确的 CPU 使用率）
+    manager.start_stats_refresh_task(2);
+
     // 自动启动配置了 auto_start 的服务
     auto_start_services(&manager).await;
 
