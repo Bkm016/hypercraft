@@ -143,9 +143,17 @@ impl ServiceManager {
             let mut total_cpu: f32 = 0.0;
             let mut total_memory: u64 = 0;
 
+            // 单进程 CPU 上限 = 核心数 * 100%
+            let cpu_count = sys.cpus().len().max(1) as f32;
+            let max_cpu_per_process = cpu_count * 100.0;
+
             for tree_pid in &tree_pids {
                 if let Some(proc) = sys.process(*tree_pid) {
-                    total_cpu += proc.cpu_usage();
+                    let cpu = proc.cpu_usage();
+                    // 过滤异常值：sysinfo 首次采样可能返回极高的值
+                    if cpu <= max_cpu_per_process {
+                        total_cpu += cpu;
+                    }
                     total_memory += proc.memory();
                 }
             }
