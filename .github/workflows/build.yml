@@ -1,0 +1,302 @@
+name: build-and-package
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  backend-debian:
+    name: Backend (debian)
+    runs-on: ubuntu-latest
+    container: debian:12
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y git ca-certificates curl build-essential pkg-config libssl-dev
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend -> target
+
+      - name: Build backend
+        run: cargo build --release -p hypercraft-api -p hypercraft-cli
+        working-directory: backend
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-debian
+          path: |
+            backend/target/release/hypercraft-api*
+            backend/target/release/hypercraft-cli*
+          if-no-files-found: error
+
+      - name: Package release files
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p release
+          cp backend/target/release/hypercraft-api release/
+          cp backend/target/release/hypercraft-cli release/
+          tar -czf hypercraft-backend-debian.tar.gz -C release .
+
+      - name: Publish to release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          files: hypercraft-backend-debian.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  backend-windows:
+    name: Backend (windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend -> target
+
+      - name: Build backend
+        run: cargo build --release -p hypercraft-api -p hypercraft-cli
+        working-directory: backend
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-windows
+          path: |
+            backend/target/release/hypercraft-api*.exe
+            backend/target/release/hypercraft-cli*.exe
+          if-no-files-found: error
+
+      - name: Package release files
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir release
+          copy backend\target\release\hypercraft-api.exe release\
+          copy backend\target\release\hypercraft-cli.exe release\
+          Compress-Archive -Path release\* -DestinationPath hypercraft-backend-windows.zip
+
+      - name: Publish to release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          files: hypercraft-backend-windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  frontend-debian:
+    name: Frontend (debian)
+    runs-on: ubuntu-latest
+    container: debian:12
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y git ca-certificates curl
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: web
+
+      - name: Build frontend
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          NEXT_OUTPUT: "standalone"
+          NODE_ENV: production
+        run: pnpm build
+        working-directory: web
+
+      - name: Check build output
+        run: |
+          ls -la .next
+          test -d .next/standalone || (echo ".next/standalone not found" && exit 1)
+          test -d .next/static || (echo ".next/static not found" && exit 1)
+        working-directory: web
+
+      - name: Package offline bundle
+        env:
+          BUNDLE_NAME: web-standalone-debian
+        run: |
+          set -e
+          ROOT="$(pwd)"
+          OUT="$ROOT/dist/$BUNDLE_NAME"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          cp -r .next/standalone/. "$OUT/"
+          mkdir -p "$OUT/.next"
+          cp -r .next/static "$OUT/.next/static"
+          cp -r public "$OUT/public"
+          # pnpm structure causes Next.js standalone to miss runtime dependencies
+          # Manually copy 4 essential packages (~140MB, mostly SWC binary)
+          mkdir -p "$OUT/node_modules"
+          for dep in styled-jsx @swc @next caniuse-lite; do
+            [ -d "$ROOT/node_modules/$dep" ] && [ ! -d "$OUT/node_modules/$dep" ] && \
+              cp -r "$ROOT/node_modules/$dep" "$OUT/node_modules/$dep"
+          done
+          NODE_BIN="$(which node)"
+          cp "$NODE_BIN" "$OUT/node"
+          cat > "$OUT/start.sh" <<'EOF'
+          #!/usr/bin/env bash
+          DIR="$(cd "$(dirname "$0")" && pwd)"
+          PORT="${PORT:-3000}"
+          HOSTNAME="${HOSTNAME:-0.0.0.0}"
+          "$DIR/node" "$DIR/server.js" --hostname "$HOSTNAME" --port "$PORT"
+          EOF
+          chmod +x "$OUT/start.sh"
+          tar -czf "$ROOT/$BUNDLE_NAME.tar.gz" -C "$ROOT/dist" "$BUNDLE_NAME"
+        working-directory: web
+
+      - name: Upload frontend offline artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-debian-offline
+          path: web/web-standalone-debian.tar.gz
+          if-no-files-found: error
+
+      - name: Publish to release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          files: web/web-standalone-debian.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  frontend-windows:
+    name: Frontend (windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: web
+
+      - name: Build frontend
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          NEXT_OUTPUT: "standalone"
+          NODE_ENV: production
+        run: pnpm build
+        working-directory: web
+
+      - name: Check build output
+        run: |
+          if (-Not (Test-Path ".next/standalone")) { Write-Error ".next/standalone not found"; exit 1 }
+          if (-Not (Test-Path ".next/static")) { Write-Error ".next/static not found"; exit 1 }
+          Get-ChildItem .next
+        working-directory: web
+
+      - name: Package offline bundle
+        env:
+          BUNDLE_NAME: web-standalone-windows
+        run: |
+          $root = Get-Location
+          $out = Join-Path $root ("dist\" + $env:BUNDLE_NAME)
+          if (Test-Path $out) { Remove-Item $out -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Get-ChildItem ".next/standalone" -Force | Copy-Item -Destination $out -Recurse -Force
+          New-Item -ItemType Directory -Force -Path (Join-Path $out ".next") | Out-Null
+          Copy-Item ".next/static" -Destination (Join-Path $out ".next/static") -Recurse -Force
+          Copy-Item "public" -Destination (Join-Path $out "public") -Recurse -Force
+          # pnpm structure causes Next.js standalone to miss runtime dependencies
+          # Manually copy 4 essential packages (~140MB, mostly SWC binary)
+          New-Item -ItemType Directory -Force -Path (Join-Path $out "node_modules") | Out-Null
+          "styled-jsx","@swc","@next","caniuse-lite" | ForEach-Object {
+            $src = Join-Path $root "node_modules/$_"
+            $dst = Join-Path $out "node_modules/$_"
+            if ((Test-Path $src) -and (-not (Test-Path $dst))) {
+              Copy-Item $src -Destination $dst -Recurse -Force
+            }
+          }
+          $nodePath = (Get-Command node).Source
+          Copy-Item $nodePath -Destination (Join-Path $out "node.exe") -Force
+          $ps1 = Join-Path $out "start.ps1"
+          @'
+          $p = Split-Path -Parent $MyInvocation.MyCommand.Definition
+          $port = $env:PORT
+          if (-not $port) { $port = 3000 }
+          $hostname = $env:HOSTNAME
+          if (-not $hostname) { $hostname = "0.0.0.0" }
+          & "$p\node.exe" "$p\server.js" --hostname $hostname --port $port
+          '@ | Set-Content -Path $ps1 -Encoding ASCII
+          $cmd = Join-Path $out "start.cmd"
+          @'
+          @echo off
+          setlocal
+          if "%PORT%"=="" set PORT=3000
+          if "%HOSTNAME%"=="" set HOSTNAME=0.0.0.0
+          "%~dp0node.exe" "%~dp0server.js" --hostname %HOSTNAME% --port %PORT%
+          '@ | Set-Content -Path $cmd -Encoding ASCII
+          $zipPath = Join-Path $root ($env:BUNDLE_NAME + ".zip")
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+          Compress-Archive -Path $out -DestinationPath $zipPath
+        working-directory: web
+
+      - name: Upload frontend offline artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-windows-offline
+          path: web/web-standalone-windows.zip
+          if-no-files-found: error
+
+      - name: Publish to release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          files: web/web-standalone-windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

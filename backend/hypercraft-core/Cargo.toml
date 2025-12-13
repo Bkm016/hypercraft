@@ -1,0 +1,30 @@
+[package]
+name = "hypercraft-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+sysinfo.workspace = true
+fs2.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+serde_with.workspace = true
+futures.workspace = true
+tokio-stream.workspace = true
+async-stream.workspace = true
+encoding_rs.workspace = true
+portable-pty = "0.8"
+jsonwebtoken.workspace = true
+bcrypt.workspace = true
+vte = "0.14"
+tokio-cron-scheduler.workspace = true
+cron.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

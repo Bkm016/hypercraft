@@ -1,0 +1,7 @@
+data/
+target/
+**/target/
+**/*.log
+.env
+api.log
+api.err

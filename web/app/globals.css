@@ -1,0 +1,309 @@
+@import 'tailwindcss';
+@import '@xterm/xterm/css/xterm.css';
+@plugin 'tailwindcss-animate';
+
+/* 修复 Windows 上 hover 效果不生效的问题 */
+/* Tailwind v4 默认使用 @media (hover: hover) 包裹 hover 状态 */
+/* 某些 Windows 设备可能被错误识别为不支持 hover */
+@media (hover: none) {
+  @layer base {
+    *:hover {
+      /* 强制所有 hover 效果在非触控设备上也能工作 */
+    }
+  }
+}
+
+/* 覆盖 Tailwind v4 的 hover 媒体查询行为 */
+@custom-variant hover (&:hover);
+
+/* ========================================
+   动态 CSS 变量 - 在 :root 和 .dark 中定义
+   这些变量会在主题切换时动态更新
+   ======================================== */
+
+:root {
+  /* 语义化背景色 */
+  --bg-white-0: #ffffff;
+  --bg-weak-50: #f7f7f7;
+  --bg-soft-200: #ebebeb;
+  --bg-sub-300: #d1d1d1;
+  --bg-surface-800: #292929;
+  --bg-strong-950: #171717;
+
+  /* 语义化文字色 */
+  --text-strong-950: #171717;
+  --text-sub-600: #5c5c5c;
+  --text-soft-400: #a3a3a3;
+  --text-disabled-300: #d1d1d1;
+  --text-white-0: #ffffff;
+
+  /* 语义化边框色 */
+  --stroke-strong-950: #171717;
+  --stroke-sub-300: #d1d1d1;
+  --stroke-soft-200: #ebebeb;
+  --stroke-white-0: #ffffff;
+
+  /* 主色 - 使用深色中性色调，更现代简洁 */
+  --primary-darker: #0a0a0a;
+  --primary-dark: #171717;
+  --primary-base: #262626;
+  --primary-alpha-24: rgba(38, 38, 38, 0.24);
+  --primary-alpha-16: rgba(38, 38, 38, 0.16);
+  --primary-alpha-10: rgba(38, 38, 38, 0.1);
+
+  /* 状态色 - Success */
+  --success-dark: #0b4627;
+  --success-base: #1fc16b;
+  --success-light: #c2f5da;
+  --success-lighter: #e0faec;
+
+  /* 状态色 - Error */
+  --error-dark: #681219;
+  --error-base: #fb3748;
+  --error-light: #ffc0c5;
+  --error-lighter: #ffebec;
+
+  /* 状态色 - Warning/Away */
+  --away-dark: #624c18;
+  --away-base: #f5b622;
+  --away-light: #fbe398;
+  --away-lighter: #fef4cf;
+
+  /* Faded */
+  --faded-dark: #292929;
+  --faded-base: #7b7b7b;
+  --faded-light: #ebebeb;
+  --faded-lighter: #f5f5f5;
+}
+
+.dark {
+  /* 语义化背景色 - 反转 */
+  --bg-white-0: #171717;
+  --bg-weak-50: #1c1c1c;
+  --bg-soft-200: #333333;
+  --bg-sub-300: #5c5c5c;
+  --bg-surface-800: #ebebeb;
+  --bg-strong-950: #ffffff;
+
+  /* 语义化文字色 - 反转 */
+  --text-strong-950: #ffffff;
+  --text-sub-600: #a3a3a3;
+  --text-soft-400: #7b7b7b;
+  --text-disabled-300: #5c5c5c;
+  --text-white-0: #171717;
+
+  /* 语义化边框色 - 反转 */
+  --stroke-strong-950: #ffffff;
+  --stroke-sub-300: #5c5c5c;
+  --stroke-soft-200: #333333;
+  --stroke-white-0: #171717;
+
+  /* 状态色在暗色模式下调亮 */
+  --success-dark: #84ebb4;
+  --success-base: #3ee089;
+  --success-light: rgba(31, 193, 107, 0.24);
+  --success-lighter: rgba(31, 193, 107, 0.16);
+
+  --error-dark: #ff97a0;
+  --error-base: #ff6875;
+  --error-light: rgba(251, 55, 72, 0.24);
+  --error-lighter: rgba(251, 55, 72, 0.16);
+
+  --away-dark: #fbe398;
+  --away-base: #f5c846;
+  --away-light: rgba(245, 182, 34, 0.24);
+  --away-lighter: rgba(245, 182, 34, 0.16);
+
+  --faded-dark: #d1d1d1;
+  --faded-base: #7b7b7b;
+  --faded-light: rgba(163, 163, 163, 0.24);
+  --faded-lighter: rgba(163, 163, 163, 0.16);
+
+  /* 暗色模式主色 - 保持深色背景以便白字可见 */
+  --primary-darker: #171717;
+  --primary-dark: #262626;
+  --primary-base: #333333;
+  --primary-alpha-24: rgba(51, 51, 51, 0.24);
+  --primary-alpha-16: rgba(51, 51, 51, 0.16);
+  --primary-alpha-10: rgba(51, 51, 51, 0.1);
+}
+
+/* ========================================
+   Tailwind v4 @theme 配置
+   使用 var() 引用动态 CSS 变量
+   ======================================== */
+
+@theme {
+  /* 背景色 */
+  --color-bg-white-0: var(--bg-white-0);
+  --color-bg-weak-50: var(--bg-weak-50);
+  --color-bg-soft-200: var(--bg-soft-200);
+  --color-bg-sub-300: var(--bg-sub-300);
+  --color-bg-surface-800: var(--bg-surface-800);
+  --color-bg-strong-950: var(--bg-strong-950);
+
+  /* 文字色 */
+  --color-text-strong-950: var(--text-strong-950);
+  --color-text-sub-600: var(--text-sub-600);
+  --color-text-soft-400: var(--text-soft-400);
+  --color-text-disabled-300: var(--text-disabled-300);
+  --color-text-white-0: var(--text-white-0);
+
+  /* 边框色 */
+  --color-stroke-strong-950: var(--stroke-strong-950);
+  --color-stroke-sub-300: var(--stroke-sub-300);
+  --color-stroke-soft-200: var(--stroke-soft-200);
+  --color-stroke-white-0: var(--stroke-white-0);
+
+  /* 主色 */
+  --color-primary-darker: var(--primary-darker);
+  --color-primary-dark: var(--primary-dark);
+  --color-primary-base: var(--primary-base);
+  --color-primary-alpha-24: var(--primary-alpha-24);
+  --color-primary-alpha-16: var(--primary-alpha-16);
+  --color-primary-alpha-10: var(--primary-alpha-10);
+
+  /* 成功色 */
+  --color-success-dark: var(--success-dark);
+  --color-success-base: var(--success-base);
+  --color-success-light: var(--success-light);
+  --color-success-lighter: var(--success-lighter);
+
+  /* 错误色 */
+  --color-error-dark: var(--error-dark);
+  --color-error-base: var(--error-base);
+  --color-error-light: var(--error-light);
+  --color-error-lighter: var(--error-lighter);
+
+  /* 警告色 */
+  --color-away-dark: var(--away-dark);
+  --color-away-base: var(--away-base);
+  --color-away-light: var(--away-light);
+  --color-away-lighter: var(--away-lighter);
+
+  /* Faded */
+  --color-faded-dark: var(--faded-dark);
+  --color-faded-base: var(--faded-base);
+  --color-faded-light: var(--faded-light);
+  --color-faded-lighter: var(--faded-lighter);
+
+  /* 静态颜色 - 不随主题变化 */
+  --color-static-black: #171717;
+  --color-static-white: #ffffff;
+
+  /* 基础颜色保留供组件库使用 */
+  --color-neutral-950: #171717;
+  --color-neutral-900: #1c1c1c;
+  --color-neutral-800: #292929;
+  --color-neutral-700: #333333;
+  --color-neutral-600: #5c5c5c;
+  --color-neutral-500: #7b7b7b;
+  --color-neutral-400: #a3a3a3;
+  --color-neutral-300: #d1d1d1;
+  --color-neutral-200: #ebebeb;
+  --color-neutral-100: #f5f5f5;
+  --color-neutral-50: #f7f7f7;
+  --color-neutral-0: #ffffff;
+
+  --color-sky-950: #0c4a6e;
+  --color-sky-900: #075985;
+  --color-sky-800: #0369a1;
+  --color-sky-700: #0284c7;
+  --color-sky-600: #0ea5e9;
+  --color-sky-500: #0ea5e9;
+  --color-sky-400: #38bdf8;
+  --color-sky-300: #7dd3fc;
+  --color-sky-200: #bae6fd;
+  --color-sky-100: #e0f2fe;
+  --color-sky-50: #f0f9ff;
+
+  --color-green-500: #1fc16b;
+  --color-green-400: #3ee089;
+  --color-red-500: #fb3748;
+  --color-red-400: #ff6875;
+  --color-yellow-500: #f5b622;
+  --color-yellow-400: #f5c846;
+  --color-blue-500: #335cff;
+  --color-purple-500: #875ff6;
+  --color-orange-500: #fa7319;
+  --color-pink-500: #f763a6;
+  --color-teal-500: #15c1b1;
+
+  /* 字体 */
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* ========================================
+   全局样式
+   ======================================== */
+
+body {
+  background-color: var(--bg-white-0);
+  color: var(--text-strong-950);
+  font-family: var(--font-sans);
+  margin: 0;
+  padding: 0;
+}
+
+/* 终端区域 - 始终保持深色 */
+.terminal-dark {
+  --terminal-bg: #1e1e1e;
+  --terminal-text: #d4d4d4;
+  background-color: var(--terminal-bg);
+  color: var(--terminal-text);
+}
+
+/* Remix Icon 缩放修复 */
+.remixicon path {
+  transform: scale(0.8996);
+  transform-origin: center;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-weak-50);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--stroke-soft-200);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--stroke-sub-300);
+}
+
+/* xterm.js 终端样式 */
+.xterm {
+  padding: 8px;
+  /* 固定尺寸，不被 flex 拉伸 */
+  flex-shrink: 0;
+  height: auto !important;
+}
+
+.xterm-viewport {
+  overflow-y: auto !important;
+}
+
+.xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
