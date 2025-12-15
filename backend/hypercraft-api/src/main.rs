@@ -171,7 +171,7 @@ async fn main() -> anyhow::Result<()> {
     let password_limiter = Arc::new(RateLimiter::new(5, Duration::from_secs(300)));
 
     let state = AppState {
-        manager,
+        manager: manager.clone(),
         user_manager,
         scheduler: scheduler.clone(),
         dev_token: config.dev_token.clone(),
@@ -183,23 +183,29 @@ async fn main() -> anyhow::Result<()> {
 
     let app = app_router(state, config.cors_origins.clone());
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
-    
+
     // Graceful shutdown 处理
     let server = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
         .with_graceful_shutdown(shutdown_signal());
-    
+
     info!("server ready, press Ctrl+C to stop");
-    
+
     if let Err(e) = server.await {
         tracing::error!(error = %e, "server error");
     }
-    
+
+    // 停止所有运行中的服务
+    info!("stopping all running services...");
+    if let Err(e) = manager.stop_all_services().await {
+        tracing::warn!(error = %e, "failed to stop services");
+    }
+
     // 关闭调度器
     info!("shutting down scheduler...");
     if let Err(e) = scheduler.shutdown().await {
         tracing::warn!(error = %e, "failed to shutdown scheduler");
     }
-    
+
     info!("server stopped");
     Ok(())
 }

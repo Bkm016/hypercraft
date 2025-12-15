@@ -255,6 +255,55 @@ impl ServiceManager {
         }
         self.start(id).await
     }
+
+    /// 停止所有正在运行的服务（用于 shutdown）
+    #[instrument(skip(self))]
+    pub async fn stop_all_services(&self) -> Result<()> {
+        let services = self.list_services().await?;
+        let running: Vec<_> = services
+            .into_iter()
+            .filter(|s| s.state == ServiceState::Running)
+            .collect();
+
+        if running.is_empty() {
+            return Ok(());
+        }
+
+        tracing::info!("stopping {} running services...", running.len());
+
+        for summary in running {
+            tracing::info!("stopping service: {}", summary.id);
+            if let Err(e) = self.stop(&summary.id).await {
+                tracing::warn!("failed to stop service {}: {}", summary.id, e);
+            }
+        }
+
+        // 等待所有服务停止，最多等待 5 秒
+        let start = tokio::time::Instant::now();
+        let timeout = Duration::from_secs(5);
+
+        loop {
+            let services = self.list_services().await?;
+            let still_running = services
+                .iter()
+                .filter(|s| s.state == ServiceState::Running)
+                .count();
+
+            if still_running == 0 {
+                tracing::info!("all services stopped");
+                break;
+            }
+
+            if start.elapsed() > timeout {
+                tracing::warn!("{} services still running after timeout", still_running);
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        Ok(())
+    }
 }
 
 // ============================================================================
