@@ -111,7 +111,7 @@ pub async fn download_log_file(
         ApiError::new(
             "IoError",
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("failed to read log file '{}': {}", log_path, e),
+            "failed to read log file".to_string(),
         )
     })?;
 

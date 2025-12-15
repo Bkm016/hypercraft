@@ -172,6 +172,7 @@ async fn main() -> anyhow::Result<()> {
     let login_limiter = Arc::new(RateLimiter::new(10, Duration::from_secs(60)));
     let refresh_limiter = Arc::new(RateLimiter::new(5, Duration::from_secs(300)));
     let auth_limiter = Arc::new(RateLimiter::new(10, Duration::from_secs(60)));
+    let password_limiter = Arc::new(RateLimiter::new(5, Duration::from_secs(300)));
 
     let state = AppState {
         manager,
@@ -181,6 +182,7 @@ async fn main() -> anyhow::Result<()> {
         login_limiter,
         refresh_limiter,
         auth_limiter,
+        password_limiter,
     };
 
     let app = app_router(state, config.cors_origins.clone());

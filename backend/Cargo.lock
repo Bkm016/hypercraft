@@ -1042,6 +1042,7 @@ dependencies = [
  "jsonwebtoken",
  "serde",
  "serde_json",
+ "subtle",
  "sysinfo",
  "tempfile",
  "tokio",

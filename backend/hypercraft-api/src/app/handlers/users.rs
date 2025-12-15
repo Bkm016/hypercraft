@@ -146,6 +146,13 @@ pub async fn change_password(
     Path(id): Path<String>,
     Json(req): Json<ChangePasswordRequest>,
 ) -> Result<Json<UserSummary>, ApiError> {
+    // 限流检查（按用户 ID，防止暴力破解当前密码）
+    if !state.password_limiter.allow(&id).await {
+        return Err(ApiError::too_many_requests(
+            "too many password change attempts, try again later",
+        ));
+    }
+
     // 密码强度验证由 core 层 UserManager::change_password 执行
     let is_admin = auth.is_admin();
     let is_self = auth.claims.sub == id;

@@ -9,6 +9,7 @@ use axum::http::Request;
 use axum::middleware::Next;
 use axum::response::Response;
 use hypercraft_core::{TokenClaims, TokenType, UserManager};
+use subtle::ConstantTimeEq;
 
 use super::error::ApiError;
 use super::state::AppState;
@@ -173,9 +174,9 @@ pub async fn auth_middleware(
 		}
 	};
 
-	// 首先检查是否是 DevToken
+	// 首先检查是否是 DevToken（使用常量时间比较防止时序攻击）
 	if let Some(ref dev_token) = state.dev_token {
-		if &token == dev_token {
+		if token.as_bytes().ct_eq(dev_token.as_bytes()).into() {
 			let auth_info = AuthInfo {
 				claims: UserManager::dev_token_claims(),
 			};

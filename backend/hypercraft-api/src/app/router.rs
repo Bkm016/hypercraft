@@ -35,7 +35,11 @@ fn build_cors_layer(cors_origins: Vec<String>) -> CorsLayer {
         .allow_credentials(true);
 
     if cors_origins.is_empty() {
-        // 空列表 = 允许所有来源
+        // 未配置时允许所有来源（开发环境友好，但生产环境应配置 HC_CORS_ORIGINS）
+        tracing::warn!(
+            "HC_CORS_ORIGINS not configured, allowing all origins. \
+             Set HC_CORS_ORIGINS in production for security."
+        );
         base.allow_origin(AllowOrigin::any())
             .allow_credentials(false) // any() 不能与 credentials(true) 共用
     } else {
