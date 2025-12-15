@@ -183,18 +183,15 @@ pub async fn auth_middleware(
 			request.extensions_mut().insert(auth_info);
 			return Ok(next.run(request).await);
 		}
-		// DevToken 配置了但不匹配，记录失败（可能是暴力破解尝试）
-		state.auth_limiter.record(&client_ip).await;
+		// DevToken 不匹配，继续尝试 JWT 验证（不在此处记录失败）
 	}
 
 	// 尝试验证为 JWT UserToken
 	let claims = match state.user_manager.verify_token(&token).await {
 		Ok(c) => c,
 		Err(_) => {
-			// JWT 验证失败，记录（如果前面没有 DevToken 配置）
-			if state.dev_token.is_none() {
-				state.auth_limiter.record(&client_ip).await;
-			}
+			// JWT 验证失败，记录认证失败
+			state.auth_limiter.record(&client_ip).await;
 			return Err(ApiError::unauthorized());
 		}
 	};
