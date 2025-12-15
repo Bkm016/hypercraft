@@ -1,5 +1,6 @@
 use axum::body::Body;
-use axum::extract::State;
+use axum::extract::{FromRequestParts, Path, State};
+use axum::http::request::Parts;
 use axum::http::Request;
 use axum::middleware::Next;
 use axum::response::Response;
@@ -27,6 +28,107 @@ impl AuthInfo {
             TokenType::User => self.claims.service_ids.contains(&service_id.to_string()),
             TokenType::Refresh => false,
         }
+    }
+}
+
+/// 要求管理员权限的 Extractor
+/// 
+/// 用法：
+/// ```ignore
+/// pub async fn create_service(
+///     RequireAdmin(auth): RequireAdmin,
+///     // ...
+/// ) -> Result<..., ApiError> { }
+/// ```
+#[derive(Debug, Clone)]
+pub struct RequireAdmin(pub AuthInfo);
+
+impl<S> FromRequestParts<S> for RequireAdmin
+where
+    S: Send + Sync,
+{
+    type Rejection = ApiError;
+
+    fn from_request_parts<'life0, 'life1, 'async_trait>(
+        parts: &'life0 mut Parts,
+        _state: &'life1 S,
+    ) -> ::core::pin::Pin<
+        Box<dyn ::core::future::Future<Output = Result<Self, Self::Rejection>> + ::core::marker::Send + 'async_trait>,
+    >
+    where
+        'life0: 'async_trait,
+        'life1: 'async_trait,
+        Self: 'async_trait,
+    {
+        Box::pin(async move {
+            let auth = parts
+                .extensions
+                .get::<AuthInfo>()
+                .cloned()
+                .ok_or_else(ApiError::unauthorized)?;
+
+            if !auth.is_admin() {
+                return Err(ApiError::forbidden("admin access required"));
+            }
+
+            Ok(RequireAdmin(auth))
+        })
+    }
+}
+
+/// 服务权限检查 Extractor - 从路径参数 :id 提取服务 ID 并验证权限
+/// 
+/// 用法：
+/// ```ignore
+/// pub async fn start_service(
+///     State(state): State<AppState>,
+///     ServicePermission { auth, service_id }: ServicePermission,
+/// ) -> Result<..., ApiError> { }
+/// ```
+#[derive(Debug, Clone)]
+pub struct ServicePermission {
+    pub auth: AuthInfo,
+    pub service_id: String,
+}
+
+impl<S> FromRequestParts<S> for ServicePermission
+where
+    S: Send + Sync,
+{
+    type Rejection = ApiError;
+
+    fn from_request_parts<'life0, 'life1, 'async_trait>(
+        parts: &'life0 mut Parts,
+        state: &'life1 S,
+    ) -> ::core::pin::Pin<
+        Box<dyn ::core::future::Future<Output = Result<Self, Self::Rejection>> + ::core::marker::Send + 'async_trait>,
+    >
+    where
+        'life0: 'async_trait,
+        'life1: 'async_trait,
+        Self: 'async_trait,
+    {
+        Box::pin(async move {
+            let auth = parts
+                .extensions
+                .get::<AuthInfo>()
+                .cloned()
+                .ok_or_else(ApiError::unauthorized)?;
+
+            // 从路径参数提取服务 ID
+            let Path(service_id) = Path::<String>::from_request_parts(parts, state)
+                .await
+                .map_err(|_| ApiError::bad_request("missing service id in path"))?;
+
+            if !auth.can_access_service(&service_id) {
+                return Err(ApiError::forbidden(format!(
+                    "no permission to access service: {}",
+                    service_id
+                )));
+            }
+
+            Ok(ServicePermission { auth, service_id })
+        })
     }
 }
 

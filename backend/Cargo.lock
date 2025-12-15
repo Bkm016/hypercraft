@@ -1112,6 +1112,7 @@ dependencies = [
  "tokio-cron-scheduler",
  "tokio-stream",
  "tracing",
+ "tracing-subscriber",
  "uuid",
  "vte",
 ]

@@ -2,6 +2,7 @@ mod client;
 mod ops;
 
 use clap::{Parser, Subcommand};
+use hypercraft_core::init_tracing;
 use ops::{
     add_user_service, attach_service, create_service, create_service_interactive, create_user,
     delete_service, delete_user, get_schedule, get_service, get_user, list_services, list_users,
@@ -10,7 +11,6 @@ use ops::{
     toggle_schedule, update_service, update_user_password, OutputFormat, ScheduleAction,
 };
 use std::path::PathBuf;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// CLI wrapper around the Hypercraft HTTP API.
 #[derive(Parser)]
@@ -334,16 +334,6 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-fn init_tracing() {
-    let fmt_layer = tracing_subscriber::fmt::layer().with_target(false);
-    let filter =
-        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(fmt_layer)
-        .init();
 }
 
 #[cfg(test)]

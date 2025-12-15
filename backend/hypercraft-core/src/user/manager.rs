@@ -1,8 +1,8 @@
 //! 用户管理器：核心结构和用户 CRUD 操作
 
+use super::crypto::hash_password;
 use super::models::*;
 use crate::error::{Result, ServiceError};
-use bcrypt::{hash, DEFAULT_COST};
 use chrono::Utc;
 use serde_json;
 use std::collections::HashMap;
@@ -149,12 +149,7 @@ impl UserManager {
         }
 
         Self::validate_password_strength(&req.password)?;
-        // 哈希密码（在阻塞线程中执行，避免阻塞 Tokio 运行时）
-        let password = req.password.clone();
-        let password_hash = tokio::task::spawn_blocking(move || hash(&password, DEFAULT_COST))
-            .await
-            .map_err(|e| ServiceError::Other(e.to_string()))?
-            .map_err(|e| ServiceError::Other(e.to_string()))?;
+        let password_hash = hash_password(&req.password).await?;
 
         let now = Utc::now();
         let mut user = User {
@@ -288,15 +283,10 @@ impl UserManager {
         let mut user = self.get_user(id).await?;
 
         let mut bumped = false;
-        // 更新密码（在阻塞线程中执行 bcrypt）
+        // 更新密码
         if let Some(password) = req.password {
             Self::validate_password_strength(&password)?;
-            let password_clone = password.clone();
-            user.password_hash =
-                tokio::task::spawn_blocking(move || hash(&password_clone, DEFAULT_COST))
-                    .await
-                    .map_err(|e| ServiceError::Other(e.to_string()))?
-                    .map_err(|e| ServiceError::Other(e.to_string()))?;
+            user.password_hash = hash_password(&password).await?;
             bumped = true;
         }
 

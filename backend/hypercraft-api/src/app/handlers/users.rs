@@ -5,7 +5,6 @@ use axum::http::StatusCode;
 use axum::Json;
 use hypercraft_core::{CreateUserRequest, UpdateUserRequest, UserSummary};
 use serde::Deserialize;
-use serde_json::{json, Value};
 
 use super::super::error::ApiError;
 use super::super::middleware::AuthInfo;
@@ -15,42 +14,37 @@ use axum::Extension;
 /// GET /users - 列出所有用户
 pub async fn list_users(
     State(state): State<AppState>,
-) -> Result<(StatusCode, Json<Value>), ApiError> {
+) -> Result<Json<Vec<UserSummary>>, ApiError> {
     let users = state.user_manager.list_users().await?;
     let summaries: Vec<UserSummary> = users.into_iter().map(|u| u.into()).collect();
-    Ok((StatusCode::OK, Json(json!(summaries))))
+    Ok(Json(summaries))
 }
 
 /// POST /users - 创建用户
 pub async fn create_user(
     State(state): State<AppState>,
     Json(req): Json<CreateUserRequest>,
-) -> Result<(StatusCode, Json<Value>), ApiError> {
+) -> Result<(StatusCode, Json<UserSummary>), ApiError> {
     if req.username.is_empty() {
         return Err(ApiError::bad_request("username is required"));
     }
     if req.password.is_empty() {
         return Err(ApiError::bad_request("password is required"));
     }
-    if req.password.len() < 8 {
-        return Err(ApiError::bad_request(
-            "password must be at least 8 characters and include upper/lowercase plus number or symbol",
-        ));
-    }
-
+    // 密码强度验证由 core 层 UserManager::create_user 执行
     let user = state.user_manager.create_user(req).await?;
     let summary: UserSummary = user.into();
-    Ok((StatusCode::CREATED, Json(json!(summary))))
+    Ok((StatusCode::CREATED, Json(summary)))
 }
 
 /// GET /users/:id - 获取用户详情
 pub async fn get_user(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<(StatusCode, Json<Value>), ApiError> {
+) -> Result<Json<UserSummary>, ApiError> {
     let user = state.user_manager.get_user(&id).await?;
     let summary: UserSummary = user.into();
-    Ok((StatusCode::OK, Json(json!(summary))))
+    Ok(Json(summary))
 }
 
 /// PUT /users/:id - 更新用户
@@ -58,18 +52,11 @@ pub async fn update_user(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(req): Json<UpdateUserRequest>,
-) -> Result<(StatusCode, Json<Value>), ApiError> {
-    if let Some(ref password) = req.password {
-        if password.len() < 8 {
-            return Err(ApiError::bad_request(
-                "password must be at least 8 characters and include upper/lowercase plus number or symbol",
-            ));
-        }
-    }
-
+) -> Result<Json<UserSummary>, ApiError> {
+    // 密码强度验证由 core 层 UserManager::update_user 执行
     let user = state.user_manager.update_user(&id, req).await?;
     let summary: UserSummary = user.into();
-    Ok((StatusCode::OK, Json(json!(summary))))
+    Ok(Json(summary))
 }
 
 /// DELETE /users/:id - 删除用户
@@ -92,7 +79,7 @@ pub async fn set_user_services(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(req): Json<ServiceIdsRequest>,
-) -> Result<(StatusCode, Json<Value>), ApiError> {
+) -> Result<Json<UserSummary>, ApiError> {
     let user = state
         .user_manager
         .update_user(
@@ -104,14 +91,14 @@ pub async fn set_user_services(
         )
         .await?;
     let summary: UserSummary = user.into();
-    Ok((StatusCode::OK, Json(json!(summary))))
+    Ok(Json(summary))
 }
 
 /// POST /users/:user_id/services/:service_id - 添加服务权限
 pub async fn add_user_service(
     State(state): State<AppState>,
     Path((user_id, service_id)): Path<(String, String)>,
-) -> Result<(StatusCode, Json<Value>), ApiError> {
+) -> Result<Json<UserSummary>, ApiError> {
     // 验证服务是否存在
     let _ = state.manager.load_manifest(&service_id).await?;
 
@@ -120,20 +107,20 @@ pub async fn add_user_service(
         .add_service_permission(&user_id, &service_id)
         .await?;
     let summary: UserSummary = user.into();
-    Ok((StatusCode::OK, Json(json!(summary))))
+    Ok(Json(summary))
 }
 
 /// DELETE /users/:user_id/services/:service_id - 移除服务权限
 pub async fn remove_user_service(
     State(state): State<AppState>,
     Path((user_id, service_id)): Path<(String, String)>,
-) -> Result<(StatusCode, Json<Value>), ApiError> {
+) -> Result<Json<UserSummary>, ApiError> {
     let user = state
         .user_manager
         .remove_service_permission(&user_id, &service_id)
         .await?;
     let summary: UserSummary = user.into();
-    Ok((StatusCode::OK, Json(json!(summary))))
+    Ok(Json(summary))
 }
 
 /// 修改密码请求
@@ -150,13 +137,8 @@ pub async fn change_password(
     Extension(auth): Extension<AuthInfo>,
     Path(id): Path<String>,
     Json(req): Json<ChangePasswordRequest>,
-) -> Result<(StatusCode, Json<Value>), ApiError> {
-    if req.new_password.len() < 6 {
-        return Err(ApiError::bad_request(
-            "password must be at least 8 characters and include upper/lowercase plus number or symbol",
-        ));
-    }
-
+) -> Result<Json<UserSummary>, ApiError> {
+    // 密码强度验证由 core 层 UserManager::change_password 执行
     let is_admin = auth.is_admin();
     let is_self = auth.claims.sub == id;
     if !is_admin && !is_self {
@@ -175,5 +157,5 @@ pub async fn change_password(
         )
         .await?;
     let summary: UserSummary = user.into();
-    Ok((StatusCode::OK, Json(json!(summary))))
+    Ok(Json(summary))
 }

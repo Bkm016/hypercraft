@@ -9,19 +9,8 @@ use serde_json::json;
 use std::str::FromStr;
 use tracing::instrument;
 
-use crate::app::middleware::AuthInfo;
+use crate::app::middleware::{AuthInfo, RequireAdmin, ServicePermission};
 use crate::app::{ApiError, AppState};
-
-/// 检查用户是否有权限访问指定服务
-fn check_service_permission(auth: &AuthInfo, service_id: &str) -> Result<(), ApiError> {
-    if !auth.can_access_service(service_id) {
-        return Err(ApiError::forbidden(format!(
-            "no permission to access service: {}",
-            service_id
-        )));
-    }
-    Ok(())
-}
 
 #[instrument(skip_all)]
 pub async fn list_services(
@@ -46,13 +35,9 @@ pub async fn list_services(
 #[instrument(skip_all)]
 pub async fn create_service(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
+    RequireAdmin(_): RequireAdmin,
     Json(payload): Json<ServiceManifest>,
 ) -> Result<Json<ServiceManifest>, ApiError> {
-    // 只有管理员可以创建服务
-    if !auth.is_admin() {
-        return Err(ApiError::forbidden("only admin can create services"));
-    }
     let svc = state.manager.create_service(payload).await?;
 
     // 同步调度任务
@@ -68,12 +53,10 @@ pub async fn create_service(
 #[instrument(skip_all)]
 pub async fn get_service(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
-    Path(id): Path<String>,
+    ServicePermission { service_id, .. }: ServicePermission,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    check_service_permission(&auth, &id)?;
-    let manifest = state.manager.load_manifest(&id).await?;
-    let status = state.manager.status(&id).await?;
+    let manifest = state.manager.load_manifest(&service_id).await?;
+    let status = state.manager.status(&service_id).await?;
     Ok(Json(json!({
         "manifest": manifest,
         "status": status
@@ -83,14 +66,9 @@ pub async fn get_service(
 #[instrument(skip_all)]
 pub async fn delete_service(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
+    RequireAdmin(_): RequireAdmin,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    // 只有管理员可以删除服务
-    if !auth.is_admin() {
-        return Err(ApiError::forbidden("only admin can delete services"));
-    }
-
     // 移除调度任务
     let _ = state.scheduler.remove_schedule(&id).await;
 
@@ -101,14 +79,10 @@ pub async fn delete_service(
 #[instrument(skip_all)]
 pub async fn update_service(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
+    RequireAdmin(_): RequireAdmin,
     Path(id): Path<String>,
     Json(payload): Json<ServiceManifest>,
 ) -> Result<StatusCode, ApiError> {
-    // 只有管理员可以更新服务配置
-    if !auth.is_admin() {
-        return Err(ApiError::forbidden("only admin can update services"));
-    }
     state.manager.update_service(&id, payload.clone()).await?;
 
     // 同步调度任务
@@ -127,66 +101,54 @@ pub async fn update_service(
 #[instrument(skip_all)]
 pub async fn start_service(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
-    Path(id): Path<String>,
+    ServicePermission { service_id, .. }: ServicePermission,
 ) -> Result<Json<ServiceStatus>, ApiError> {
-    check_service_permission(&auth, &id)?;
-    let status = state.manager.start(&id).await?;
+    let status = state.manager.start(&service_id).await?;
     Ok(Json(status))
 }
 
 #[instrument(skip_all)]
 pub async fn stop_service(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
-    Path(id): Path<String>,
+    ServicePermission { service_id, .. }: ServicePermission,
 ) -> Result<Json<ServiceStatus>, ApiError> {
-    check_service_permission(&auth, &id)?;
-    let status = state.manager.stop(&id).await?;
+    let status = state.manager.stop(&service_id).await?;
     Ok(Json(status))
 }
 
 #[instrument(skip_all)]
 pub async fn shutdown_service(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
-    Path(id): Path<String>,
+    ServicePermission { service_id, .. }: ServicePermission,
 ) -> Result<Json<ServiceStatus>, ApiError> {
-    check_service_permission(&auth, &id)?;
-    let status = state.manager.shutdown(&id).await?;
+    let status = state.manager.shutdown(&service_id).await?;
     Ok(Json(status))
 }
 
 #[instrument(skip_all)]
 pub async fn kill_service(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
-    Path(id): Path<String>,
+    ServicePermission { service_id, .. }: ServicePermission,
 ) -> Result<Json<ServiceStatus>, ApiError> {
-    check_service_permission(&auth, &id)?;
-    let status = state.manager.kill(&id).await?;
+    let status = state.manager.kill(&service_id).await?;
     Ok(Json(status))
 }
 
 #[instrument(skip_all)]
 pub async fn restart_service(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
-    Path(id): Path<String>,
+    ServicePermission { service_id, .. }: ServicePermission,
 ) -> Result<Json<ServiceStatus>, ApiError> {
-    check_service_permission(&auth, &id)?;
-    let status = state.manager.restart(&id).await?;
+    let status = state.manager.restart(&service_id).await?;
     Ok(Json(status))
 }
 
 #[instrument(skip_all)]
 pub async fn get_status(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
-    Path(id): Path<String>,
+    ServicePermission { service_id, .. }: ServicePermission,
 ) -> Result<Json<ServiceStatus>, ApiError> {
-    check_service_permission(&auth, &id)?;
-    let status = state.manager.status(&id).await?;
+    let status = state.manager.status(&service_id).await?;
     Ok(Json(status))
 }
 
@@ -207,12 +169,9 @@ pub struct UpdateScheduleRequest {
 #[instrument(skip_all)]
 pub async fn get_schedule(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
-    Path(id): Path<String>,
+    ServicePermission { service_id, .. }: ServicePermission,
 ) -> Result<Json<ScheduleResponse>, ApiError> {
-    check_service_permission(&auth, &id)?;
-
-    let manifest = state.manager.load_manifest(&id).await?;
+    let manifest = state.manager.load_manifest(&service_id).await?;
     let next_run = manifest
         .schedule
         .as_ref()
@@ -230,15 +189,10 @@ pub async fn get_schedule(
 #[instrument(skip_all)]
 pub async fn update_schedule(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
+    RequireAdmin(_): RequireAdmin,
     Path(id): Path<String>,
     Json(payload): Json<UpdateScheduleRequest>,
 ) -> Result<Json<ScheduleResponse>, ApiError> {
-    // 只有管理员可以修改定时配置
-    if !auth.is_admin() {
-        return Err(ApiError::forbidden("only admin can modify schedule"));
-    }
-
     // 验证 cron 表达式
     if let Some(schedule) = &payload.schedule {
         if schedule.enabled && !schedule.cron.is_empty() {

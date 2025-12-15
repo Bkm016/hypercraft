@@ -1,9 +1,9 @@
 //! 密码管理：验证强度、修改密码
 
+use super::crypto::{hash_password, verify_password};
 use super::models::*;
 use super::UserManager;
 use crate::error::{Result, ServiceError};
-use bcrypt::{hash, verify, DEFAULT_COST};
 use chrono::Utc;
 use tracing::instrument;
 
@@ -50,16 +50,11 @@ impl UserManager {
         let mut user = self.get_user(id).await?;
 
         Self::validate_password_strength(new_password)?;
-        // 校验旧密码（非强制模式，在阻塞线程中执行 bcrypt verify）
+        // 校验旧密码（非强制模式）
         if !force {
             let current = current_password
                 .ok_or_else(|| ServiceError::Unauthorized("current password required".into()))?;
-            let current_owned = current.to_string();
-            let hash_clone = user.password_hash.clone();
-            let valid = tokio::task::spawn_blocking(move || verify(&current_owned, &hash_clone))
-                .await
-                .map_err(|e| ServiceError::Other(e.to_string()))?
-                .map_err(|e| ServiceError::Other(e.to_string()))?;
+            let valid = verify_password(current, &user.password_hash).await?;
             if !valid {
                 return Err(ServiceError::Unauthorized(
                     "invalid current password".into(),
@@ -67,12 +62,8 @@ impl UserManager {
             }
         }
 
-        // 在阻塞线程中执行 bcrypt hash
-        let new_password_owned = new_password.to_string();
-        user.password_hash = tokio::task::spawn_blocking(move || hash(&new_password_owned, DEFAULT_COST))
-            .await
-            .map_err(|e| ServiceError::Other(e.to_string()))?
-            .map_err(|e| ServiceError::Other(e.to_string()))?;
+        // 哈希新密码
+        user.password_hash = hash_password(new_password).await?;
         user.token_version = user.token_version.saturating_add(1);
         Self::rotate_refresh_nonce(&mut user);
         user.updated_at = Some(Utc::now());

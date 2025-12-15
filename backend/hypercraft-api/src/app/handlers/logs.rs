@@ -13,7 +13,7 @@ use std::convert::Infallible;
 use std::time::Duration;
 use tracing::instrument;
 
-use crate::app::middleware::AuthInfo;
+use crate::app::middleware::{AuthInfo, ServicePermission};
 use crate::app::{ApiError, AppState};
 
 #[derive(Debug, Deserialize)]
@@ -31,7 +31,7 @@ pub async fn get_logs(
     Path(id): Path<String>,
     Query(query): Query<LogQuery>,
 ) -> Result<Response, ApiError> {
-    // 权限检查
+    // 权限检查（需要同时访问 Path 和 Query，无法使用 ServicePermission extractor）
     if !auth.can_access_service(&id) {
         return Err(ApiError::forbidden(format!(
             "no permission to access service: {}",
@@ -80,26 +80,17 @@ pub async fn get_logs(
 #[instrument(skip_all)]
 pub async fn download_log_file(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
-    Path(id): Path<String>,
+    ServicePermission { service_id, .. }: ServicePermission,
 ) -> Result<Response, ApiError> {
-    tracing::info!(service_id = %id, "download_log_file called");
-
-    // 权限检查
-    if !auth.can_access_service(&id) {
-        return Err(ApiError::forbidden(format!(
-            "no permission to access service: {}",
-            id
-        )));
-    }
+    tracing::info!(service_id = %service_id, "download_log_file called");
 
     // 获取服务 manifest
     let manifest = state
         .manager
-        .load_manifest(&id)
+        .load_manifest(&service_id)
         .await
         .map_err(|e| {
-            tracing::error!(service_id = %id, error = %e, "failed to load manifest");
+            tracing::error!(service_id = %service_id, error = %e, "failed to load manifest");
             ApiError::from(e)
         })?;
 
@@ -108,15 +99,15 @@ pub async fn download_log_file(
         .log_path
         .as_ref()
         .ok_or_else(|| {
-            tracing::warn!(service_id = %id, "service has no log_path configured");
+            tracing::warn!(service_id = %service_id, "service has no log_path configured");
             ApiError::bad_request("service has no log_path configured")
         })?;
 
-    tracing::info!(service_id = %id, log_path = %log_path, "reading log file");
+    tracing::info!(service_id = %service_id, log_path = %log_path, "reading log file");
 
     // 读取日志文件内容
     let content = tokio::fs::read(log_path).await.map_err(|e| {
-        tracing::error!(service_id = %id, log_path = %log_path, error = %e, "failed to read log file");
+        tracing::error!(service_id = %service_id, log_path = %log_path, error = %e, "failed to read log file");
         ApiError::new(
             "IoError",
             StatusCode::INTERNAL_SERVER_ERROR,

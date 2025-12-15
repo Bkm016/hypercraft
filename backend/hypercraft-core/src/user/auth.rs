@@ -1,9 +1,9 @@
 //! JWT 认证：登录、刷新、验证、签发 token
 
+use super::crypto::verify_password;
 use super::models::*;
 use super::UserManager;
 use crate::error::{Result, ServiceError};
-use bcrypt::verify;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use tracing::{info, instrument, warn};
@@ -17,13 +17,8 @@ impl UserManager {
             .await?
             .ok_or_else(|| ServiceError::Unauthorized("invalid credentials".into()))?;
 
-        // 验证密码（在阻塞线程中执行 bcrypt verify）
-        let password_owned = password.to_string();
-        let hash_clone = user.password_hash.clone();
-        let valid = tokio::task::spawn_blocking(move || verify(&password_owned, &hash_clone))
-            .await
-            .map_err(|e| ServiceError::Other(e.to_string()))?
-            .map_err(|e| ServiceError::Other(e.to_string()))?;
+        // 验证密码
+        let valid = verify_password(password, &user.password_hash).await?;
 
         if !valid {
             warn!(username = %username, "login failed: invalid password");

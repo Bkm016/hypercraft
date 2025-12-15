@@ -31,8 +31,20 @@ impl ServiceScheduler {
         }
     }
 
-    /// 启动调度器
-    pub async fn start(&self) -> Result<()> {
+    /// 启动调度器（懒加载，仅在需要时启动）
+    async fn ensure_started(&self) -> Result<()> {
+        let guard = self.scheduler.read().await;
+        if guard.is_some() {
+            return Ok(());
+        }
+        drop(guard);
+
+        let mut write_guard = self.scheduler.write().await;
+        // 双重检查
+        if write_guard.is_some() {
+            return Ok(());
+        }
+
         let scheduler = JobScheduler::new()
             .await
             .map_err(|e| ServiceError::Other(format!("failed to create scheduler: {e}")))?;
@@ -42,8 +54,15 @@ impl ServiceScheduler {
             .await
             .map_err(|e| ServiceError::Other(format!("failed to start scheduler: {e}")))?;
 
-        *self.scheduler.write().await = Some(scheduler);
-        info!("service scheduler started");
+        *write_guard = Some(scheduler);
+        info!("service scheduler started (lazy)");
+        Ok(())
+    }
+
+    /// 启动调度器（兼容旧 API，现在是空操作）
+    pub async fn start(&self) -> Result<()> {
+        // 调度器现在是懒加载的，这里不再预启动
+        info!("scheduler configured (will start when first schedule is added)");
         Ok(())
     }
 
@@ -73,6 +92,9 @@ impl ServiceScheduler {
 
         // 验证 cron 表达式
         Self::validate_cron(&schedule.cron)?;
+
+        // 懒加载：仅在需要时启动调度器
+        self.ensure_started().await?;
 
         let scheduler_guard = self.scheduler.read().await;
         let scheduler = scheduler_guard

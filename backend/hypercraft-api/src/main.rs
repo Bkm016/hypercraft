@@ -2,7 +2,7 @@ mod app;
 
 use app::{app_router, AppState, RateLimiter};
 use dotenvy::dotenv;
-use hypercraft_core::{ServiceManager, ServiceScheduler, UserManager};
+use hypercraft_core::{init_tracing, ServiceManager, ServiceScheduler, UserManager};
 use std::collections::HashSet;
 use std::env;
 use std::net::SocketAddr;
@@ -10,7 +10,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Debug, Clone)]
 struct ApiConfig {
@@ -144,7 +143,8 @@ async fn main() -> anyhow::Result<()> {
     manager.ensure_base_dirs()?;
 
     // 启动后台进程统计刷新任务（sysinfo 需要两次采样才能获取准确的 CPU 使用率）
-    manager.start_stats_refresh_task(2);
+    // 间隔 5 秒，减少 CPU 开销
+    manager.start_stats_refresh_task(5);
 
     // 自动启动配置了 auto_start 的服务
     auto_start_services(&manager).await;
@@ -173,7 +173,7 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState {
         manager,
         user_manager,
-        scheduler,
+        scheduler: scheduler.clone(),
         dev_token: config.dev_token.clone(),
         login_limiter,
         refresh_limiter,
@@ -181,20 +181,50 @@ async fn main() -> anyhow::Result<()> {
 
     let app = app_router(state, config.cors_origins.clone());
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-        .await?;
-
+    
+    // Graceful shutdown 处理
+    let server = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+        .with_graceful_shutdown(shutdown_signal());
+    
+    info!("server ready, press Ctrl+C to stop");
+    
+    if let Err(e) = server.await {
+        tracing::error!(error = %e, "server error");
+    }
+    
+    // 关闭调度器
+    info!("shutting down scheduler...");
+    if let Err(e) = scheduler.shutdown().await {
+        tracing::warn!(error = %e, "failed to shutdown scheduler");
+    }
+    
+    info!("server stopped");
     Ok(())
 }
 
-fn init_tracing() {
-    let fmt_layer = tracing_subscriber::fmt::layer().with_target(false);
-    let filter =
-        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(fmt_layer)
-        .init();
+/// 等待关闭信号 (Ctrl+C / SIGTERM)
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => info!("received Ctrl+C, shutting down..."),
+        _ = terminate => info!("received SIGTERM, shutting down..."),
+    }
 }
 
 /// 自动启动配置了 auto_start: true 的服务

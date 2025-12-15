@@ -1,6 +1,7 @@
 //! 用户认证与授权模块
 
 mod auth;
+mod crypto;
 mod manager;
 mod models;
 mod password;

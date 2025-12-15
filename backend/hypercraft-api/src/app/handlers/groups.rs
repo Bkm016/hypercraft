@@ -6,7 +6,7 @@ use hypercraft_core::ServiceGroup;
 use serde::Deserialize;
 use tracing::instrument;
 
-use crate::app::middleware::AuthInfo;
+use crate::app::middleware::{AuthInfo, RequireAdmin};
 use crate::app::{ApiError, AppState};
 
 /// 列出所有分组
@@ -30,12 +30,9 @@ pub struct CreateGroupRequest {
 #[instrument(skip_all)]
 pub async fn create_group(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
+    RequireAdmin(_): RequireAdmin,
     Json(payload): Json<CreateGroupRequest>,
 ) -> Result<Json<ServiceGroup>, ApiError> {
-    if !auth.is_admin() {
-        return Err(ApiError::forbidden("only admin can create groups"));
-    }
     let group = state
         .manager
         .create_group(payload.id, payload.name, payload.color)
@@ -53,13 +50,10 @@ pub struct UpdateGroupRequest {
 #[instrument(skip_all)]
 pub async fn update_group(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
+    RequireAdmin(_): RequireAdmin,
     Path(id): Path<String>,
     Json(payload): Json<UpdateGroupRequest>,
 ) -> Result<Json<ServiceGroup>, ApiError> {
-    if !auth.is_admin() {
-        return Err(ApiError::forbidden("only admin can update groups"));
-    }
     let group = state
         .manager
         .update_group(&id, payload.name, payload.color)
@@ -71,12 +65,9 @@ pub async fn update_group(
 #[instrument(skip_all)]
 pub async fn delete_group(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
+    RequireAdmin(_): RequireAdmin,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    if !auth.is_admin() {
-        return Err(ApiError::forbidden("only admin can delete groups"));
-    }
     state.manager.delete_group(&id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -90,12 +81,9 @@ pub struct ReorderGroupsRequest {
 #[instrument(skip_all)]
 pub async fn reorder_groups(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
+    RequireAdmin(_): RequireAdmin,
     Json(payload): Json<ReorderGroupsRequest>,
 ) -> Result<Json<Vec<ServiceGroup>>, ApiError> {
-    if !auth.is_admin() {
-        return Err(ApiError::forbidden("only admin can reorder groups"));
-    }
     let groups = state.manager.reorder_groups(payload.group_ids).await?;
     Ok(Json(groups))
 }
@@ -109,13 +97,10 @@ pub struct UpdateServiceTagsRequest {
 #[instrument(skip_all)]
 pub async fn update_service_tags(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
+    RequireAdmin(_): RequireAdmin,
     Path(id): Path<String>,
     Json(payload): Json<UpdateServiceTagsRequest>,
 ) -> Result<StatusCode, ApiError> {
-    if !auth.is_admin() {
-        return Err(ApiError::forbidden("only admin can update service tags"));
-    }
     state.manager.update_service_tags(&id, payload.tags).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -129,13 +114,10 @@ pub struct UpdateServiceGroupRequest {
 #[instrument(skip_all)]
 pub async fn update_service_group(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
+    RequireAdmin(_): RequireAdmin,
     Path(id): Path<String>,
     Json(payload): Json<UpdateServiceGroupRequest>,
 ) -> Result<StatusCode, ApiError> {
-    if !auth.is_admin() {
-        return Err(ApiError::forbidden("only admin can update service group"));
-    }
     state
         .manager
         .update_service_group(&id, payload.group)
@@ -160,12 +142,9 @@ pub struct ServiceOrderItem {
 #[instrument(skip_all)]
 pub async fn reorder_services(
     State(state): State<AppState>,
-    Extension(auth): Extension<AuthInfo>,
+    RequireAdmin(_): RequireAdmin,
     Json(payload): Json<ReorderServicesRequest>,
 ) -> Result<StatusCode, ApiError> {
-    if !auth.is_admin() {
-        return Err(ApiError::forbidden("only admin can reorder services"));
-    }
     let orders: Vec<(String, Option<String>, i32)> = payload
         .services
         .into_iter()
