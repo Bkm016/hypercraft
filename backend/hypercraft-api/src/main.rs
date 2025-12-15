@@ -170,7 +170,7 @@ async fn main() -> anyhow::Result<()> {
     user_manager.ensure_dirs()?;
 
     let login_limiter = Arc::new(RateLimiter::new(10, Duration::from_secs(60)));
-    let refresh_limiter = Arc::new(RateLimiter::new(30, Duration::from_secs(300)));
+    let refresh_limiter = Arc::new(RateLimiter::new(5, Duration::from_secs(300)));
     let auth_limiter = Arc::new(RateLimiter::new(10, Duration::from_secs(60)));
 
     let state = AppState {

@@ -47,4 +47,37 @@ impl RateLimiter {
         }
         allowed
     }
+
+    /// 检查是否超限（不记录）
+    pub async fn check(&self, key: &str) -> bool {
+        let now = Instant::now();
+        let buckets = self.buckets.lock().await;
+        if let Some(entry) = buckets.get(key) {
+            let valid_count = entry.iter().filter(|t| now.duration_since(**t) < self.window).count();
+            valid_count < self.limit
+        } else {
+            true
+        }
+    }
+
+    /// 记录一次访问（不检查限制）
+    pub async fn record(&self, key: &str) {
+        let now = Instant::now();
+        let key_owned = key.to_string();
+        let mut buckets = self.buckets.lock().await;
+        let entry = buckets.entry(key_owned.clone()).or_default();
+        entry.retain(|t| now.duration_since(*t) < self.window);
+        entry.push(now);
+        // 清理空桶
+        if entry.is_empty() {
+            buckets.remove(&key_owned);
+        }
+        // 定期全量清理
+        if buckets.len() > self.sweep_threshold {
+            buckets.retain(|_, times| {
+                times.retain(|t| now.duration_since(*t) < self.window);
+                !times.is_empty()
+            });
+        }
+    }
 }

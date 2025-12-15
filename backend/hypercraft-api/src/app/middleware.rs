@@ -157,16 +157,20 @@ pub async fn auth_middleware(
 
 	let client_ip = extract_client_ip(&request);
 
-	// 检查是否超过认证失败限制（防止暴力破解）
-	if !state.auth_limiter.allow(&client_ip).await {
+	// 检查该 IP 是否因认证失败过多而被封禁
+	if !state.auth_limiter.check(&client_ip).await {
 		return Err(ApiError::too_many_requests(
-			"too many authentication attempts, try again later",
+			"too many authentication failures, try again later",
 		));
 	}
 
 	let token = match extract_token(&request) {
 		Some(t) => t,
-		None => return Err(ApiError::unauthorized()),
+		None => {
+			// 记录认证失败
+			state.auth_limiter.record(&client_ip).await;
+			return Err(ApiError::unauthorized());
+		}
 	};
 
 	// 首先检查是否是 DevToken
@@ -178,12 +182,20 @@ pub async fn auth_middleware(
 			request.extensions_mut().insert(auth_info);
 			return Ok(next.run(request).await);
 		}
+		// DevToken 配置了但不匹配，记录失败（可能是暴力破解尝试）
+		state.auth_limiter.record(&client_ip).await;
 	}
 
 	// 尝试验证为 JWT UserToken
 	let claims = match state.user_manager.verify_token(&token).await {
 		Ok(c) => c,
-		Err(_) => return Err(ApiError::unauthorized()),
+		Err(_) => {
+			// JWT 验证失败，记录（如果前面没有 DevToken 配置）
+			if state.dev_token.is_none() {
+				state.auth_limiter.record(&client_ip).await;
+			}
+			return Err(ApiError::unauthorized());
+		}
 	};
 
 	if claims.token_type == TokenType::Refresh {
