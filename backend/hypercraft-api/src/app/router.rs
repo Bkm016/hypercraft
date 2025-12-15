@@ -13,7 +13,7 @@ use super::handlers::{
     stop_service, update_group, update_schedule, update_service, update_service_group,
     update_service_tags, update_user, validate_cron,
 };
-use super::middleware::{auth_middleware, require_admin};
+use super::middleware::auth_middleware;
 use super::state::AppState;
 
 /// 根据配置的来源列表构建 CorsLayer
@@ -56,7 +56,7 @@ pub fn app_router(state: AppState, cors_origins: Vec<String>) -> Router {
         .route("/auth/login", post(login))
         .route("/auth/refresh", post(refresh));
 
-    // 用户管理端点（需要管理员权限）
+    // 用户管理端点（需要管理员权限，由 handler 中的 RequireAdmin extractor 检查）
     let admin_routes = Router::new()
         .route("/users", get(list_users).post(create_user))
         .route(
@@ -67,8 +67,7 @@ pub fn app_router(state: AppState, cors_origins: Vec<String>) -> Router {
         .route(
             "/users/:user_id/services/:service_id",
             post(add_user_service).delete(remove_user_service),
-        )
-        .layer(from_fn_with_state(state.clone(), require_admin));
+        );
 
     // 服务端点（需要认证，权限由 handler 检查）
     let service_routes = Router::new()

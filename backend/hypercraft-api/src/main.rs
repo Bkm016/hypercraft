@@ -126,7 +126,9 @@ impl ApiConfig {
     }
 }
 
-#[tokio::main]
+/// 限制 worker 线程数，避免在高核心数服务器上创建过多线程
+/// 可通过环境变量 TOKIO_WORKER_THREADS 覆盖
+#[tokio::main(worker_threads = 4)]
 async fn main() -> anyhow::Result<()> {
     // 优先读取 .env（若存在）
     let _ = dotenv();
@@ -169,6 +171,7 @@ async fn main() -> anyhow::Result<()> {
 
     let login_limiter = Arc::new(RateLimiter::new(10, Duration::from_secs(60)));
     let refresh_limiter = Arc::new(RateLimiter::new(30, Duration::from_secs(300)));
+    let auth_limiter = Arc::new(RateLimiter::new(10, Duration::from_secs(60)));
 
     let state = AppState {
         manager,
@@ -177,6 +180,7 @@ async fn main() -> anyhow::Result<()> {
         dev_token: config.dev_token.clone(),
         login_limiter,
         refresh_limiter,
+        auth_limiter,
     };
 
     let app = app_router(state, config.cors_origins.clone());

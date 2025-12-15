@@ -24,7 +24,6 @@ portable-pty = "0.8"
 jsonwebtoken.workspace = true
 bcrypt.workspace = true
 vte = "0.14"
-tokio-cron-scheduler.workspace = true
 cron.workspace = true
 
 [dev-dependencies]

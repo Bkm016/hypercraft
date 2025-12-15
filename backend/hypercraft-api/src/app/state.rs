@@ -14,4 +14,6 @@ pub struct AppState {
     pub login_limiter: Arc<crate::app::RateLimiter>,
     /// 刷新接口限流（按 IP）
     pub refresh_limiter: Arc<crate::app::RateLimiter>,
+    /// Token 认证限流（按 IP，防止 DevToken 暴力破解）
+    pub auth_limiter: Arc<crate::app::RateLimiter>,
 }

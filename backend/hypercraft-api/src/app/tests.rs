@@ -22,6 +22,7 @@ async fn health_ok_without_auth() {
         dev_token: None,
         login_limiter: Arc::new(crate::app::RateLimiter::new(100, Duration::from_secs(60))),
         refresh_limiter: Arc::new(crate::app::RateLimiter::new(100, Duration::from_secs(60))),
+        auth_limiter: Arc::new(crate::app::RateLimiter::new(100, Duration::from_secs(60))),
     };
     let app = app_router(state, Vec::new());
     let response = app

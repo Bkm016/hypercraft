@@ -1,22 +1,24 @@
 //! 定时调度器：基于 cron 表达式的服务定时启动/重启/停止。
+//! 
+//! 使用纯 tokio 实现，不依赖重量级的 tokio-cron-scheduler。
 
 use crate::error::{Result, ServiceError};
 use crate::manifest::{Schedule, ScheduleAction};
 use crate::ServiceManager;
+use chrono::Utc;
+use cron::Schedule as CronSchedule;
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tokio_cron_scheduler::{Job, JobScheduler, JobSchedulerError};
+use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
-use uuid::Uuid;
 
 /// 调度器：管理所有服务的定时任务
 #[derive(Clone)]
 pub struct ServiceScheduler {
-    /// 内部调度器实例
-    scheduler: Arc<RwLock<Option<JobScheduler>>>,
-    /// 服务 ID -> Job UUID 的映射
-    jobs: Arc<RwLock<HashMap<String, Uuid>>>,
+    /// 服务 ID -> 任务句柄
+    jobs: Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
     /// ServiceManager 引用
     manager: ServiceManager,
 }
@@ -25,58 +27,25 @@ impl ServiceScheduler {
     /// 创建新的调度器
     pub fn new(manager: ServiceManager) -> Self {
         Self {
-            scheduler: Arc::new(RwLock::new(None)),
             jobs: Arc::new(RwLock::new(HashMap::new())),
             manager,
         }
     }
 
-    /// 启动调度器（懒加载，仅在需要时启动）
-    async fn ensure_started(&self) -> Result<()> {
-        let guard = self.scheduler.read().await;
-        if guard.is_some() {
-            return Ok(());
-        }
-        drop(guard);
-
-        let mut write_guard = self.scheduler.write().await;
-        // 双重检查
-        if write_guard.is_some() {
-            return Ok(());
-        }
-
-        let scheduler = JobScheduler::new()
-            .await
-            .map_err(|e| ServiceError::Other(format!("failed to create scheduler: {e}")))?;
-
-        scheduler
-            .start()
-            .await
-            .map_err(|e| ServiceError::Other(format!("failed to start scheduler: {e}")))?;
-
-        *write_guard = Some(scheduler);
-        info!("service scheduler started (lazy)");
-        Ok(())
-    }
-
-    /// 启动调度器（兼容旧 API，现在是空操作）
+    /// 启动调度器（现在是空操作，任务按需创建）
     pub async fn start(&self) -> Result<()> {
-        // 调度器现在是懒加载的，这里不再预启动
-        info!("scheduler configured (will start when first schedule is added)");
+        info!("scheduler ready");
         Ok(())
     }
 
-    /// 停止调度器
+    /// 停止调度器，取消所有任务
     pub async fn shutdown(&self) -> Result<()> {
-        let mut guard = self.scheduler.write().await;
-        if let Some(mut scheduler) = guard.take() {
-            scheduler
-                .shutdown()
-                .await
-                .map_err(|e| ServiceError::Other(format!("failed to shutdown scheduler: {e}")))?;
-            info!("service scheduler stopped");
+        let mut jobs = self.jobs.write().await;
+        for (id, handle) in jobs.drain() {
+            handle.abort();
+            info!("cancelled scheduled task for service: {}", id);
         }
-        self.jobs.write().await.clear();
+        info!("scheduler stopped");
         Ok(())
     }
 
@@ -90,37 +59,41 @@ impl ServiceScheduler {
             return Ok(());
         }
 
-        // 验证 cron 表达式
-        Self::validate_cron(&schedule.cron)?;
-
-        // 懒加载：仅在需要时启动调度器
-        self.ensure_started().await?;
-
-        let scheduler_guard = self.scheduler.read().await;
-        let scheduler = scheduler_guard
-            .as_ref()
-            .ok_or_else(|| ServiceError::Other("scheduler not started".into()))?;
+        // 验证并解析 cron 表达式
+        let cron_schedule = Self::parse_cron(&schedule.cron)?;
 
         let manager = self.manager.clone();
         let sid = service_id.to_string();
         let action = schedule.action.clone();
         let cron_expr = schedule.cron.clone();
 
-        let job = Job::new_async(cron_expr.as_str(), move |_uuid, _lock| {
-            let manager = manager.clone();
-            let sid = sid.clone();
-            let action = action.clone();
-            Box::pin(async move {
+        // 启动定时任务
+        let handle = tokio::spawn(async move {
+            loop {
+                // 计算下次执行时间
+                let now = Utc::now();
+                let next = match cron_schedule.upcoming(Utc).next() {
+                    Some(t) => t,
+                    None => {
+                        warn!("no upcoming schedule for service {}", sid);
+                        break;
+                    }
+                };
+
+                // 等待到下次执行时间
+                let duration = (next - now).to_std().unwrap_or_default();
+                tokio::time::sleep(duration).await;
+
+                // 执行任务
                 info!("scheduled task triggered for service: {}", sid);
                 let result = match action {
                     ScheduleAction::Start => {
-                        // 仅在服务未运行时启动
                         match manager.status(&sid).await {
                             Ok(status) if status.state == crate::models::ServiceState::Stopped => {
                                 manager.start(&sid).await.map(|_| ())
                             }
                             Ok(_) => {
-                                info!("service {} is already running, skipping scheduled start", sid);
+                                info!("service {} already running, skipping scheduled start", sid);
                                 Ok(())
                             }
                             Err(e) => Err(e),
@@ -128,13 +101,12 @@ impl ServiceScheduler {
                     }
                     ScheduleAction::Restart => manager.restart(&sid).await.map(|_| ()),
                     ScheduleAction::Stop => {
-                        // 仅在服务运行时停止
                         match manager.status(&sid).await {
                             Ok(status) if status.state == crate::models::ServiceState::Running => {
                                 manager.stop(&sid).await.map(|_| ())
                             }
                             Ok(_) => {
-                                info!("service {} is not running, skipping scheduled stop", sid);
+                                info!("service {} not running, skipping scheduled stop", sid);
                                 Ok(())
                             }
                             Err(e) => Err(e),
@@ -143,36 +115,18 @@ impl ServiceScheduler {
                 };
 
                 if let Err(e) = result {
-                    error!("scheduled {} failed for service {}: {}", 
-                        match action {
-                            ScheduleAction::Start => "start",
-                            ScheduleAction::Restart => "restart",
-                            ScheduleAction::Stop => "stop",
-                        },
-                        sid, e
+                    error!(
+                        "scheduled {:?} failed for service {}: {}",
+                        action, sid, e
                     );
                 }
-            })
-        })
-        .map_err(|e: JobSchedulerError| {
-            ServiceError::Other(format!("failed to create job: {e}"))
-        })?;
-
-        let job_id = job.guid();
-        scheduler.add(job).await.map_err(|e| {
-            ServiceError::Other(format!("failed to add job to scheduler: {e}"))
-        })?;
-
-        self.jobs.write().await.insert(service_id.to_string(), job_id);
-        info!(
-            "scheduled task added for service {}: {} ({})",
-            service_id,
-            schedule.cron,
-            match schedule.action {
-                ScheduleAction::Start => "start",
-                ScheduleAction::Restart => "restart",
-                ScheduleAction::Stop => "stop",
             }
+        });
+
+        self.jobs.write().await.insert(service_id.to_string(), handle);
+        info!(
+            "scheduled task added for service {}: {} ({:?})",
+            service_id, cron_expr, schedule.action
         );
 
         Ok(())
@@ -180,18 +134,10 @@ impl ServiceScheduler {
 
     /// 移除指定服务的定时任务
     pub async fn remove_schedule(&self, service_id: &str) -> Result<()> {
-        let job_id = self.jobs.write().await.remove(service_id);
-
-        if let Some(job_id) = job_id {
-            let scheduler_guard = self.scheduler.read().await;
-            if let Some(scheduler) = scheduler_guard.as_ref() {
-                scheduler.remove(&job_id).await.map_err(|e| {
-                    ServiceError::Other(format!("failed to remove job: {e}"))
-                })?;
-                info!("scheduled task removed for service: {}", service_id);
-            }
+        if let Some(handle) = self.jobs.write().await.remove(service_id) {
+            handle.abort();
+            info!("scheduled task removed for service: {}", service_id);
         }
-
         Ok(())
     }
 
@@ -220,27 +166,23 @@ impl ServiceScheduler {
         Ok(())
     }
 
-    /// 获取所有已注册的定时任务
-    pub async fn list_schedules(&self) -> Vec<String> {
-        self.jobs.read().await.keys().cloned().collect()
-    }
-
     /// 验证 cron 表达式
     pub fn validate_cron(cron: &str) -> Result<()> {
-        use cron::Schedule;
-        cron.parse::<Schedule>().map_err(|e| {
-            ServiceError::InvalidSchedule(format!("invalid cron expression '{}': {}", cron, e))
-        })?;
+        Self::parse_cron(cron)?;
         Ok(())
+    }
+
+    /// 解析 cron 表达式
+    fn parse_cron(cron: &str) -> Result<CronSchedule> {
+        CronSchedule::from_str(cron).map_err(|e| {
+            ServiceError::InvalidSchedule(format!("invalid cron expression '{}': {}", cron, e))
+        })
     }
 
     /// 获取下次执行时间
     pub fn next_run(cron: &str) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
-        use cron::Schedule;
-        let schedule = cron.parse::<Schedule>().map_err(|e| {
-            ServiceError::InvalidSchedule(format!("invalid cron expression: {}", e))
-        })?;
-        Ok(schedule.upcoming(chrono::Utc).next())
+        let schedule = Self::parse_cron(cron)?;
+        Ok(schedule.upcoming(Utc).next())
     }
 }
 

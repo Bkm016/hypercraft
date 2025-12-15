@@ -7,13 +7,14 @@ use hypercraft_core::{CreateUserRequest, UpdateUserRequest, UserSummary};
 use serde::Deserialize;
 
 use super::super::error::ApiError;
-use super::super::middleware::AuthInfo;
+use super::super::middleware::{AuthInfo, RequireAdmin};
 use super::super::state::AppState;
 use axum::Extension;
 
 /// GET /users - 列出所有用户
 pub async fn list_users(
     State(state): State<AppState>,
+    RequireAdmin(_): RequireAdmin,
 ) -> Result<Json<Vec<UserSummary>>, ApiError> {
     let users = state.user_manager.list_users().await?;
     let summaries: Vec<UserSummary> = users.into_iter().map(|u| u.into()).collect();
@@ -23,6 +24,7 @@ pub async fn list_users(
 /// POST /users - 创建用户
 pub async fn create_user(
     State(state): State<AppState>,
+    RequireAdmin(_): RequireAdmin,
     Json(req): Json<CreateUserRequest>,
 ) -> Result<(StatusCode, Json<UserSummary>), ApiError> {
     if req.username.is_empty() {
@@ -40,6 +42,7 @@ pub async fn create_user(
 /// GET /users/:id - 获取用户详情
 pub async fn get_user(
     State(state): State<AppState>,
+    RequireAdmin(_): RequireAdmin,
     Path(id): Path<String>,
 ) -> Result<Json<UserSummary>, ApiError> {
     let user = state.user_manager.get_user(&id).await?;
@@ -50,6 +53,7 @@ pub async fn get_user(
 /// PUT /users/:id - 更新用户
 pub async fn update_user(
     State(state): State<AppState>,
+    RequireAdmin(_): RequireAdmin,
     Path(id): Path<String>,
     Json(req): Json<UpdateUserRequest>,
 ) -> Result<Json<UserSummary>, ApiError> {
@@ -62,6 +66,7 @@ pub async fn update_user(
 /// DELETE /users/:id - 删除用户
 pub async fn delete_user(
     State(state): State<AppState>,
+    RequireAdmin(_): RequireAdmin,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
     state.user_manager.delete_user(&id).await?;
@@ -77,6 +82,7 @@ pub struct ServiceIdsRequest {
 /// PUT /users/:id/services - 设置用户的服务权限
 pub async fn set_user_services(
     State(state): State<AppState>,
+    RequireAdmin(_): RequireAdmin,
     Path(id): Path<String>,
     Json(req): Json<ServiceIdsRequest>,
 ) -> Result<Json<UserSummary>, ApiError> {
@@ -97,6 +103,7 @@ pub async fn set_user_services(
 /// POST /users/:user_id/services/:service_id - 添加服务权限
 pub async fn add_user_service(
     State(state): State<AppState>,
+    RequireAdmin(_): RequireAdmin,
     Path((user_id, service_id)): Path<(String, String)>,
 ) -> Result<Json<UserSummary>, ApiError> {
     // 验证服务是否存在
@@ -113,6 +120,7 @@ pub async fn add_user_service(
 /// DELETE /users/:user_id/services/:service_id - 移除服务权限
 pub async fn remove_user_service(
     State(state): State<AppState>,
+    RequireAdmin(_): RequireAdmin,
     Path((user_id, service_id)): Path<(String, String)>,
 ) -> Result<Json<UserSummary>, ApiError> {
     let user = state

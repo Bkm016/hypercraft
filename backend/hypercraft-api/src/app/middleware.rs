@@ -1,5 +1,9 @@
+use std::future::Future;
+use std::net::SocketAddr;
+use std::pin::Pin;
+
 use axum::body::Body;
-use axum::extract::{FromRequestParts, Path, State};
+use axum::extract::{ConnectInfo, FromRequestParts, Path, State};
 use axum::http::request::Parts;
 use axum::http::Request;
 use axum::middleware::Next;
@@ -12,219 +16,183 @@ use super::state::AppState;
 /// 认证信息扩展
 #[derive(Debug, Clone)]
 pub struct AuthInfo {
-    pub claims: TokenClaims,
+	pub claims: TokenClaims,
 }
 
 impl AuthInfo {
-    /// 检查是否是管理员
-    pub fn is_admin(&self) -> bool {
-        self.claims.token_type == TokenType::Dev
-    }
+	/// 检查是否是管理员
+	pub fn is_admin(&self) -> bool {
+		self.claims.token_type == TokenType::Dev
+	}
 
-    /// 检查是否有权限访问指定服务
-    pub fn can_access_service(&self, service_id: &str) -> bool {
-        match self.claims.token_type {
-            TokenType::Dev => true,
-            TokenType::User => self.claims.service_ids.contains(&service_id.to_string()),
-            TokenType::Refresh => false,
-        }
-    }
+	/// 检查是否有权限访问指定服务
+	pub fn can_access_service(&self, service_id: &str) -> bool {
+		match self.claims.token_type {
+			TokenType::Dev => true,
+			TokenType::User => self.claims.service_ids.contains(&service_id.to_string()),
+			TokenType::Refresh => false,
+		}
+	}
 }
 
 /// 要求管理员权限的 Extractor
-/// 
-/// 用法：
-/// ```ignore
-/// pub async fn create_service(
-///     RequireAdmin(auth): RequireAdmin,
-///     // ...
-/// ) -> Result<..., ApiError> { }
-/// ```
 #[derive(Debug, Clone)]
-pub struct RequireAdmin(pub AuthInfo);
+pub struct RequireAdmin(#[allow(dead_code)] pub AuthInfo);
 
-impl<S> FromRequestParts<S> for RequireAdmin
-where
-    S: Send + Sync,
-{
-    type Rejection = ApiError;
+impl<S: Send + Sync> FromRequestParts<S> for RequireAdmin {
+	type Rejection = ApiError;
 
-    fn from_request_parts<'life0, 'life1, 'async_trait>(
-        parts: &'life0 mut Parts,
-        _state: &'life1 S,
-    ) -> ::core::pin::Pin<
-        Box<dyn ::core::future::Future<Output = Result<Self, Self::Rejection>> + ::core::marker::Send + 'async_trait>,
-    >
-    where
-        'life0: 'async_trait,
-        'life1: 'async_trait,
-        Self: 'async_trait,
-    {
-        Box::pin(async move {
-            let auth = parts
-                .extensions
-                .get::<AuthInfo>()
-                .cloned()
-                .ok_or_else(ApiError::unauthorized)?;
+	fn from_request_parts<'a, 'b, 'c>(
+		parts: &'a mut Parts,
+		_state: &'b S,
+	) -> Pin<Box<dyn Future<Output = Result<Self, Self::Rejection>> + Send + 'c>>
+	where
+		'a: 'c,
+		'b: 'c,
+	{
+		Box::pin(async move {
+			let auth = parts
+				.extensions
+				.get::<AuthInfo>()
+				.cloned()
+				.ok_or_else(ApiError::unauthorized)?;
 
-            if !auth.is_admin() {
-                return Err(ApiError::forbidden("admin access required"));
-            }
-
-            Ok(RequireAdmin(auth))
-        })
-    }
+			if !auth.is_admin() {
+				return Err(ApiError::forbidden("admin access required"));
+			}
+			Ok(RequireAdmin(auth))
+		})
+	}
 }
 
 /// 服务权限检查 Extractor - 从路径参数 :id 提取服务 ID 并验证权限
-/// 
-/// 用法：
-/// ```ignore
-/// pub async fn start_service(
-///     State(state): State<AppState>,
-///     ServicePermission { auth, service_id }: ServicePermission,
-/// ) -> Result<..., ApiError> { }
-/// ```
 #[derive(Debug, Clone)]
 pub struct ServicePermission {
-    pub auth: AuthInfo,
-    pub service_id: String,
+	#[allow(dead_code)]
+	pub auth: AuthInfo,
+	pub service_id: String,
 }
 
-impl<S> FromRequestParts<S> for ServicePermission
-where
-    S: Send + Sync,
-{
-    type Rejection = ApiError;
+impl<S: Send + Sync> FromRequestParts<S> for ServicePermission {
+	type Rejection = ApiError;
 
-    fn from_request_parts<'life0, 'life1, 'async_trait>(
-        parts: &'life0 mut Parts,
-        state: &'life1 S,
-    ) -> ::core::pin::Pin<
-        Box<dyn ::core::future::Future<Output = Result<Self, Self::Rejection>> + ::core::marker::Send + 'async_trait>,
-    >
-    where
-        'life0: 'async_trait,
-        'life1: 'async_trait,
-        Self: 'async_trait,
-    {
-        Box::pin(async move {
-            let auth = parts
-                .extensions
-                .get::<AuthInfo>()
-                .cloned()
-                .ok_or_else(ApiError::unauthorized)?;
+	fn from_request_parts<'a, 'b, 'c>(
+		parts: &'a mut Parts,
+		state: &'b S,
+	) -> Pin<Box<dyn Future<Output = Result<Self, Self::Rejection>> + Send + 'c>>
+	where
+		'a: 'c,
+		'b: 'c,
+	{
+		Box::pin(async move {
+			let auth = parts
+				.extensions
+				.get::<AuthInfo>()
+				.cloned()
+				.ok_or_else(ApiError::unauthorized)?;
 
-            // 从路径参数提取服务 ID
-            let Path(service_id) = Path::<String>::from_request_parts(parts, state)
-                .await
-                .map_err(|_| ApiError::bad_request("missing service id in path"))?;
+			let Path(service_id) = Path::<String>::from_request_parts(parts, state)
+				.await
+				.map_err(|_| ApiError::bad_request("missing service id in path"))?;
 
-            if !auth.can_access_service(&service_id) {
-                return Err(ApiError::forbidden(format!(
-                    "no permission to access service: {}",
-                    service_id
-                )));
-            }
-
-            Ok(ServicePermission { auth, service_id })
-        })
-    }
+			if !auth.can_access_service(&service_id) {
+				return Err(ApiError::forbidden(format!(
+					"no permission to access service: {}",
+					service_id
+				)));
+			}
+			Ok(ServicePermission { auth, service_id })
+		})
+	}
 }
 
 /// 不需要认证的路径
 const PUBLIC_PATHS: &[&str] = &["/health", "/auth/login", "/auth/refresh"];
 
-pub async fn auth_middleware(
-    State(state): State<AppState>,
-    mut request: Request<Body>,
-    next: Next,
-) -> Result<Response, ApiError> {
-    let path = request.uri().path().to_string();
+/// 从请求中提取 token（优先 header，fallback 到 query param）
+fn extract_token(request: &Request<Body>) -> Option<String> {
+	// 优先从 Authorization header 获取
+	if let Some(token) = request
+		.headers()
+		.get(axum::http::header::AUTHORIZATION)
+		.and_then(|v| v.to_str().ok())
+		.and_then(|v| v.strip_prefix("Bearer "))
+	{
+		return Some(token.to_string());
+	}
 
-    // 公开端点不需要认证
-    if PUBLIC_PATHS.iter().any(|p| path == *p) {
-        return Ok(next.run(request).await);
-    }
-
-    // 获取 Authorization header
-    let provided = request
-        .headers()
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .map(str::to_string);
-
-    // 如果 header 中没有 token，尝试从 URL 查询参数中获取
-    // 这主要是为了支持浏览器 WebSocket（不支持自定义 headers）
-    let token = match provided {
-        Some(t) => t,
-        None => {
-            // 从 URL 查询参数中获取 token
-            request
-                .uri()
-                .query()
-                .and_then(|query| {
-                    query.split('&').find_map(|pair| {
-                        let mut parts = pair.splitn(2, '=');
-                        let key = parts.next()?;
-                        let value = parts.next()?;
-                        if key == "token" {
-                            // URL 解码
-                            urlencoding::decode(value).ok().map(|s| s.into_owned())
-                        } else {
-                            None
-                        }
-                    })
-                })
-                .ok_or_else(ApiError::unauthorized)?
-        }
-    };
-
-    // 首先检查是否是 DevToken
-    if let Some(ref dev_token) = state.dev_token {
-        if &token == dev_token {
-            // DevToken 认证成功，注入管理员身份
-            let auth_info = AuthInfo {
-                claims: UserManager::dev_token_claims(),
-            };
-            request.extensions_mut().insert(auth_info);
-            return Ok(next.run(request).await);
-        }
-    }
-
-    // 尝试验证为 JWT UserToken
-    match state.user_manager.verify_token(&token).await {
-        Ok(claims) => {
-            // 检查 token 类型
-            if claims.token_type == TokenType::Refresh {
-                return Err(ApiError::unauthorized_with_message(
-                    "refresh token cannot be used for API access",
-                ));
-            }
-
-            let auth_info = AuthInfo { claims };
-            request.extensions_mut().insert(auth_info);
-            Ok(next.run(request).await)
-        }
-        Err(_) => Err(ApiError::unauthorized()),
-    }
+	// fallback 到 query param（WebSocket 场景）
+	request.uri().query().and_then(|query| {
+		query.split('&').find_map(|pair| {
+			let (key, value) = pair.split_once('=')?;
+			if key == "token" {
+				urlencoding::decode(value).ok().map(|s| s.into_owned())
+			} else {
+				None
+			}
+		})
+	})
 }
 
-/// 要求管理员权限的中间件
-pub async fn require_admin(
-    State(_state): State<AppState>,
-    request: Request<Body>,
-    next: Next,
+/// 从请求中提取客户端 IP
+fn extract_client_ip(request: &Request<Body>) -> String {
+	request
+		.extensions()
+		.get::<ConnectInfo<SocketAddr>>()
+		.map(|ci| ci.0.ip().to_string())
+		.unwrap_or_else(|| "unknown".to_string())
+}
+
+pub async fn auth_middleware(
+	State(state): State<AppState>,
+	mut request: Request<Body>,
+	next: Next,
 ) -> Result<Response, ApiError> {
-    let auth_info = request
-        .extensions()
-        .get::<AuthInfo>()
-        .ok_or_else(ApiError::unauthorized)?;
+	let path = request.uri().path().to_string();
 
-    if !auth_info.is_admin() {
-        return Err(ApiError::forbidden("admin access required"));
-    }
+	// 公开端点不需要认证
+	if PUBLIC_PATHS.iter().any(|p| path == *p) {
+		return Ok(next.run(request).await);
+	}
 
-    Ok(next.run(request).await)
+	let client_ip = extract_client_ip(&request);
+
+	// 检查是否超过认证失败限制（防止暴力破解）
+	if !state.auth_limiter.allow(&client_ip).await {
+		return Err(ApiError::too_many_requests(
+			"too many authentication attempts, try again later",
+		));
+	}
+
+	let token = match extract_token(&request) {
+		Some(t) => t,
+		None => return Err(ApiError::unauthorized()),
+	};
+
+	// 首先检查是否是 DevToken
+	if let Some(ref dev_token) = state.dev_token {
+		if &token == dev_token {
+			let auth_info = AuthInfo {
+				claims: UserManager::dev_token_claims(),
+			};
+			request.extensions_mut().insert(auth_info);
+			return Ok(next.run(request).await);
+		}
+	}
+
+	// 尝试验证为 JWT UserToken
+	let claims = match state.user_manager.verify_token(&token).await {
+		Ok(c) => c,
+		Err(_) => return Err(ApiError::unauthorized()),
+	};
+
+	if claims.token_type == TokenType::Refresh {
+		return Err(ApiError::unauthorized_with_message(
+			"refresh token cannot be used for API access",
+		));
+	}
+
+	let auth_info = AuthInfo { claims };
+	request.extensions_mut().insert(auth_info);
+	Ok(next.run(request).await)
 }
