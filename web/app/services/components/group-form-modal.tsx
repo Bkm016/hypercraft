@@ -59,8 +59,7 @@ export function GroupFormModal({
       const apiErr = err as { message?: string };
       notification({
         status: "error",
-        title: isEditMode ? "更新失败" : "创建失败",
-        description: apiErr.message || (isEditMode ? "更新分组失败" : "创建分组失败"),
+        title: apiErr.message || (isEditMode ? "更新分组失败" : "创建分组失败"),
       });
     } finally {
       setSaving(false);

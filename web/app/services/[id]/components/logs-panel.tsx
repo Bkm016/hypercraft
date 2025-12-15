@@ -190,8 +190,7 @@ export function LogsPanel({ serviceId, serviceState, logPath }: LogsPanelProps) 
       const apiErr = err as { message?: string };
       notification({
         status: "error",
-        title: "下载失败",
-        description: apiErr.message || "下载日志文件失败",
+        title: apiErr.message || "下载日志文件失败",
       });
     } finally {
       setDownloading(false);

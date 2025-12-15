@@ -87,8 +87,7 @@ export function GroupManageModal({
         const apiErr = err as { message?: string };
         notification({
           status: "error",
-          title: "排序失败",
-          description: apiErr.message || "重新排序分组失败",
+          title: apiErr.message || "重新排序分组失败",
         });
         setLocalGroups(applyGroupOrder(groups, isAdmin));
       }

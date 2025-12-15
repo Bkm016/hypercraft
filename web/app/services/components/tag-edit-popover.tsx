@@ -186,8 +186,7 @@ export function TagEditPopover({
       const apiErr = err as { message?: string };
       notification({
         status: "error",
-        title: "更新失败",
-        description: apiErr.message || "更新标签失败",
+        title: apiErr.message || "更新标签失败",
       });
     } finally {
       setSaving(false);

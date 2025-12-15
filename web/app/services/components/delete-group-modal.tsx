@@ -33,8 +33,7 @@ export function DeleteGroupModal({
       const apiErr = err as { message?: string };
       notification({
         status: "error",
-        title: "删除失败",
-        description: apiErr.message || "删除分组失败",
+        title: apiErr.message || "删除分组失败",
       });
     } finally {
       setDeleting(false);

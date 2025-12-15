@@ -95,8 +95,7 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
       const apiErr = err as { message?: string };
       notification({
         status: "error",
-        title: "操作失败",
-        description: apiErr.message || `${action} 操作失败`,
+        title: apiErr.message || `${action} 操作失败`,
       });
     } finally {
       setOperating(false);
@@ -114,8 +113,7 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
       const apiErr = err as { message?: string };
       notification({
         status: "error",
-        title: "删除失败",
-        description: apiErr.message || "删除服务失败",
+        title: apiErr.message || "删除服务失败",
       });
       setOperating(false);
     }

@@ -73,8 +73,7 @@ export function GroupSelectModal({
       const apiErr = err as { message?: string };
       notification({
         status: "error",
-        title: "操作失败",
-        description: apiErr.message || "更新分组失败",
+        title: apiErr.message || "更新分组失败",
       });
     } finally {
       setSaving(false);

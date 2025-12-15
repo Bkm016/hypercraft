@@ -78,8 +78,7 @@ export default function UsersPage() {
       const apiErr = err as { message?: string };
       notification({
         status: "error",
-        title: "删除失败",
-        description: apiErr.message || "删除用户失败",
+        title: apiErr.message || "删除用户失败",
       });
     }
   };

@@ -93,8 +93,7 @@ export default function ServicesPage() {
       const apiErr = err as { message?: string };
       notification({
         status: "error",
-        title: "操作失败",
-        description: apiErr.message || `${action} 操作失败`,
+        title: apiErr.message || `${action} 操作失败`,
       });
     } finally {
       setOperating((prev) => {
@@ -131,8 +130,7 @@ export default function ServicesPage() {
       const apiErr = err as { message?: string };
       notification({
         status: "error",
-        title: "删除失败",
-        description: apiErr.message || "删除服务失败",
+        title: apiErr.message || "删除服务失败",
       });
     } finally {
       setOperating((prev) => {
@@ -152,8 +150,7 @@ export default function ServicesPage() {
       const apiErr = err as { message?: string };
       notification({
         status: "error",
-        title: "获取服务详情失败",
-        description: apiErr.message || "无法加载服务配置",
+        title: apiErr.message || "无法加载服务配置",
       });
     }
   };
@@ -167,8 +164,7 @@ export default function ServicesPage() {
       const apiErr = err as { message?: string };
       notification({
         status: "error",
-        title: "获取服务详情失败",
-        description: apiErr.message || "无法加载服务配置",
+        title: apiErr.message || "无法加载服务配置",
       });
     }
   };
