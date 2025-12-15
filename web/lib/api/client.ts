@@ -20,7 +20,6 @@ import type {
   ValidateCronRequest,
   ValidateCronResponse,
   SystemStats,
-  ProcessStatsResponse,
 } from "./types";
 
 function getApiBaseUrl(): string {
@@ -463,10 +462,6 @@ class ApiClient {
 
   async getSystemStats(): Promise<SystemStats> {
     return this.request<SystemStats>("/stats/system");
-  }
-
-  async getProcessStats(): Promise<ProcessStatsResponse> {
-    return this.request<ProcessStatsResponse>("/stats/processes");
   }
 }
 

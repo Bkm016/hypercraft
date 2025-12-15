@@ -6,7 +6,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use super::handlers::{
     add_user_service, attach_service, change_password, create_group, create_service, create_user,
-    delete_group, delete_service, delete_user, download_log_file, get_logs, get_process_stats,
+    delete_group, delete_service, delete_user, download_log_file, get_logs,
     get_schedule, get_service, get_status, get_system_stats, get_user, health, kill_service,
     list_groups, list_services, list_users, login, refresh, remove_user_service, reorder_groups,
     reorder_services, restart_service, set_user_services, shutdown_service, start_service,
@@ -104,10 +104,9 @@ pub fn app_router(state: AppState, cors_origins: Vec<String>) -> Router {
         .route("/groups/:id", patch(update_group).delete(delete_group))
         .route("/services/reorder", post(reorder_services));
 
-    // 资源统计端点
+    // 资源统计端点（仅系统级）
     let stats_routes = Router::new()
-        .route("/stats/system", get(get_system_stats))
-        .route("/stats/processes", get(get_process_stats));
+        .route("/stats/system", get(get_system_stats));
 
     // 密码更新（认证 + 自己或管理员）
     let password_routes = Router::new().route("/users/:id/password", post(change_password));

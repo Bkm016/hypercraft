@@ -15,7 +15,6 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { RiServerLine } from "@remixicon/react";
 import { api, type ServiceSummary, type ServiceGroup } from "@/lib/api";
-import { useProcessStats } from "@/lib/process-stats-context";
 import { GroupCard } from "./group-card";
 import { ServiceCardDragOverlay } from "./service-card";
 import { applyServiceOrder, applyGroupOrder, updateLocalServiceOrder } from "../local-order";
@@ -47,9 +46,6 @@ export function GroupedServicesView({
   selected,
   onToggleSelect,
 }: GroupedServicesViewProps) {
-  // 进程资源数据
-  const { stats: processStats } = useProcessStats();
-
   // 本地服务状态，用于乐观更新
   // 对于普通用户，应用本地排序
   const [localServices, setLocalServices] = useState(() => applyServiceOrder(services, isAdmin));
@@ -226,7 +222,6 @@ export function GroupedServicesView({
             onToggleSelect={onToggleSelect}
             onToggleSelectAll={handleToggleSelectAll}
             isDraggable={true}
-            processStats={processStats}
           />
         );
       })}
@@ -248,7 +243,6 @@ export function GroupedServicesView({
           onToggleSelect={onToggleSelect}
           onToggleSelectAll={handleToggleSelectAll}
           isDraggable={true}
-          processStats={processStats}
         />
       )}
 

@@ -8,7 +8,7 @@ pub mod user;
 
 pub use error::{Result, ServiceError};
 pub use manager::scheduler::ServiceScheduler;
-pub use manager::{AttachHandle, ProcessStats, ServiceManager, SystemStats};
+pub use manager::{AttachHandle, ServiceManager, SystemStats};
 pub use manifest::{Schedule, ScheduleAction, ServiceManifest};
 pub use models::{ServiceGroup, ServiceState, ServiceStatus, ServiceSummary};
 pub use user::{

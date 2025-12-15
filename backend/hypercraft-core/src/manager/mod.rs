@@ -18,7 +18,7 @@ mod signal;
 mod stats;
 mod storage;
 
-pub use stats::{ProcessStats, SystemStats};
+pub use stats::SystemStats;
 
 /// attach 会话句柄：暴露写入 stdin 的通道与订阅 stdout/stderr 的广播。
 #[derive(Debug)]

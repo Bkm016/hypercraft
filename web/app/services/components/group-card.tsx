@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo } from "react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { RiArrowDownSLine, RiServerLine } from "@remixicon/react";
 import * as Checkbox from "@/components/ui/checkbox";
-import { type ServiceSummary, type ServiceGroup, type ProcessStats } from "@/lib/api";
+import { type ServiceSummary, type ServiceGroup } from "@/lib/api";
 import { ServiceCard } from "./service-card";
 
 const COLLAPSED_STORAGE_KEY = "hypercraft-group-collapsed";
@@ -44,7 +44,6 @@ export interface GroupCardProps {
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: (ids: string[]) => void;
   isDraggable?: boolean;
-  processStats?: Record<string, ProcessStats>;
 }
 
 export function GroupCard({
@@ -63,7 +62,6 @@ export function GroupCard({
   onToggleSelect,
   onToggleSelectAll,
   isDraggable = false,
-  processStats = {},
 }: GroupCardProps) {
   const groupKey = group?.id || "ungrouped";
   const [collapsed, setCollapsed] = useState(() => {
@@ -159,7 +157,6 @@ export function GroupCard({
                     selected={selected.has(service.id)}
                     onToggleSelect={() => onToggleSelect(service.id)}
                     isDraggable={isDraggable}
-                    processStats={processStats[service.id]}
                   />
                 ))}
               </SortableContext>

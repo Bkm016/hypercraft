@@ -20,7 +20,7 @@ pub use services::{
     list_services, restart_service, shutdown_service, start_service, stop_service, update_schedule,
     update_service, validate_cron,
 };
-pub use stats::{get_process_stats, get_system_stats};
+pub use stats::get_system_stats;
 pub use users::{
     add_user_service, change_password, create_user, delete_user, get_user, list_users,
     remove_user_service, set_user_services, update_user,

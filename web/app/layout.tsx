@@ -8,7 +8,6 @@ import { Inter as FontSans } from "next/font/google";
 import { NotificationProvider } from "@/components/ui/notification-provider";
 import { Provider as TooltipProvider } from "@/components/ui/tooltip";
 import { ServicesProvider } from "@/lib/services-context";
-import { ProcessStatsProvider } from "@/lib/process-stats-context";
 import { ThemeProvider } from "next-themes";
 import { cn } from "@/utils/cn";
 
@@ -53,14 +52,12 @@ export default function RootLayout({
         >
           <AuthProvider>
             <ServicesProvider>
-              <ProcessStatsProvider>
-                <TooltipProvider>
-                  <div className="flex h-screen flex-col overflow-hidden">
-                    <Header />
-                    <main className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</main>
-                  </div>
-                </TooltipProvider>
-              </ProcessStatsProvider>
+              <TooltipProvider>
+                <div className="flex h-screen flex-col overflow-hidden">
+                  <Header />
+                  <main className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</main>
+                </div>
+              </TooltipProvider>
             </ServicesProvider>
           </AuthProvider>
         </ThemeProvider>

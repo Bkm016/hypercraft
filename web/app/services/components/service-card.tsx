@@ -21,7 +21,7 @@ import * as Checkbox from "@/components/ui/checkbox";
 import * as CompactButton from "@/components/ui/compact-button";
 import * as Tooltip from "@/components/ui/tooltip";
 import * as Popover from "@/components/ui/popover";
-import { type ServiceSummary, type ServiceGroup, type ProcessStats } from "@/lib/api";
+import { type ServiceSummary, type ServiceGroup } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { TagEditPopover } from "./tag-edit-popover";
 import { TagEditModal } from "./mobile/tag-edit-modal";
@@ -50,7 +50,6 @@ export interface ServiceCardProps {
   selected: boolean;
   onToggleSelect: () => void;
   isDraggable?: boolean;
-  processStats?: ProcessStats | null;
 }
 
 // 拖拽时显示的简化版卡片
@@ -82,7 +81,6 @@ export function ServiceCard({
   selected,
   onToggleSelect,
   isDraggable = false,
-  processStats,
 }: ServiceCardProps) {
   const state = stateConfig[service.state];
   const isRunning = service.state === "running";
@@ -155,22 +153,6 @@ export function ServiceCard({
           {service.name}
         </div>
       </Link>
-
-      {/* 资源占用 - 仅运行中服务显示 */}
-      {isRunning && processStats && (
-        <Tooltip.Root>
-          <Tooltip.Trigger asChild>
-            <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-text-soft-400 tabular-nums shrink-0">
-              <span>{processStats.cpu_usage.toFixed(1)}%</span>
-              <span className="text-stroke-sub-300">|</span>
-              <span>{formatBytes(processStats.memory_bytes, true)}</span>
-            </div>
-          </Tooltip.Trigger>
-          <Tooltip.Content>
-            CPU {processStats.cpu_usage.toFixed(1)}% · 内存 {formatBytes(processStats.memory_bytes, true)}
-          </Tooltip.Content>
-        </Tooltip.Root>
-      )}
 
       {/* 标签 - 移动端只显示颜色圆点 */}
       {service.tags && service.tags.length > 0 && (

@@ -12,16 +12,6 @@ export interface SystemStats {
   disk_usage: number;
 }
 
-export interface ProcessStats {
-  pid: number;
-  cpu_usage: number;
-  memory_bytes: number;
-}
-
-export interface ProcessStatsResponse {
-  processes: Record<string, ProcessStats>;
-}
-
 // ==================== 服务相关 ====================
 
 export type ServiceState = "running" | "stopped" | "unknown";
