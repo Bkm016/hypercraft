@@ -8,8 +8,7 @@ use axum::http::request::Parts;
 use axum::http::Request;
 use axum::middleware::Next;
 use axum::response::Response;
-use hypercraft_core::{TokenClaims, TokenType, UserManager};
-use subtle::ConstantTimeEq;
+use hypercraft_core::{TokenClaims, TokenType};
 
 use super::error::ApiError;
 use super::state::AppState;
@@ -23,15 +22,17 @@ pub struct AuthInfo {
 impl AuthInfo {
 	/// 检查是否是管理员
 	pub fn is_admin(&self) -> bool {
-		self.claims.token_type == TokenType::Dev
+		self.claims.sub == "__devtoken__"
 	}
 
 	/// 检查是否有权限访问指定服务
 	pub fn can_access_service(&self, service_id: &str) -> bool {
+		if self.is_admin() {
+			return true;
+		}
 		match self.claims.token_type {
-			TokenType::Dev => true,
 			TokenType::User => self.claims.service_ids.contains(&service_id.to_string()),
-			TokenType::Refresh => false,
+			_ => false,
 		}
 	}
 }
@@ -108,7 +109,7 @@ impl<S: Send + Sync> FromRequestParts<S> for ServicePermission {
 }
 
 /// 不需要认证的路径
-const PUBLIC_PATHS: &[&str] = &["/health", "/auth/login", "/auth/refresh"];
+const PUBLIC_PATHS: &[&str] = &["/health", "/auth/login", "/auth/devtoken", "/auth/refresh"];
 
 /// 从请求中提取 token（优先 header，fallback 到 query param）
 fn extract_token(request: &Request<Body>) -> Option<String> {
@@ -173,18 +174,6 @@ pub async fn auth_middleware(
 			return Err(ApiError::unauthorized());
 		}
 	};
-
-	// 首先检查是否是 DevToken（使用常量时间比较防止时序攻击）
-	if let Some(ref dev_token) = state.dev_token {
-		if token.as_bytes().ct_eq(dev_token.as_bytes()).into() {
-			let auth_info = AuthInfo {
-				claims: UserManager::dev_token_claims(),
-			};
-			request.extensions_mut().insert(auth_info);
-			return Ok(next.run(request).await);
-		}
-		// DevToken 不匹配，继续尝试 JWT 验证（不在此处记录失败）
-	}
 
 	// 尝试验证为 JWT UserToken
 	let claims = match state.user_manager.verify_token(&token).await {

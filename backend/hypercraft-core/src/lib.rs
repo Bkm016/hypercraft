@@ -12,8 +12,9 @@ pub use manager::{AttachHandle, ServiceManager, SystemStats};
 pub use manifest::{Schedule, ScheduleAction, ServiceManifest};
 pub use models::{ServiceGroup, ServiceState, ServiceStatus, ServiceSummary};
 pub use user::{
-    AuthToken, CreateUserRequest, LoginRequest, RefreshRequest, TokenClaims, TokenType,
-    UpdateUserRequest, User, UserManager, UserSummary,
+    AuthToken, CreateUserRequest, DevTokenLoginRequest, Disable2FARequest, Enable2FARequest,
+    LoginRequest, RefreshRequest, Setup2FARequest, Setup2FAResponse, TokenClaims, TokenType,
+    TwoFactorVerification, UpdateUserRequest, User, UserManager, UserSummary,
 };
 
 /// 初始化 tracing 日志系统

@@ -10,8 +10,8 @@ use tracing::{info, instrument, warn};
 
 impl UserManager {
     /// 用户登录
-    #[instrument(skip(self, password))]
-    pub async fn login(&self, username: &str, password: &str) -> Result<AuthToken> {
+    #[instrument(skip(self, password, totp_code))]
+    pub async fn login(&self, username: &str, password: &str, totp_code: Option<&str>) -> Result<AuthToken> {
         let user = self
             .find_by_username(username)
             .await?
@@ -23,6 +23,20 @@ impl UserManager {
         if !valid {
             warn!(username = %username, "login failed: invalid password");
             return Err(ServiceError::Unauthorized("invalid credentials".into()));
+        }
+
+        // 检查是否启用 2FA
+        if let Some(totp_cfg) = &user.totp_config {
+            if totp_cfg.enabled {
+                let code = totp_code.ok_or_else(|| {
+                    ServiceError::TwoFactorRequired("2FA code required".into())
+                })?;
+
+                if !self.verify_totp(&user, code).await? {
+                    warn!(username = %username, "login failed: invalid 2FA code");
+                    return Err(ServiceError::Unauthorized("invalid 2FA code".into()));
+                }
+            }
         }
 
         info!(user_id = %user.id, username = %username, "user logged in");
@@ -44,6 +58,22 @@ impl UserManager {
 
         info!(user_id = %user.id, "token refreshed");
         self.issue_tokens(user, true)
+    }
+
+    /// 签发 DevToken JWT（用于 DevToken 登录后获取 JWT）
+    #[instrument(skip(self))]
+    pub async fn issue_dev_token(&self) -> Result<AuthToken> {
+        // 确保 __devtoken__ 虚拟用户存在
+        let dev_user = match self.get_user("__devtoken__").await {
+            Ok(user) => user,
+            Err(ServiceError::NotFound(_)) => {
+                // 自动创建虚拟用户
+                self.create_devtoken_user().await?
+            }
+            Err(e) => return Err(e),
+        };
+        // 复用 issue_tokens 逻辑
+        self.issue_tokens(dev_user, true)
     }
 
     /// 生成 access token 和 refresh token
@@ -121,12 +151,6 @@ impl UserManager {
 
         let claims = token_data.claims;
         let refresh_nonce = claims.refresh_nonce.clone();
-        // 拒绝通过 JWT 伪造的 Dev token
-        if claims.token_type == TokenType::Dev {
-            return Err(ServiceError::Unauthorized(
-                "dev token via jwt is not allowed".into(),
-            ));
-        }
 
         // 校验 token version 以支持撤销
         let user = self.get_user(&claims.sub).await?;
@@ -144,21 +168,5 @@ impl UserManager {
         }
 
         Ok(claims)
-    }
-
-    /// 生成 DevToken claims（用于验证）
-    pub fn dev_token_claims() -> TokenClaims {
-        TokenClaims {
-            sub: "dev".to_string(),
-            username: "admin".to_string(),
-            iss: None,
-            aud: None,
-            token_type: TokenType::Dev,
-            service_ids: vec![],
-            token_version: 0,
-            refresh_nonce: None,
-            exp: i64::MAX,
-            iat: 0,
-        }
     }
 }

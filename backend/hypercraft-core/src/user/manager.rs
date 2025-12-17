@@ -159,6 +159,7 @@ impl UserManager {
             service_ids: req.service_ids,
             token_version: 0,
             refresh_nonce: String::new(),
+            totp_config: None,
             created_at: Some(now),
             updated_at: Some(now),
         };
@@ -171,6 +172,38 @@ impl UserManager {
         self.save_username_index(&index)?;
 
         info!(user_id = %user.id, username = %user.username, "created user");
+        Ok(user)
+    }
+
+    /// 创建 DevToken 虚拟用户（用于存储 DevToken 的 2FA 配置）
+    #[instrument(skip(self))]
+    pub async fn create_devtoken_user(&self) -> Result<User> {
+        self.ensure_dirs()?;
+
+        // 使用固定密码哈希（DevToken 用户不需要密码登录）
+        let password_hash = "$2b$12$AAAAAAAAAAAAAAAAAAAAAA".to_string();
+
+        let now = Utc::now();
+        let mut user = User {
+            id: "__devtoken__".to_string(),
+            username: "__devtoken__".to_string(),
+            password_hash,
+            service_ids: vec![],
+            token_version: 0,
+            refresh_nonce: String::new(),
+            totp_config: None,
+            created_at: Some(now),
+            updated_at: Some(now),
+        };
+        Self::ensure_refresh_nonce(&mut user);
+
+        // 保存
+        self.persist_user(&user)?;
+        let mut index = self.load_username_index();
+        index.insert(user.username.clone(), user.id.clone());
+        self.save_username_index(&index)?;
+
+        info!("created __devtoken__ virtual user");
         Ok(user)
     }
 
@@ -263,6 +296,10 @@ impl UserManager {
                 if path.extension().map(|e| e == "json").unwrap_or(false) {
                     if let Ok(data) = std::fs::read(&path) {
                         if let Ok(mut user) = serde_json::from_slice::<User>(&data) {
+                            // 过滤掉内部虚拟用户
+                            if user.id == "__devtoken__" {
+                                continue;
+                            }
                             if user.refresh_nonce.is_empty() {
                                 Self::ensure_refresh_nonce(&mut user);
                                 let _ = self.persist_user(&user);
@@ -280,6 +317,13 @@ impl UserManager {
     /// 更新用户
     #[instrument(skip(self, req))]
     pub async fn update_user(&self, id: &str, req: UpdateUserRequest) -> Result<User> {
+        // 禁止修改内部虚拟用户
+        if id == "__devtoken__" {
+            return Err(ServiceError::PolicyViolation(
+                "cannot update internal virtual user".into(),
+            ));
+        }
+
         let mut user = self.get_user(id).await?;
 
         let mut bumped = false;
@@ -313,6 +357,13 @@ impl UserManager {
     /// 删除用户
     #[instrument(skip(self))]
     pub async fn delete_user(&self, id: &str) -> Result<()> {
+        // 禁止删除内部虚拟用户
+        if id == "__devtoken__" {
+            return Err(ServiceError::PolicyViolation(
+                "cannot delete internal virtual user".into(),
+            ));
+        }
+
         let path = self.user_path(id);
         if !path.exists() {
             return Err(ServiceError::NotFound(format!("user: {}", id)));

@@ -87,6 +87,9 @@ impl From<ServiceError> for ApiError {
             ServiceError::Unauthorized(msg) => {
                 ApiError::new("Unauthorized", StatusCode::UNAUTHORIZED, msg)
             }
+            ServiceError::TwoFactorRequired(msg) => {
+                ApiError::new("2FA_REQUIRED", StatusCode::UNAUTHORIZED, msg)
+            }
             ServiceError::Other(msg) => {
                 ApiError::new("Error", StatusCode::INTERNAL_SERVER_ERROR, msg)
             }

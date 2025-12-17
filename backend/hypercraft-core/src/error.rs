@@ -23,6 +23,8 @@ pub enum ServiceError {
     SpawnFailed(String),
     #[error("unauthorized: {0}")]
     Unauthorized(String),
+    #[error("two-factor authentication required: {0}")]
+    TwoFactorRequired(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("serde error: {0}")]

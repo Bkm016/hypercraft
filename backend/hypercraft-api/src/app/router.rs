@@ -1,17 +1,17 @@
 use axum::middleware::from_fn_with_state;
 use axum::routing::{get, patch, post, put};
 use axum::Router;
-use axum::http::{header, HeaderValue, Method};
+use axum::http::{header, HeaderName, HeaderValue, Method};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use super::handlers::{
     add_user_service, attach_service, change_password, create_group, create_service, create_user,
-    delete_group, delete_service, delete_user, download_log_file, get_logs,
-    get_schedule, get_service, get_status, get_system_stats, get_user, health, kill_service,
-    list_groups, list_services, list_users, login, refresh, remove_user_service, reorder_groups,
-    reorder_services, restart_service, set_user_services, shutdown_service, start_service,
-    stop_service, update_group, update_schedule, update_service, update_service_group,
-    update_service_tags, update_user, validate_cron,
+    delete_group, delete_service, delete_user, devtoken_login, disable_2fa, download_log_file,
+    enable_2fa, get_logs, get_me, get_schedule, get_service, get_status, get_system_stats,
+    get_user, health, kill_service, list_groups, list_services, list_users, login, refresh,
+    remove_user_service, reorder_groups, reorder_services, restart_service, set_user_services,
+    setup_2fa, shutdown_service, start_service, stop_service, update_group, update_schedule,
+    update_service, update_service_group, update_service_tags, update_user, validate_cron,
 };
 use super::middleware::auth_middleware;
 use super::state::AppState;
@@ -58,6 +58,7 @@ pub fn app_router(state: AppState, cors_origins: Vec<String>) -> Router {
     let public_routes = Router::new()
         .route("/health", get(health))
         .route("/auth/login", post(login))
+        .route("/auth/devtoken", post(devtoken_login))
         .route("/auth/refresh", post(refresh));
 
     // 用户管理端点（需要管理员权限，由 handler 中的 RequireAdmin extractor 检查）
@@ -111,6 +112,13 @@ pub fn app_router(state: AppState, cors_origins: Vec<String>) -> Router {
     // 密码更新（认证 + 自己或管理员）
     let password_routes = Router::new().route("/users/:id/password", post(change_password));
 
+    // 2FA 管理端点（需要认证）
+    let two_factor_routes = Router::new()
+        .route("/auth/2fa/setup", post(setup_2fa))
+        .route("/auth/2fa/enable", post(enable_2fa))
+        .route("/auth/2fa/disable", post(disable_2fa))
+        .route("/auth/me", get(get_me));
+
     // 组合所有路由
     Router::new()
         .merge(public_routes)
@@ -119,6 +127,7 @@ pub fn app_router(state: AppState, cors_origins: Vec<String>) -> Router {
         .merge(group_routes)
         .merge(stats_routes)
         .merge(password_routes)
+        .merge(two_factor_routes)
         .layer(from_fn_with_state(state.clone(), auth_middleware))
         .layer(build_cors_layer(cors_origins))
         .with_state(state)

@@ -25,6 +25,13 @@ jsonwebtoken.workspace = true
 bcrypt.workspace = true
 vte = "0.14"
 cron.workspace = true
+totp-rs = "5.6"
+aes-gcm = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+rand = "0.8"
+urlencoding = "2.1"
 
 [dev-dependencies]
 tempfile.workspace = true

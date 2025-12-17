@@ -2,13 +2,15 @@
 
 use axum::extract::{ConnectInfo, State};
 use axum::http::StatusCode;
-use axum::Json;
-use hypercraft_core::{LoginRequest, RefreshRequest};
+use axum::{Extension, Json};
+use hypercraft_core::{DevTokenLoginRequest, LoginRequest, RefreshRequest, UserSummary};
 use serde_json::{json, Value};
 use std::net::SocketAddr;
 
 use super::super::error::ApiError;
+use super::super::middleware::AuthInfo;
 use super::super::state::AppState;
+use super::verify_user_2fa;
 
 /// POST /auth/login - 用户登录
 pub async fn login(
@@ -25,8 +27,50 @@ pub async fn login(
 
     let auth_token = state
         .user_manager
-        .login(&req.username, &req.password)
+        .login(&req.username, &req.password, req.totp_code.as_deref())
         .await?;
+
+    Ok((StatusCode::OK, Json(json!(auth_token))))
+}
+
+/// POST /auth/devtoken - DevToken 登录
+pub async fn devtoken_login(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(req): Json<DevTokenLoginRequest>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    let ip = addr.ip().to_string();
+    if !state.login_limiter.allow(&ip).await {
+        return Err(ApiError::too_many_requests(
+            "too many login attempts, try again later",
+        ));
+    }
+
+    // 验证 DevToken
+    let dev_token = state
+        .dev_token
+        .as_ref()
+        .ok_or_else(|| ApiError::unauthorized_with_message("DevToken not configured"))?;
+
+    if &req.dev_token != dev_token {
+        return Err(ApiError::unauthorized_with_message("Invalid DevToken"));
+    }
+
+    // 验证 2FA（如果启用）
+    verify_user_2fa(&state, "__devtoken__", req.totp_code.as_deref()).await?;
+
+    // 签发 JWT token（使用虚拟 dev 用户）
+    let auth_token = state
+        .user_manager
+        .issue_dev_token()
+        .await
+        .map_err(|e| {
+            ApiError::new(
+                "INTERNAL_ERROR",
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to issue token: {}", e),
+            )
+        })?;
 
     Ok((StatusCode::OK, Json(json!(auth_token))))
 }
@@ -47,4 +91,36 @@ pub async fn refresh(
     let auth_token = state.user_manager.refresh(&req.refresh_token).await?;
 
     Ok((StatusCode::OK, Json(json!(auth_token))))
+}
+
+/// GET /auth/me - 获取当前用户信息
+pub async fn get_me(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthInfo>,
+) -> Result<Json<UserSummary>, ApiError> {
+    // 获取用户信息，如果是 DevToken 且不存在，返回默认信息
+    let user = match state.user_manager.get_user(&auth.claims.sub).await {
+        Ok(user) => user,
+        Err(_) if auth.claims.sub == "__devtoken__" => {
+            // DevToken 用户不存在时返回默认信息
+            use hypercraft_core::user::User;
+            use chrono::Utc;
+
+            User {
+                id: "__devtoken__".to_string(),
+                username: "DevToken".to_string(),
+                password_hash: String::new(),
+                service_ids: vec![],
+                token_version: 0,
+                refresh_nonce: String::new(),
+                totp_config: None,
+                created_at: Some(Utc::now()),
+                updated_at: Some(Utc::now()),
+            }
+        }
+        Err(e) => return Err(e.into()),
+    };
+
+    let summary: UserSummary = user.into();
+    Ok(Json(summary))
 }

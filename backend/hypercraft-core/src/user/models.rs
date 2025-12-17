@@ -23,10 +23,27 @@ pub struct User {
     /// Refresh token 随机因子（用于单次刷新）
     #[serde(default)]
     pub refresh_nonce: String,
+    /// 2FA 配置（可选）
+    pub totp_config: Option<TotpConfig>,
     /// 创建时间
     pub created_at: Option<DateTime<Utc>>,
     /// 更新时间
     pub updated_at: Option<DateTime<Utc>>,
+}
+
+/// TOTP 2FA 配置
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TotpConfig {
+    /// TOTP secret（AES-256-GCM 加密后的 base64）
+    pub secret: String,
+    /// 是否已启用
+    pub enabled: bool,
+    /// 备用恢复码（bcrypt 哈希后）
+    #[serde(default)]
+    pub recovery_codes: Vec<String>,
+    /// 启用时间
+    pub enabled_at: Option<DateTime<Utc>>,
 }
 
 /// 创建用户请求
@@ -108,6 +125,16 @@ pub struct AuthToken {
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
+    /// TOTP 验证码（用户启用 2FA 后必填）
+    pub totp_code: Option<String>,
+}
+
+/// DevToken 登录请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DevTokenLoginRequest {
+    pub dev_token: String,
+    /// TOTP 验证码（DevToken 启用 2FA 后必填）
+    pub totp_code: Option<String>,
 }
 
 /// 刷新请求
@@ -122,6 +149,8 @@ pub struct UserSummary {
     pub id: String,
     pub username: String,
     pub service_ids: Vec<String>,
+    /// 是否启用了双因素认证
+    pub totp_enabled: bool,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -131,7 +160,53 @@ impl From<User> for UserSummary {
             id: user.id,
             username: user.username,
             service_ids: user.service_ids,
+            totp_enabled: user
+                .totp_config
+                .as_ref()
+                .map(|cfg| cfg.enabled)
+                .unwrap_or(false),
             created_at: user.created_at,
         }
     }
 }
+
+/// 2FA 设置响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Setup2FAResponse {
+    /// TOTP secret（明文，仅此次返回）
+    pub secret: String,
+    /// QR code URI（otpauth:// 格式）
+    pub qr_uri: String,
+    /// 备用恢复码（明文，仅此次返回）
+    pub recovery_codes: Vec<String>,
+}
+
+/// 2FA 启用请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Enable2FARequest {
+    /// TOTP 验证码确认
+    pub totp_code: String,
+    /// TOTP secret（从 setup 响应中获取）
+    pub secret: String,
+    /// 备用恢复码（从 setup 响应中获取）
+    pub recovery_codes: Vec<String>,
+}
+
+/// 2FA 禁用请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Disable2FARequest {
+    /// 验证方式
+    pub verification: TwoFactorVerification,
+}
+
+/// 双因素验证方式
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum TwoFactorVerification {
+    Totp { code: String },
+    Recovery { code: String },
+}
+
+/// 2FA 设置请求（无需参数，从 JWT 获取用户信息）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Setup2FARequest {}

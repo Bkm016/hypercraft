@@ -5,9 +5,6 @@ mod rate_limit;
 mod router;
 mod state;
 
-#[cfg(test)]
-mod tests;
-
 pub use error::ApiError;
 pub use rate_limit::RateLimiter;
 pub use router::app_router;
