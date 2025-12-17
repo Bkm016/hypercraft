@@ -219,8 +219,9 @@ export default function UsersPage() {
                     onCheckedChange={toggleAll}
                   />
                 </PageTableTh>
-                <PageTableTh>用户名</PageTableTh>
-                <PageTableTh>服务权限</PageTableTh>
+                <PageTableTh className="w-48">用户名</PageTableTh>
+                <PageTableTh className="w-64">服务权限</PageTableTh>
+                <PageTableTh className="w-32">双因素认证</PageTableTh>
                 <PageTableTh className="w-50">创建时间</PageTableTh>
                 <PageTableTh className="w-24" />
               </PageTableHead>

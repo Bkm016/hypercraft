@@ -120,6 +120,7 @@ export interface UserSummary {
   id: string;
   username: string;
   service_ids: string[];
+  totp_enabled: boolean;
   created_at?: string;
 }
 
@@ -162,11 +163,41 @@ export interface AuthToken {
 export interface LoginRequest {
   username: string;
   password: string;
+  totp_code?: string;
+}
+
+export interface DevTokenLoginRequest {
+  dev_token: string;
+  totp_code?: string;
 }
 
 export interface RefreshRequest {
   refresh_token: string;
 }
+
+// ==================== 2FA 相关 ====================
+
+export interface Setup2FAResponse {
+  secret: string;
+  qr_uri: string;
+  recovery_codes: string[];
+}
+
+export interface Setup2FARequest {}
+
+export interface Enable2FARequest {
+  totp_code: string;
+  secret: string;
+  recovery_codes: string[];
+}
+
+export interface Disable2FARequest {
+  verification: TwoFactorVerification;
+}
+
+export type TwoFactorVerification =
+  | { type: "totp"; code: string }
+  | { type: "recovery"; code: string };
 
 // ==================== 日志相关 ====================
 
@@ -178,6 +209,7 @@ export interface LogsResponse {
 // ==================== API 响应 ====================
 
 export interface ApiError {
+  code?: string;
   error: string;
   message: string;
   status?: number;

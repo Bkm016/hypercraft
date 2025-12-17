@@ -11,12 +11,16 @@ import {
   RiTimeLine,
   RiUserLine,
   RiRefreshLine,
+  RiShieldCheckLine,
+  RiShieldLine,
 } from "@remixicon/react";
 import * as Button from "@/components/ui/button";
 import * as CompactButton from "@/components/ui/compact-button";
 import { PageLayout, PageHeader, PageContent, PageCard } from "@/components/layout/page-layout";
 import { useAuth } from "@/lib/auth";
-import { api, type ServiceSummary } from "@/lib/api";
+import { api, type ServiceSummary, type Setup2FAResponse } from "@/lib/api";
+import { Setup2FADialog } from "@/components/auth/setup-2fa-dialog";
+import { VerificationCodeDialog } from "@/components/auth/verification-code-dialog";
 
 export default function ProfilePage() {
   const { user, isAdmin, logout, isAuthenticated } = useAuth();
@@ -24,14 +28,23 @@ export default function ProfilePage() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  
+
   // 密码表单
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
-  
+
+  // 2FA 状态
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [showSetup2FA, setShowSetup2FA] = useState(false);
+  const [setup2FAData, setSetup2FAData] = useState<Setup2FAResponse | null>(null);
+  const [twoFactorLoading, setTwoFactorLoading] = useState(false);
+  const [twoFactorError, setTwoFactorError] = useState("");
+  const [twoFactorSuccess, setTwoFactorSuccess] = useState("");
+  const [showVerificationDialog, setShowVerificationDialog] = useState(false);
+
   // 服务列表（用于显示服务名称）
   const [services, setServices] = useState<ServiceSummary[]>([]);
 
@@ -41,6 +54,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (isAuthenticated) {
       loadServices();
+      loadTwoFactorStatus();
     }
   }, [isAuthenticated]);
 
@@ -50,6 +64,18 @@ export default function ProfilePage() {
       setServices(data);
     } catch {
       // 忽略错误
+    }
+  };
+
+  const loadTwoFactorStatus = async () => {
+    if (!user) return;
+
+    try {
+      const userData = await api.getMe();
+      setTwoFactorEnabled(userData.totp_enabled);
+    } catch (err) {
+      console.error("Failed to load 2FA status:", err);
+      setTwoFactorEnabled(false);
     }
   };
 
@@ -99,6 +125,77 @@ export default function ProfilePage() {
       // 刷新失败，可能需要重新登录
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  // 启用 2FA - 第一步：获取 QR 码和恢复码
+  const handleEnable2FAStart = async () => {
+    setTwoFactorError("");
+    setTwoFactorSuccess("");
+    setTwoFactorLoading(true);
+
+    try {
+      const response = await api.setup2FA({});
+      setSetup2FAData(response);
+      setShowSetup2FA(true);
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      setTwoFactorError(error.message || "获取 2FA 配置失败");
+    } finally {
+      setTwoFactorLoading(false);
+    }
+  };
+
+  // 启用 2FA - 第二步：验证并启用
+  const handleEnable2FAConfirm = async (code: string) => {
+    if (!setup2FAData) return;
+
+    setTwoFactorLoading(true);
+    try {
+      await api.enable2FA({
+        totp_code: code,
+        secret: setup2FAData.secret,
+        recovery_codes: setup2FAData.recovery_codes,
+      });
+
+      setShowSetup2FA(false);
+      setSetup2FAData(null);
+      setTwoFactorSuccess("双因素认证已启用");
+      await loadTwoFactorStatus();
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      throw new Error(error.message || "启用 2FA 失败");
+    } finally {
+      setTwoFactorLoading(false);
+    }
+  };
+
+  // 禁用 2FA
+  const handleDisable2FA = () => {
+    setTwoFactorError("");
+    setTwoFactorSuccess("");
+    setShowVerificationDialog(true);
+  };
+
+  // 禁用 2FA - 验证码确认
+  const handleDisableVerificationConfirm = async (code: string) => {
+    setShowVerificationDialog(false);
+    setTwoFactorLoading(true);
+
+    try {
+      const verification = code.includes("-")
+        ? { type: "recovery" as const, code }
+        : { type: "totp" as const, code };
+
+      await api.disable2FA({ verification });
+
+      setTwoFactorSuccess("双因素认证已禁用");
+      await loadTwoFactorStatus();
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      setTwoFactorError(error.message || "禁用 2FA 失败");
+    } finally {
+      setTwoFactorLoading(false);
     }
   };
 
@@ -255,6 +352,66 @@ export default function ProfilePage() {
             </div>
           </PageCard>
 
+          {/* 双因素认证 */}
+          <PageCard
+            title="双因素认证"
+            description="为你的账号添加额外的安全保护"
+          >
+            {twoFactorError && (
+              <div className="mb-4 rounded-lg bg-error-lighter px-4 py-3 text-sm text-error-base">
+                {twoFactorError}
+              </div>
+            )}
+            {twoFactorSuccess && (
+              <div className="mb-4 rounded-lg bg-success-lighter px-4 py-3 text-sm text-success-base">
+                {twoFactorSuccess}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between rounded-lg bg-bg-weak-50 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <div className={`rounded-lg p-2 ${twoFactorEnabled ? "bg-success-alpha-10" : "bg-bg-white-0"}`}>
+                  {twoFactorEnabled ? (
+                    <RiShieldCheckLine className="size-4 text-success-base" />
+                  ) : (
+                    <RiShieldLine className="size-4 text-text-soft-400" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-text-strong-950">
+                    {twoFactorEnabled ? "已启用" : "未启用"}
+                  </p>
+                  <p className="text-xs text-text-sub-600">
+                    {twoFactorEnabled
+                      ? "使用 TOTP 应用进行双因素认证"
+                      : "推荐启用以提升账号安全性"}
+                  </p>
+                </div>
+              </div>
+              {twoFactorEnabled ? (
+                <Button.Root
+                  size="xsmall"
+                  variant="error"
+                  mode="stroke"
+                  onClick={handleDisable2FA}
+                  disabled={twoFactorLoading}
+                >
+                  {twoFactorLoading ? "处理中..." : "禁用"}
+                </Button.Root>
+              ) : (
+                <Button.Root
+                  size="xsmall"
+                  variant="neutral"
+                  mode="stroke"
+                  onClick={handleEnable2FAStart}
+                  disabled={twoFactorLoading}
+                >
+                  {twoFactorLoading ? "处理中..." : "启用"}
+                </Button.Root>
+              )}
+            </div>
+          </PageCard>
+
           {/* 修改密码 - DevToken 用户无法修改密码 */}
           {isDevToken ? (
             <PageCard
@@ -377,6 +534,30 @@ export default function ProfilePage() {
           </div>
         </div>
       </PageContent>
+
+      {/* 2FA 设置对话框 */}
+      {showSetup2FA && setup2FAData && (
+        <Setup2FADialog
+          secret={setup2FAData.secret}
+          qrUri={setup2FAData.qr_uri}
+          recoveryCodes={setup2FAData.recovery_codes}
+          onConfirm={handleEnable2FAConfirm}
+          onClose={() => {
+            setShowSetup2FA(false);
+            setSetup2FAData(null);
+          }}
+        />
+      )}
+
+      {/* 验证码确认对话框 */}
+      {showVerificationDialog && (
+        <VerificationCodeDialog
+          title="禁用双因素认证"
+          description="请输入 6 位验证码或恢复码以确认禁用"
+          onConfirm={handleDisableVerificationConfirm}
+          onClose={() => setShowVerificationDialog(false)}
+        />
+      )}
     </PageLayout>
   );
 }

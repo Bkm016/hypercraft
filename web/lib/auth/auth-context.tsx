@@ -24,8 +24,8 @@ interface AuthContextValue {
   connectionStatus: ConnectionStatus;
 
   // 操作
-  login: (username: string, password: string) => Promise<void>;
-  loginWithDevToken: (token: string) => Promise<void>;
+  login: (username: string, password: string, totpCode?: string) => Promise<void>;
+  loginWithDevToken: (token: string, totpCode?: string) => Promise<void>;
   logout: () => void;
   retryConnection: () => Promise<void>;
 
@@ -55,18 +55,6 @@ function parseJwt(token: string): TokenClaims | null {
 // 检查 token 是否过期
 function isTokenExpired(claims: TokenClaims): boolean {
   return claims.exp * 1000 < Date.now();
-}
-
-// DevToken 的虚拟 claims（不是JWT，所以需要手动构造）
-function createDevTokenClaims(): TokenClaims {
-  return {
-    sub: "dev",
-    username: "DevToken",
-    token_type: "dev",
-    service_ids: [],
-    exp: Math.floor(Date.now() / 1000) + 86400 * 365, // 1年后过期
-    iat: Math.floor(Date.now() / 1000),
-  };
 }
 
 // 公开路由（不需要认证）
@@ -113,25 +101,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 恢复登录状态
       const accessToken = api.getAccessToken();
       if (accessToken) {
-        // 检查是否是 devtoken（不是 JWT 格式）
-        const isDevToken = !accessToken.includes(".");
-        if (isDevToken) {
-          // DevToken：验证有效性
-          try {
-            await api.listServices();
-            setUser(createDevTokenClaims());
-          } catch {
-            api.clearTokens();
-          }
+        // JWT：解析 claims
+        const claims = parseJwt(accessToken);
+        if (claims && !isTokenExpired(claims)) {
+          setUser(claims);
         } else {
-          // JWT：解析 claims
-          const claims = parseJwt(accessToken);
-          if (claims && !isTokenExpired(claims)) {
-            setUser(claims);
-          } else {
-            // token 过期，清除
-            api.clearTokens();
-          }
+          // token 过期，清除
+          api.clearTokens();
         }
       }
       setIsLoading(false);
@@ -153,28 +129,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, isLoading, pathname, router]);
 
-  const login = useCallback(async (username: string, password: string) => {
-    const tokens = await api.login({ username, password });
+  const login = useCallback(async (username: string, password: string, totpCode?: string) => {
+    const tokens = await api.login({ username, password, totp_code: totpCode });
     const claims = parseJwt(tokens.access_token);
     if (claims) {
       setUser(claims);
     }
   }, []);
 
-  // DevToken 登录：直接使用 token 验证
-  const loginWithDevToken = useCallback(async (token: string) => {
-    // 先设置 token
-    api.setDevToken(token);
-    
-    // 尝试调用一个需要认证的 API 来验证 token 是否有效
-    try {
-      await api.listServices();
-      // 验证成功，设置用户状态
-      setUser(createDevTokenClaims());
-    } catch {
-      // 验证失败，清除 token
-      api.clearTokens();
-      throw new Error("DevToken 无效");
+  // DevToken 登录：调用 /auth/devtoken 接口，验证 2FA 后签发 JWT
+  const loginWithDevToken = useCallback(async (token: string, totpCode?: string) => {
+    const tokens = await api.devtokenLogin({ dev_token: token, totp_code: totpCode });
+    const claims = parseJwt(tokens.access_token);
+    if (claims) {
+      setUser(claims);
     }
   }, []);
 
@@ -187,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const canAccessService = useCallback(
     (serviceId: string): boolean => {
       if (!user) return false;
-      if (user.token_type === "dev") return true;
+      if (user.sub === "__devtoken__") return true;
       return user.service_ids?.includes(serviceId) ?? false;
     },
     [user]
@@ -197,7 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     isLoading,
     isAuthenticated: !!user,
-    isAdmin: user?.token_type === "dev",
+    isAdmin: user?.sub === "__devtoken__",
     connectionStatus,
     login,
     loginWithDevToken,

@@ -71,6 +71,13 @@ export function UserRow({
           )}
         </div>
       </td>
+      <td className="px-4 py-3">
+        {user.totp_enabled ? (
+          <span className="text-xs text-green-500">已启用</span>
+        ) : (
+          <span className="text-xs text-text-soft-400">未启用</span>
+        )}
+      </td>
       <td className="px-4 py-3 text-sm text-text-sub-600">
         {user.created_at ? new Date(user.created_at).toLocaleString("zh-CN") : "—"}
       </td>

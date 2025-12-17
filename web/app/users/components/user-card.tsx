@@ -5,6 +5,7 @@ import {
   RiEditLine,
   RiMoreLine,
   RiUserLine,
+  RiShieldCheckLine,
 } from "@remixicon/react";
 import * as Checkbox from "@/components/ui/checkbox";
 import * as Dropdown from "@/components/ui/dropdown";
@@ -61,6 +62,15 @@ export function UserCard({
             <>
               <span className="text-xs text-text-sub-600">
                 {user.service_ids.length} 个服务
+              </span>
+            </>
+          )}
+          {user.totp_enabled && (
+            <>
+              <span className="text-text-soft-400">•</span>
+              <span className="inline-flex items-center gap-0.5 text-xs text-success-base">
+                <RiShieldCheckLine className="size-3" />
+                2FA
               </span>
             </>
           )}

@@ -1,6 +1,7 @@
 import type {
   AuthToken,
   LoginRequest,
+  DevTokenLoginRequest,
   RefreshRequest,
   UserSummary,
   CreateUserRequest,
@@ -20,6 +21,10 @@ import type {
   ValidateCronRequest,
   ValidateCronResponse,
   SystemStats,
+  Setup2FARequest,
+  Setup2FAResponse,
+  Enable2FARequest,
+  Disable2FARequest,
 } from "./types";
 
 function getApiBaseUrl(): string {
@@ -88,16 +93,6 @@ class ApiClient {
     return this.refreshToken;
   }
 
-  // 设置 DevToken（不是JWT，直接作为 access_token 使用）
-  setDevToken(token: string) {
-    this.accessToken = token;
-    this.refreshToken = null;
-    if (typeof window !== "undefined") {
-      localStorage.setItem("access_token", token);
-      localStorage.removeItem("refresh_token");
-    }
-  }
-
   // ==================== 请求方法 ====================
 
   private async request<T>(
@@ -154,7 +149,8 @@ class ApiClient {
     try {
       const data = await response.json();
       return {
-        error: data.error || "Unknown error",
+        code: data.code,
+        error: data.error || data.code || "Unknown error",
         message: data.message || data.error || response.statusText,
         status: response.status,
       };
@@ -196,6 +192,15 @@ class ApiClient {
     return tokens;
   }
 
+  async devtokenLogin(req: DevTokenLoginRequest): Promise<AuthToken> {
+    const tokens = await this.request<AuthToken>("/auth/devtoken", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+    this.setTokens(tokens);
+    return tokens;
+  }
+
   async authRefresh(req: RefreshRequest): Promise<AuthToken> {
     // 刷新 token 时不使用 Authorization header
     const response = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
@@ -211,6 +216,33 @@ class ApiClient {
 
   logout() {
     this.clearTokens();
+  }
+
+  async getMe(): Promise<UserSummary> {
+    return this.request<UserSummary>("/auth/me");
+  }
+
+  // ==================== 2FA API ====================
+
+  async setup2FA(req: Setup2FARequest): Promise<Setup2FAResponse> {
+    return this.request<Setup2FAResponse>("/auth/2fa/setup", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async enable2FA(req: Enable2FARequest): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>("/auth/2fa/enable", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async disable2FA(req: Disable2FARequest): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>("/auth/2fa/disable", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
   }
 
   // ==================== 用户 API ====================
