@@ -69,7 +69,7 @@ export default function HomePage() {
     <PageLayout>
       <PageHeader
         title="仪表盘"
-        description={`欢迎回来，${user?.username || "用户"}`}
+        description={`欢迎回来，${user?.username == "__devtoken__" ? "管理员" :  user?.username ?? "用户"}`}
       />
 
       <PageContent>

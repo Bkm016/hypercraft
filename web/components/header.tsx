@@ -83,12 +83,9 @@ export default function Header() {
               >
                 <div className="flex items-center gap-1.5 text-sm text-text-sub-600">
                   <RiUserLine className="size-4" />
-                  <span>{user.username}</span>
-                  {isAdmin && (
-                    <span className="rounded bg-away-lighter px-1.5 py-0.5 text-xs font-medium text-away-base">
-                      管理员
-                    </span>
-                  )}
+                  {isAdmin ? <span className="rounded bg-away-lighter px-1.5 py-0.5 text-xs font-medium text-away-base">
+                    管理员
+                  </span> : <span>{user.username}</span>}
                 </div>
               </Link>
               <Button.Root

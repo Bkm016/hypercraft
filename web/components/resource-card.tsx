@@ -5,7 +5,7 @@ import type { RemixiconComponentType } from "@remixicon/react";
 const colorMap = {
   primary: {
     bg: "bg-primary-alpha-10",
-    fill: "bg-primary-base",
+    fill: "bg-text-strong-950",
     text: "text-primary-base",
   },
   success: {

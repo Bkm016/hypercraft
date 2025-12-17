@@ -2,582 +2,163 @@
 
 import { useState, useEffect } from "react";
 import {
-  RiCheckLine,
-  RiEyeLine,
-  RiEyeOffLine,
-  RiKeyLine,
-  RiLogoutBoxLine,
-  RiServerLine,
-  RiTimeLine,
-  RiUserLine,
-  RiRefreshLine,
-  RiShieldCheckLine,
-  RiShieldLine,
-} from "@remixicon/react";
-import * as Button from "@/components/ui/button";
-import * as CompactButton from "@/components/ui/compact-button";
-import { PageLayout, PageHeader, PageContent, PageCard } from "@/components/layout/page-layout";
+	PageLayout,
+	PageHeader,
+	PageContent,
+} from "@/components/layout/page-layout";
 import { useAuth } from "@/lib/auth";
-import { api, type ServiceSummary, type Setup2FAResponse } from "@/lib/api";
-import { Setup2FADialog } from "@/components/auth/setup-2fa-dialog";
-import { VerificationCodeDialog } from "@/components/auth/verification-code-dialog";
+import { api, type ServiceSummary } from "@/lib/api";
+import {
+	ProfileSidebar,
+	AccountPanel,
+	SecurityPanel,
+	PasswordPanel,
+	type ProfileSection,
+} from "./components";
 
 export default function ProfilePage() {
-  const { user, isAdmin, logout, isAuthenticated } = useAuth();
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+	const { user, isAdmin, logout, isAuthenticated } = useAuth();
+	const [activeSection, setActiveSection] = useState<ProfileSection>("account");
+	const [refreshing, setRefreshing] = useState(false);
 
-  // 密码表单
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-  const [passwordSuccess, setPasswordSuccess] = useState("");
+	// 2FA 状态
+	const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
 
-  // 2FA 状态
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  const [showSetup2FA, setShowSetup2FA] = useState(false);
-  const [setup2FAData, setSetup2FAData] = useState<Setup2FAResponse | null>(null);
-  const [twoFactorLoading, setTwoFactorLoading] = useState(false);
-  const [twoFactorError, setTwoFactorError] = useState("");
-  const [twoFactorSuccess, setTwoFactorSuccess] = useState("");
-  const [showVerificationDialog, setShowVerificationDialog] = useState(false);
+	// 服务列表（用于显示服务名称）
+	const [services, setServices] = useState<ServiceSummary[]>([]);
 
-  // 服务列表（用于显示服务名称）
-  const [services, setServices] = useState<ServiceSummary[]>([]);
+	// 判断是否是 DevToken 用户（没有密码可改）
+	const isDevToken = user?.sub === "dev" || user?.token_type === "dev";
 
-  // 判断是否是 DevToken 用户（没有密码可改）
-  const isDevToken = user?.sub === "dev" || user?.token_type === "dev";
+	useEffect(() => {
+		if (isAuthenticated) {
+			loadServices();
+			loadTwoFactorStatus();
+		}
+	}, [isAuthenticated]);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadServices();
-      loadTwoFactorStatus();
-    }
-  }, [isAuthenticated]);
+	const loadServices = async () => {
+		try {
+			const data = await api.listServices();
+			setServices(data);
+		} catch {
+			// 忽略错误
+		}
+	};
 
-  const loadServices = async () => {
-    try {
-      const data = await api.listServices();
-      setServices(data);
-    } catch {
-      // 忽略错误
-    }
-  };
+	const loadTwoFactorStatus = async () => {
+		if (!user) return;
 
-  const loadTwoFactorStatus = async () => {
-    if (!user) return;
+		try {
+			const userData = await api.getMe();
+			setTwoFactorEnabled(userData.totp_enabled);
+		} catch (err) {
+			console.error("Failed to load 2FA status:", err);
+			setTwoFactorEnabled(false);
+		}
+	};
 
-    try {
-      const userData = await api.getMe();
-      setTwoFactorEnabled(userData.totp_enabled);
-    } catch (err) {
-      console.error("Failed to load 2FA status:", err);
-      setTwoFactorEnabled(false);
-    }
-  };
+	const handleRefreshToken = async () => {
+		setRefreshing(true);
+		try {
+			const refreshToken = api.getRefreshToken();
+			if (refreshToken) {
+				await api.authRefresh({ refresh_token: refreshToken });
+				// 刷新页面以更新状态
+				window.location.reload();
+			}
+		} catch {
+			// 刷新失败，可能需要重新登录
+		} finally {
+			setRefreshing(false);
+		}
+	};
 
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPasswordError("");
-    setPasswordSuccess("");
+	// 获取当前面板的标题和描述
+	const getPanelInfo = () => {
+		switch (activeSection) {
+			case "account":
+				return {
+					title: "账号信息",
+					description: "查看和管理你的基本账号信息",
+				};
+			case "security":
+				return {
+					title: "安全设置",
+					description: "管理双因素认证和账号安全选项",
+				};
+			case "password":
+				return {
+					title: "修改密码",
+					description: "更新你的登录密码",
+				};
+		}
+	};
 
-    if (newPassword !== confirmPassword) {
-      setPasswordError("两次输入的密码不一致");
-      return;
-    }
+	if (!user) {
+		return (
+			<PageLayout>
+				<PageContent>
+					<div className="flex items-center justify-center py-20">
+						<p className="text-text-sub-600">加载中...</p>
+					</div>
+				</PageContent>
+			</PageLayout>
+		);
+	}
 
-    if (newPassword.length < 4) {
-      setPasswordError("新密码长度至少 4 位");
-      return;
-    }
+	const panelInfo = getPanelInfo();
 
-    setSaving(true);
-    try {
-      await api.changePassword(user!.sub, {
-        new_password: newPassword,
-        current_password: currentPassword || undefined,
-      });
-      setPasswordSuccess("密码修改成功");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (err: unknown) {
-      const error = err as { message?: string };
-      setPasswordError(error.message || "修改密码失败");
-    } finally {
-      setSaving(false);
-    }
-  };
+	return (
+		<PageLayout>
+			<PageHeader title="个人中心" description="管理你的账号信息和安全设置" />
 
-  const handleRefreshToken = async () => {
-    setRefreshing(true);
-    try {
-      const refreshToken = api.getRefreshToken();
-      if (refreshToken) {
-        await api.authRefresh({ refresh_token: refreshToken });
-        // 刷新页面以更新状态
-        window.location.reload();
-      }
-    } catch {
-      // 刷新失败，可能需要重新登录
-    } finally {
-      setRefreshing(false);
-    }
-  };
+			<PageContent maxWidth="6xl">
+				<div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
+					{/* 左侧导航 */}
+					<ProfileSidebar
+						activeSection={activeSection}
+						onSectionChange={setActiveSection}
+						onLogout={logout}
+						isDevToken={isDevToken}
+					/>
 
-  // 启用 2FA - 第一步：获取 QR 码和恢复码
-  const handleEnable2FAStart = async () => {
-    setTwoFactorError("");
-    setTwoFactorSuccess("");
-    setTwoFactorLoading(true);
+					{/* 右侧内容区 */}
+					<div className="min-w-0 flex-1">
+						{/* 面板标题 */}
+						<div className="mb-6 border-b border-stroke-soft-200 pb-4">
+							<h2 className="text-lg font-semibold text-text-strong-950">
+								{panelInfo.title}
+							</h2>
+							<p className="mt-1 text-sm text-text-sub-600">
+								{panelInfo.description}
+							</p>
+						</div>
 
-    try {
-      const response = await api.setup2FA({});
-      setSetup2FAData(response);
-      setShowSetup2FA(true);
-    } catch (err: unknown) {
-      const error = err as { message?: string };
-      setTwoFactorError(error.message || "获取 2FA 配置失败");
-    } finally {
-      setTwoFactorLoading(false);
-    }
-  };
+						{/* 内容面板 */}
+						{activeSection === "account" && (
+							<AccountPanel
+								user={user}
+								isAdmin={isAdmin}
+								services={services}
+								refreshing={refreshing}
+								onRefreshToken={handleRefreshToken}
+							/>
+						)}
 
-  // 启用 2FA - 第二步：验证并启用
-  const handleEnable2FAConfirm = async (code: string) => {
-    if (!setup2FAData) return;
+						{activeSection === "security" && (
+							<SecurityPanel
+								twoFactorEnabled={twoFactorEnabled}
+								onTwoFactorChange={loadTwoFactorStatus}
+							/>
+						)}
 
-    setTwoFactorLoading(true);
-    try {
-      await api.enable2FA({
-        totp_code: code,
-        secret: setup2FAData.secret,
-        recovery_codes: setup2FAData.recovery_codes,
-      });
-
-      setShowSetup2FA(false);
-      setSetup2FAData(null);
-      setTwoFactorSuccess("双因素认证已启用");
-      await loadTwoFactorStatus();
-    } catch (err: unknown) {
-      const error = err as { message?: string };
-      throw new Error(error.message || "启用 2FA 失败");
-    } finally {
-      setTwoFactorLoading(false);
-    }
-  };
-
-  // 禁用 2FA
-  const handleDisable2FA = () => {
-    setTwoFactorError("");
-    setTwoFactorSuccess("");
-    setShowVerificationDialog(true);
-  };
-
-  // 禁用 2FA - 验证码确认
-  const handleDisableVerificationConfirm = async (code: string) => {
-    setShowVerificationDialog(false);
-    setTwoFactorLoading(true);
-
-    try {
-      const verification = code.includes("-")
-        ? { type: "recovery" as const, code }
-        : { type: "totp" as const, code };
-
-      await api.disable2FA({ verification });
-
-      setTwoFactorSuccess("双因素认证已禁用");
-      await loadTwoFactorStatus();
-    } catch (err: unknown) {
-      const error = err as { message?: string };
-      setTwoFactorError(error.message || "禁用 2FA 失败");
-    } finally {
-      setTwoFactorLoading(false);
-    }
-  };
-
-  // 计算 token 过期时间
-  const getTokenExpiry = () => {
-    if (!user) return "未知";
-    const expiryTime = user.exp * 1000;
-    const now = Date.now();
-    const diff = expiryTime - now;
-    
-    if (diff <= 0) return "已过期";
-    
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(minutes / 60);
-    
-    if (hours > 0) {
-      return `${hours} 小时 ${minutes % 60} 分钟后`;
-    }
-    return `${minutes} 分钟后`;
-  };
-
-  // 获取用户有权限的服务名称
-  const getUserServices = () => {
-    if (!user?.service_ids) return [];
-    return user.service_ids.map((id) => {
-      const service = services.find((s) => s.id === id);
-      return service?.name || id;
-    });
-  };
-
-  // 格式化时间
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleString("zh-CN");
-  };
-
-  if (!user) {
-    return (
-      <PageLayout>
-        <PageContent>
-          <div className="flex items-center justify-center py-20">
-            <p className="text-text-sub-600">加载中...</p>
-          </div>
-        </PageContent>
-      </PageLayout>
-    );
-  }
-
-  return (
-    <PageLayout>
-      <PageHeader
-        title="个人中心"
-        description="管理你的账号信息和安全设置"
-      />
-
-      <PageContent maxWidth="2xl">
-        <div className="space-y-6">
-          {/* 账号信息 */}
-          <PageCard
-            title="账号信息"
-            description="你的基本账号信息"
-          >
-            <div className="space-y-4">
-              <InfoRow
-                icon={<RiUserLine className="size-4" />}
-                label="用户名"
-                value={user.username}
-              />
-              <InfoRow
-                icon={<RiUserLine className="size-4" />}
-                label="用户 ID"
-                value={<code className="text-xs bg-bg-weak-50 px-1.5 py-0.5 rounded">{user.sub}</code>}
-              />
-              <InfoRow
-                icon={<RiUserLine className="size-4" />}
-                label="角色"
-                value={
-                  <span
-                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${
-                      isAdmin
-                        ? "bg-away-lighter text-away-base"
-                        : "bg-bg-weak-50 text-text-sub-600"
-                    }`}
-                  >
-                    {isAdmin ? "管理员" : "用户"}
-                  </span>
-                }
-              />
-              {!isAdmin && (
-                <InfoRow
-                  icon={<RiServerLine className="size-4" />}
-                  label="服务权限"
-                  value={
-                    <div className="flex flex-wrap gap-1.5">
-                      {getUserServices().length > 0 ? (
-                        getUserServices().map((name) => (
-                          <span
-                            key={name}
-                            className="rounded bg-bg-weak-50 px-2 py-0.5 text-xs text-text-sub-600"
-                          >
-                            {name}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-text-soft-400">无服务权限</span>
-                      )}
-                    </div>
-                  }
-                />
-              )}
-              <InfoRow
-                icon={<RiTimeLine className="size-4" />}
-                label="Token 签发时间"
-                value={formatDate(user.iat)}
-              />
-            </div>
-          </PageCard>
-
-          {/* Token 状态 */}
-          <PageCard
-            title="Token 状态"
-            description="访问令牌的有效期信息"
-          >
-            <div className="flex items-center justify-between rounded-lg bg-bg-weak-50 px-4 py-3">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-primary-alpha-10 p-2">
-                  <RiKeyLine className="size-4 text-primary-base" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-text-strong-950">访问令牌</p>
-                  <p className="text-xs text-text-sub-600">
-                    将在 <span className="font-medium text-away-base">{getTokenExpiry()}</span> 过期
-                  </p>
-                </div>
-              </div>
-              <Button.Root 
-                size="xsmall" 
-                variant="neutral" 
-                mode="stroke"
-                onClick={handleRefreshToken}
-                disabled={refreshing}
-              >
-                {refreshing ? (
-                  <>
-                    <RiRefreshLine className="size-3.5 animate-spin" />
-                    刷新中...
-                  </>
-                ) : (
-                  <>
-                    <RiRefreshLine className="size-3.5" />
-                    刷新
-                  </>
-                )}
-              </Button.Root>
-            </div>
-          </PageCard>
-
-          {/* 双因素认证 */}
-          <PageCard
-            title="双因素认证"
-            description="为你的账号添加额外的安全保护"
-          >
-            {twoFactorError && (
-              <div className="mb-4 rounded-lg bg-error-lighter px-4 py-3 text-sm text-error-base">
-                {twoFactorError}
-              </div>
-            )}
-            {twoFactorSuccess && (
-              <div className="mb-4 rounded-lg bg-success-lighter px-4 py-3 text-sm text-success-base">
-                {twoFactorSuccess}
-              </div>
-            )}
-
-            <div className="flex items-center justify-between rounded-lg bg-bg-weak-50 px-4 py-3">
-              <div className="flex items-center gap-3">
-                <div className={`rounded-lg p-2 ${twoFactorEnabled ? "bg-success-alpha-10" : "bg-bg-white-0"}`}>
-                  {twoFactorEnabled ? (
-                    <RiShieldCheckLine className="size-4 text-success-base" />
-                  ) : (
-                    <RiShieldLine className="size-4 text-text-soft-400" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-text-strong-950">
-                    {twoFactorEnabled ? "已启用" : "未启用"}
-                  </p>
-                  <p className="text-xs text-text-sub-600">
-                    {twoFactorEnabled
-                      ? "使用 TOTP 应用进行双因素认证"
-                      : "推荐启用以提升账号安全性"}
-                  </p>
-                </div>
-              </div>
-              {twoFactorEnabled ? (
-                <Button.Root
-                  size="xsmall"
-                  variant="error"
-                  mode="stroke"
-                  onClick={handleDisable2FA}
-                  disabled={twoFactorLoading}
-                >
-                  {twoFactorLoading ? "处理中..." : "禁用"}
-                </Button.Root>
-              ) : (
-                <Button.Root
-                  size="xsmall"
-                  variant="neutral"
-                  mode="stroke"
-                  onClick={handleEnable2FAStart}
-                  disabled={twoFactorLoading}
-                >
-                  {twoFactorLoading ? "处理中..." : "启用"}
-                </Button.Root>
-              )}
-            </div>
-          </PageCard>
-
-          {/* 修改密码 - DevToken 用户无法修改密码 */}
-          {isDevToken ? (
-            <PageCard
-              title="修改密码"
-              description="更新你的登录密码"
-            >
-              <div className="rounded-lg bg-bg-weak-50 px-4 py-6 text-center">
-                <RiKeyLine className="mx-auto size-8 text-text-soft-400" />
-                <p className="mt-2 text-sm text-text-sub-600">
-                  DevToken 用户无需密码，不支持修改密码
-                </p>
-              </div>
-            </PageCard>
-          ) : (
-          <PageCard
-            title="修改密码"
-            description="更新你的登录密码"
-          >
-            <form onSubmit={handlePasswordSubmit} className="space-y-4">
-              {passwordError && (
-                <div className="rounded-lg bg-error-lighter px-4 py-3 text-sm text-error-base">
-                  {passwordError}
-                </div>
-              )}
-              {passwordSuccess && (
-                <div className="rounded-lg bg-success-lighter px-4 py-3 text-sm text-success-base">
-                  {passwordSuccess}
-                </div>
-              )}
-
-              {!isAdmin && (
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-text-strong-950">
-                    当前密码
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showCurrentPassword ? "text" : "password"}
-                      placeholder="输入当前密码"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      className="h-10 w-full rounded-lg border border-stroke-soft-200 bg-bg-white-0 px-3 pr-10 text-sm text-text-strong-950 placeholder:text-text-soft-400 focus:border-primary-base focus:outline-none focus:ring-2 focus:ring-primary-alpha-10"
-                    />
-                    <CompactButton.Root
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      className="absolute right-1 top-1/2 -translate-y-1/2"
-                    >
-                      <CompactButton.Icon as={showCurrentPassword ? RiEyeOffLine : RiEyeLine} />
-                    </CompactButton.Root>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-text-strong-950">
-                  新密码
-                </label>
-                <div className="relative">
-                  <input
-                    type={showNewPassword ? "text" : "password"}
-                    placeholder="输入新密码"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-stroke-soft-200 bg-bg-white-0 px-3 pr-10 text-sm text-text-strong-950 placeholder:text-text-soft-400 focus:border-primary-base focus:outline-none focus:ring-2 focus:ring-primary-alpha-10"
-                  />
-                  <CompactButton.Root
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute right-1 top-1/2 -translate-y-1/2"
-                  >
-                    <CompactButton.Icon as={showNewPassword ? RiEyeOffLine : RiEyeLine} />
-                  </CompactButton.Root>
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-text-strong-950">
-                  确认新密码
-                </label>
-                <input
-                  type="password"
-                  placeholder="再次输入新密码"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="h-10 w-full rounded-lg border border-stroke-soft-200 bg-bg-white-0 px-3 text-sm text-text-strong-950 placeholder:text-text-soft-400 focus:border-primary-base focus:outline-none focus:ring-2 focus:ring-primary-alpha-10"
-                />
-              </div>
-
-              <Button.Root type="submit" size="small" disabled={saving || !newPassword}>
-                {saving ? (
-                  "保存中..."
-                ) : (
-                  <>
-                    <Button.Icon as={RiCheckLine} />
-                    保存密码
-                  </>
-                )}
-              </Button.Root>
-            </form>
-          </PageCard>
-          )}
-
-          {/* 退出登录 */}
-          <div className="rounded-xl border border-error-light bg-error-lighter p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium text-error-base">退出登录</h3>
-                <p className="mt-0.5 text-sm text-error-base/80">
-                  退出当前账号，清除本地登录状态
-                </p>
-              </div>
-              <Button.Root size="small" variant="error" mode="stroke" onClick={logout}>
-                <Button.Icon as={RiLogoutBoxLine} />
-                退出
-              </Button.Root>
-            </div>
-          </div>
-        </div>
-      </PageContent>
-
-      {/* 2FA 设置对话框 */}
-      {showSetup2FA && setup2FAData && (
-        <Setup2FADialog
-          secret={setup2FAData.secret}
-          qrUri={setup2FAData.qr_uri}
-          recoveryCodes={setup2FAData.recovery_codes}
-          onConfirm={handleEnable2FAConfirm}
-          onClose={() => {
-            setShowSetup2FA(false);
-            setSetup2FAData(null);
-          }}
-        />
-      )}
-
-      {/* 验证码确认对话框 */}
-      {showVerificationDialog && (
-        <VerificationCodeDialog
-          title="禁用双因素认证"
-          description="请输入 6 位验证码或恢复码以确认禁用"
-          onConfirm={handleDisableVerificationConfirm}
-          onClose={() => setShowVerificationDialog(false)}
-        />
-      )}
-    </PageLayout>
-  );
-}
-
-function InfoRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between border-b border-stroke-soft-200 pb-4 last:border-0 last:pb-0">
-      <div className="flex items-center gap-2 text-text-sub-600">
-        {icon}
-        <span className="text-sm">{label}</span>
-      </div>
-      <div className="text-sm text-text-strong-950">{value}</div>
-    </div>
-  );
+						{activeSection === "password" && !isDevToken && (
+							<PasswordPanel userId={user.sub} isAdmin={isAdmin} />
+						)}
+					</div>
+				</div>
+			</PageContent>
+		</PageLayout>
+	);
 }
