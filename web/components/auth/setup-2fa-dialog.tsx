@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useQRCode } from "next-qrcode";
-import { RiCloseLine, RiCheckLine, RiFileCopyLine, RiShieldKeyholeLine } from "@remixicon/react";
+import { RiCheckLine, RiFileCopyLine, RiShieldKeyholeLine, RiArrowLeftLine, RiArrowRightLine } from "@remixicon/react";
 import * as Button from "@/components/ui/button";
 import * as CompactButton from "@/components/ui/compact-button";
+import * as FormDialog from "@/components/ui/form-dialog";
 
 interface Setup2FADialogProps {
   secret: string;
@@ -22,11 +23,26 @@ export function Setup2FADialog({
   onClose,
 }: Setup2FADialogProps) {
   const { Canvas } = useQRCode();
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [totpCode, setTotpCode] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState("");
   const [copiedSecret, setCopiedSecret] = useState(false);
   const [copiedRecovery, setCopiedRecovery] = useState(false);
+
+  const handleNext = () => {
+    if (step < 3) {
+      setStep((s) => (s + 1) as 1 | 2 | 3);
+      setError("");
+    }
+  };
+
+  const handleBack = () => {
+    if (step > 1) {
+      setStep((s) => (s - 1) as 1 | 2 | 3);
+      setError("");
+    }
+  };
 
   const handleConfirm = async () => {
     if (!totpCode || totpCode.length !== 6) {
@@ -46,6 +62,17 @@ export function Setup2FADialog({
     }
   };
 
+  const getStepTitle = () => {
+    switch (step) {
+      case 1:
+        return "扫描二维码";
+      case 2:
+        return "保存恢复码";
+      case 3:
+        return "验证并启用";
+    }
+  };
+
   const copyToClipboard = async (text: string, type: "secret" | "recovery") => {
     try {
       await navigator.clipboard.writeText(text);
@@ -62,117 +89,164 @@ export function Setup2FADialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-xl border border-stroke-soft-200 bg-bg-white-0 shadow-lg">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-stroke-soft-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-text-strong-950">启用双因素认证</h2>
-          <CompactButton.Root variant="ghost" onClick={onClose}>
-            <CompactButton.Icon as={RiCloseLine} />
-          </CompactButton.Root>
-        </div>
+    <FormDialog.Root open={true} onOpenChange={(open) => !open && onClose()} size="md">
+      <FormDialog.Content>
+        <FormDialog.Header title={`启用双因素认证 (${step}/3)`} description={getStepTitle()} />
 
-        {/* Content */}
-        <div className="space-y-6 px-6 py-6">
-          {/* Step 1: Scan QR Code */}
-          <div>
-            <h3 className="mb-3 text-sm font-medium text-text-strong-950">
-              1. 使用 Google Authenticator 扫描二维码
-            </h3>
-            <div className="flex justify-center rounded-lg bg-bg-weak-50 p-4">
-              <Canvas
-                text={qrUri}
-                options={{
-                  errorCorrectionLevel: "M",
-                  margin: 2,
-                  scale: 4,
-                  width: 200,
-                }}
+        <FormDialog.Body>
+          {/* Step Indicator */}
+          <div className="flex items-center justify-center gap-2 pb-4">
+            {[1, 2, 3].map((s) => (
+              <div
+                key={s}
+                className={`h-2 flex-1 rounded-full transition-colors ${
+                  s === step
+                    ? "bg-primary-base"
+                    : s < step
+                      ? "bg-success-base"
+                      : "bg-stroke-soft-200"
+                }`}
               />
-            </div>
-            <div className="mt-3 rounded-lg bg-bg-weak-50 p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <p className="text-xs text-text-sub-600">或手动输入密钥：</p>
-                  <code className="mt-1 block break-all font-mono text-xs text-text-strong-950">
-                    {secret}
-                  </code>
+            ))}
+          </div>
+
+          {/* Step 1: Scan QR Code */}
+          {step === 1 && (
+            <div className="min-h-[380px] space-y-4">
+              <div>
+                <p className="mb-3 text-sm text-text-sub-600">
+                  使用 Google Authenticator 或其他 TOTP 应用扫描二维码
+                </p>
+                <div className="flex justify-center rounded-lg bg-bg-weak-50 p-6">
+                  <Canvas
+                    text={qrUri}
+                    options={{
+                      errorCorrectionLevel: "M",
+                      margin: 2,
+                      scale: 4,
+                      width: 200,
+                    }}
+                  />
                 </div>
-                <CompactButton.Root
-                  variant="ghost"
-                  onClick={() => copyToClipboard(secret, "secret")}
-                  className="ml-2 shrink-0"
-                >
-                  <CompactButton.Icon as={copiedSecret ? RiCheckLine : RiFileCopyLine} />
-                </CompactButton.Root>
+              </div>
+              <div className="rounded-lg border border-stroke-soft-200 bg-bg-weak-50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-text-sub-600">或手动输入密钥</p>
+                    <code className="mt-1 block break-all font-mono text-xs text-text-strong-950">
+                      {secret}
+                    </code>
+                  </div>
+                  <CompactButton.Root
+                    variant="ghost"
+                    onClick={() => copyToClipboard(secret, "secret")}
+                    className="shrink-0"
+                  >
+                    <CompactButton.Icon as={copiedSecret ? RiCheckLine : RiFileCopyLine} />
+                  </CompactButton.Root>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Step 2: Save Recovery Codes */}
-          <div>
-            <h3 className="mb-3 text-sm font-medium text-text-strong-950">
-              2. 保存恢复码（请妥善保管）
-            </h3>
-            <div className="rounded-lg border border-stroke-soft-200 bg-bg-weak-50 p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs text-text-sub-600">恢复码可用于在丢失验证器时恢复账号</p>
-                <CompactButton.Root
-                  variant="ghost"
-                  onClick={() => copyToClipboard(recoveryCodes.join("\n"), "recovery")}
-                >
-                  <CompactButton.Icon as={copiedRecovery ? RiCheckLine : RiFileCopyLine} />
-                </CompactButton.Root>
+          {step === 2 && (
+            <div className="min-h-[380px] space-y-4">
+              <div className="rounded-lg border border-away-light bg-away-lighter p-4">
+                <p className="text-sm font-medium text-away-dark">⚠️ 重要提示</p>
+                <p className="mt-1 text-xs text-away-dark">
+                  恢复码可用于在丢失验证器时恢复账号，请妥善保管，每个恢复码只能使用一次
+                </p>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {recoveryCodes.map((code, i) => (
-                  <code
-                    key={i}
-                    className="rounded bg-bg-white-0 px-2 py-1.5 text-center font-mono text-xs text-text-strong-950"
+              <div className="rounded-lg border border-stroke-soft-200 bg-bg-weak-50 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-medium text-text-strong-950">恢复码</p>
+                  <CompactButton.Root
+                    variant="ghost"
+                    onClick={() => copyToClipboard(recoveryCodes.join("\n"), "recovery")}
                   >
-                    {code}
-                  </code>
-                ))}
+                    <CompactButton.Icon as={copiedRecovery ? RiCheckLine : RiFileCopyLine} />
+                  </CompactButton.Root>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {recoveryCodes.map((code, i) => (
+                    <code
+                      key={i}
+                      className="rounded bg-bg-white-0 px-3 py-2 text-center font-mono text-xs text-text-strong-950"
+                    >
+                      {code}
+                    </code>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Step 3: Verify */}
-          <div>
-            <h3 className="mb-3 text-sm font-medium text-text-strong-950">
-              3. 输入 6 位验证码确认
-            </h3>
-            <div className="relative">
-              <RiShieldKeyholeLine className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-soft-400" />
-              <input
-                type="text"
-                value={totpCode}
-                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="输入 6 位验证码"
-                maxLength={6}
-                className="h-10 w-full rounded-lg border border-stroke-soft-200 bg-bg-white-0 pl-10 pr-3 text-sm text-text-strong-950 placeholder:text-text-soft-400 focus:border-primary-base focus:outline-none focus:ring-2 focus:ring-primary-alpha-10"
-              />
+          {step === 3 && (
+            <div className="min-h-[380px] space-y-4">
+              <p className="text-sm text-text-sub-600">
+                从验证器应用中输入 6 位验证码以完成设置
+              </p>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-text-strong-950">
+                  验证码
+                </label>
+                <div className="relative">
+                  <RiShieldKeyholeLine className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-soft-400" />
+                  <input
+                    type="text"
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="输入 6 位验证码"
+                    maxLength={6}
+                    autoFocus
+                    className="h-10 w-full rounded-lg border border-stroke-soft-200 bg-bg-white-0 pl-10 pr-3 text-sm text-text-strong-950 placeholder:text-text-soft-400 focus:border-primary-base focus:outline-none focus:ring-2 focus:ring-primary-alpha-10"
+                  />
+                </div>
+                {error && (
+                  <p className="mt-2 text-xs text-error-base">{error}</p>
+                )}
+              </div>
             </div>
-            {error && (
-              <p className="mt-2 text-xs text-error-base">{error}</p>
+          )}
+        </FormDialog.Body>
+
+        <FormDialog.Footer>
+          <div className="flex w-full items-center justify-between">
+            <Button.Root
+              size="small"
+              variant="neutral"
+              mode="stroke"
+              onClick={step === 1 ? onClose : handleBack}
+              type="button"
+            >
+              {step === 1 ? (
+                "取消"
+              ) : (
+                <>
+                  <RiArrowLeftLine className="size-4" />
+                  上一步
+                </>
+              )}
+            </Button.Root>
+            {step < 3 ? (
+              <Button.Root size="small" onClick={handleNext}>
+                下一步
+                <RiArrowRightLine className="size-4" />
+              </Button.Root>
+            ) : (
+              <Button.Root
+                size="small"
+                onClick={handleConfirm}
+                disabled={!totpCode || totpCode.length !== 6 || confirming}
+              >
+                {confirming ? "验证中..." : "确认启用"}
+              </Button.Root>
             )}
           </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex justify-end gap-3 border-t border-stroke-soft-200 px-6 py-4">
-          <Button.Root size="small" variant="neutral" mode="stroke" onClick={onClose}>
-            取消
-          </Button.Root>
-          <Button.Root
-            size="small"
-            onClick={handleConfirm}
-            disabled={confirming || totpCode.length !== 6}
-          >
-            {confirming ? "启用中..." : "确认启用"}
-          </Button.Root>
-        </div>
-      </div>
-    </div>
+        </FormDialog.Footer>
+      </FormDialog.Content>
+    </FormDialog.Root>
   );
 }

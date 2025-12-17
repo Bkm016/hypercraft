@@ -130,7 +130,7 @@ class ApiClient {
         return retryResponse.json();
       } catch {
         this.clearTokens();
-        throw new Error("Session expired, please login again");
+        throw new Error("会话已过期，请重新登录");
       }
     }
 
