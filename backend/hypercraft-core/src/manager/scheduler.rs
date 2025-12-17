@@ -34,7 +34,7 @@ impl ServiceScheduler {
 
     /// 启动调度器（现在是空操作，任务按需创建）
     pub async fn start(&self) -> Result<()> {
-        info!("scheduler ready");
+        info!("计划任务已就绪");
         Ok(())
     }
 
@@ -43,9 +43,9 @@ impl ServiceScheduler {
         let mut jobs = self.jobs.write().await;
         for (id, handle) in jobs.drain() {
             handle.abort();
-            info!("cancelled scheduled task for service: {}", id);
+            info!("取消了服务的计划任务: {}", id);
         }
-        info!("scheduler stopped");
+        info!("计划任务调度器已停止");
         Ok(())
     }
 
@@ -75,7 +75,7 @@ impl ServiceScheduler {
                 let next = match cron_schedule.upcoming(Utc).next() {
                     Some(t) => t,
                     None => {
-                        warn!("no upcoming schedule for service {}", sid);
+                        warn!("没有找到服务 {} 的下一个计划时间", sid);
                         break;
                     }
                 };
@@ -85,7 +85,7 @@ impl ServiceScheduler {
                 tokio::time::sleep(duration).await;
 
                 // 执行任务
-                info!("scheduled task triggered for service: {}", sid);
+                info!("计划任务触发，服务: {}", sid);
                 let result = match action {
                     ScheduleAction::Start => {
                         match manager.status(&sid).await {
@@ -93,7 +93,7 @@ impl ServiceScheduler {
                                 manager.start(&sid).await.map(|_| ())
                             }
                             Ok(_) => {
-                                info!("service {} already running, skipping scheduled start", sid);
+                                info!("服务 {} 已运行，跳过计划启动", sid);
                                 Ok(())
                             }
                             Err(e) => Err(e),
@@ -106,7 +106,7 @@ impl ServiceScheduler {
                                 manager.stop(&sid).await.map(|_| ())
                             }
                             Ok(_) => {
-                                info!("service {} not running, skipping scheduled stop", sid);
+                                info!("服务 {} 未运行，跳过计划停止", sid);
                                 Ok(())
                             }
                             Err(e) => Err(e),
@@ -116,7 +116,7 @@ impl ServiceScheduler {
 
                 if let Err(e) = result {
                     error!(
-                        "scheduled {:?} failed for service {}: {}",
+                        "计划任务 {:?} 失败，服务: {}，错误: {}",
                         action, sid, e
                     );
                 }
@@ -125,7 +125,7 @@ impl ServiceScheduler {
 
         self.jobs.write().await.insert(service_id.to_string(), handle);
         info!(
-            "scheduled task added for service {}: {} ({:?})",
+            "已为服务 {} 添加计划任务: {} ({:?})",
             service_id, cron_expr, schedule.action
         );
 
@@ -136,7 +136,7 @@ impl ServiceScheduler {
     pub async fn remove_schedule(&self, service_id: &str) -> Result<()> {
         if let Some(handle) = self.jobs.write().await.remove(service_id) {
             handle.abort();
-            info!("scheduled task removed for service: {}", service_id);
+            info!("取消了服务的计划任务: {}", service_id);
         }
         Ok(())
     }
@@ -151,14 +151,14 @@ impl ServiceScheduler {
                     if let Some(schedule) = &manifest.schedule {
                         if let Err(e) = self.upsert_schedule(&summary.id, schedule).await {
                             warn!(
-                                "failed to load schedule for service {}: {}",
+                                "加载服务 {} 的计划任务失败: {}",
                                 summary.id, e
                             );
                         }
                     }
                 }
                 Err(e) => {
-                    warn!("failed to load manifest for service {}: {}", summary.id, e);
+                    warn!("加载服务 {} 的清单失败: {}", summary.id, e);
                 }
             }
         }
@@ -175,7 +175,7 @@ impl ServiceScheduler {
     /// 解析 cron 表达式
     fn parse_cron(cron: &str) -> Result<CronSchedule> {
         CronSchedule::from_str(cron).map_err(|e| {
-            ServiceError::InvalidSchedule(format!("invalid cron expression '{}': {}", cron, e))
+            ServiceError::InvalidSchedule(format!("无效的 cron 表达式 '{}': {}", cron, e))
         })
     }
 
