@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "Bash(grep:*)",
+      "WebSearch",
+      "Bash(pnpm add:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

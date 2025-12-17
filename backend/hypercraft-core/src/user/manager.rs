@@ -6,6 +6,7 @@ use crate::error::{Result, ServiceError};
 use chrono::Utc;
 use serde_json;
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::{info, instrument};
@@ -37,13 +38,24 @@ pub struct UserManager {
 impl UserManager {
     /// 创建新的用户管理器
     pub fn new<P: AsRef<Path>>(data_dir: P, jwt_secret: String) -> Self {
+        // 从环境变量读取 TTL，如果未设置则使用默认值
+        let access_token_ttl = env::var("HC_ACCESS_TOKEN_TTL")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(6 * 60 * 60); // 默认 6 小时
+
+        let refresh_token_ttl = env::var("HC_REFRESH_TOKEN_TTL")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(7 * 24 * 3600); // 默认 7 天
+
         Self {
             data_dir: data_dir.as_ref().to_path_buf(),
             jwt_secret,
             jwt_issuer: DEFAULT_JWT_ISSUER.to_string(),
             jwt_audience: DEFAULT_JWT_AUDIENCE.to_string(),
-            access_token_ttl: 15 * 60,        // 15 分钟
-            refresh_token_ttl: 7 * 24 * 3600, // 7 天
+            access_token_ttl,
+            refresh_token_ttl,
         }
     }
 
