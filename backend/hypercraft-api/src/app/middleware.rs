@@ -137,7 +137,31 @@ fn extract_token(request: &Request<Body>) -> Option<String> {
 }
 
 /// 从请求中提取客户端 IP
+/// 优先级：X-Real-IP > X-Forwarded-For（第一个） > Socket Address
 fn extract_client_ip(request: &Request<Body>) -> String {
+	// 1. 优先从 X-Real-IP header 获取（Nginx 常用）
+	if let Some(real_ip) = request
+		.headers()
+		.get("X-Real-IP")
+		.and_then(|v| v.to_str().ok())
+	{
+		return real_ip.to_string();
+	}
+
+	// 2. 从 X-Forwarded-For 获取第一个 IP（最左边是真实客户端）
+	if let Some(forwarded) = request
+		.headers()
+		.get("X-Forwarded-For")
+		.and_then(|v| v.to_str().ok())
+	{
+		if let Some(first_ip) = forwarded.split(',').next().map(|s| s.trim()) {
+			if !first_ip.is_empty() {
+				return first_ip.to_string();
+			}
+		}
+	}
+
+	// 3. fallback 到直连 socket 地址
 	request
 		.extensions()
 		.get::<ConnectInfo<SocketAddr>>()
@@ -161,6 +185,7 @@ pub async fn auth_middleware(
 
 	// 检查该 IP 是否因认证失败过多而被封禁
 	if !state.auth_limiter.check(&client_ip).await {
+		tracing::warn!("IP 被限流: {} (路径: {})", client_ip, path);
 		return Err(ApiError::too_many_requests(
 			"请求过于频繁，请稍后再试",
 		));

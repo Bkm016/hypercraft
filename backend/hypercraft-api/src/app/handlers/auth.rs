@@ -19,17 +19,26 @@ pub async fn login(
     Json(req): Json<LoginRequest>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let ip = addr.ip().to_string();
+    tracing::info!("登录请求: 用户={}, IP={}", req.username, ip);
+    
     if !state.login_limiter.allow(&ip).await {
+        tracing::warn!("登录限流: 用户={}, IP={}", req.username, ip);
         return Err(ApiError::too_many_requests(
             "请求过于频繁，请稍后再试",
         ));
     }
 
-    let auth_token = state
+    let result = state
         .user_manager
         .login(&req.username, &req.password, req.totp_code.as_deref())
-        .await?;
+        .await;
 
+    match &result {
+        Ok(_) => tracing::info!("登录成功: 用户={}, IP={}", req.username, ip),
+        Err(e) => tracing::warn!("登录失败: 用户={}, IP={}, 错误={}", req.username, ip, e),
+    }
+
+    let auth_token = result?;
     Ok((StatusCode::OK, Json(json!(auth_token))))
 }
 
@@ -40,7 +49,10 @@ pub async fn devtoken_login(
     Json(req): Json<DevTokenLoginRequest>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let ip = addr.ip().to_string();
+    tracing::info!("DevToken 登录请求: IP={}", ip);
+    
     if !state.login_limiter.allow(&ip).await {
+        tracing::warn!("DevToken 登录限流: IP={}", ip);
         return Err(ApiError::too_many_requests(
             "请求过于频繁，请稍后再试",
         ));
@@ -53,11 +65,15 @@ pub async fn devtoken_login(
         .ok_or_else(|| ApiError::unauthorized_with_message("未启用 DevToken"))?;
 
     if &req.dev_token != dev_token {
+        tracing::warn!("DevToken 登录失败: 无效的 token, IP={}", ip);
         return Err(ApiError::unauthorized_with_message("无效的 DevToken"));
     }
 
     // 验证 2FA（如果启用）
-    verify_user_2fa(&state, "__devtoken__", req.totp_code.as_deref()).await?;
+    if let Err(e) = verify_user_2fa(&state, "__devtoken__", req.totp_code.as_deref()).await {
+        tracing::warn!("DevToken 登录失败: 2FA 验证失败, IP={}", ip);
+        return Err(e);
+    }
 
     // 签发 JWT token（使用虚拟 dev 用户）
     let auth_token = state
@@ -65,6 +81,7 @@ pub async fn devtoken_login(
         .issue_dev_token()
         .await
         .map_err(|e| {
+            tracing::error!("DevToken 签发失败: IP={}, 错误={}", ip, e);
             ApiError::new(
                 "INTERNAL_ERROR",
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -72,6 +89,7 @@ pub async fn devtoken_login(
             )
         })?;
 
+    tracing::info!("DevToken 登录成功: IP={}", ip);
     Ok((StatusCode::OK, Json(json!(auth_token))))
 }
 
@@ -83,6 +101,7 @@ pub async fn refresh(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let ip = addr.ip().to_string();
     if !state.refresh_limiter.allow(&ip).await {
+        tracing::warn!("刷新限流: IP={}", ip);
         return Err(ApiError::too_many_requests(
             "请求过于频繁，请稍后再试",
         ));

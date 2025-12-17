@@ -148,6 +148,7 @@ pub async fn change_password(
 ) -> Result<Json<UserSummary>, ApiError> {
     // 限流检查（按用户 ID，防止暴力破解当前密码）
     if !state.password_limiter.allow(&id).await {
+        tracing::warn!("修改密码限流: UserID={}", id);
         return Err(ApiError::too_many_requests(
             "请求过于频繁，请稍后再试",
         ));

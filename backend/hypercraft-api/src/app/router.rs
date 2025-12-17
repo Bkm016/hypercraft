@@ -8,10 +8,11 @@ use super::handlers::{
     add_user_service, attach_service, change_password, create_group, create_service, create_user,
     delete_group, delete_service, delete_user, devtoken_login, disable_2fa, download_log_file,
     enable_2fa, get_logs, get_me, get_schedule, get_service, get_status, get_system_stats,
-    get_user, health, kill_service, list_groups, list_services, list_users, login, refresh,
-    remove_user_service, reorder_groups, reorder_services, restart_service, set_user_services,
-    setup_2fa, shutdown_service, start_service, stop_service, update_group, update_schedule,
-    update_service, update_service_group, update_service_tags, update_user, validate_cron,
+    get_user, handler_404, health, kill_service, list_groups, list_services, list_users, login,
+    refresh, remove_user_service, reorder_groups, reorder_services, restart_service,
+    set_user_services, setup_2fa, shutdown_service, start_service, stop_service, update_group,
+    update_schedule, update_service, update_service_group, update_service_tags, update_user,
+    validate_cron,
 };
 use super::middleware::auth_middleware;
 use super::state::AppState;
@@ -118,16 +119,21 @@ pub fn app_router(state: AppState, cors_origins: Vec<String>) -> Router {
         .route("/auth/2fa/disable", post(disable_2fa))
         .route("/auth/me", get(get_me));
 
-    // 组合所有路由
-    Router::new()
-        .merge(public_routes)
+    // 需要认证的路由（经过 auth_middleware）
+    let protected_routes = Router::new()
         .merge(admin_routes)
         .merge(service_routes)
         .merge(group_routes)
         .merge(stats_routes)
         .merge(password_routes)
         .merge(two_factor_routes)
-        .layer(from_fn_with_state(state.clone(), auth_middleware))
+        .layer(from_fn_with_state(state.clone(), auth_middleware));
+
+    // 组合所有路由（公开路由 + 受保护路由 + fallback）
+    Router::new()
+        .merge(public_routes)
+        .merge(protected_routes)
+        .fallback(handler_404)
         .layer(build_cors_layer(cors_origins))
         .with_state(state)
 }

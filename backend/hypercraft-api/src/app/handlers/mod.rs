@@ -14,7 +14,7 @@ pub use groups::{
     create_group, delete_group, list_groups, reorder_groups, reorder_services, update_group,
     update_service_group, update_service_tags,
 };
-pub use health::health;
+pub use health::{handler_404, health};
 pub use logs::{download_log_file, get_logs};
 pub use services::{
     create_service, delete_service, get_schedule, get_service, get_status, kill_service,
