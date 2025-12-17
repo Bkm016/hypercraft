@@ -34,7 +34,7 @@ pub async fn get_logs(
     // 权限检查（需要同时访问 Path 和 Query，无法使用 ServicePermission extractor）
     if !auth.can_access_service(&id) {
         return Err(ApiError::forbidden(format!(
-            "no permission to access service: {}",
+            "没有权限访问服务: {}",
             id
         )));
     }
@@ -107,11 +107,11 @@ pub async fn download_log_file(
 
     // 读取日志文件内容
     let content = tokio::fs::read(log_path).await.map_err(|e| {
-        tracing::error!(service_id = %service_id, log_path = %log_path, error = %e, "failed to read log file");
+        tracing::error!(service_id = %service_id, log_path = %log_path, error = %e, "无法读取日志文件");
         ApiError::new(
             "IoError",
             StatusCode::INTERNAL_SERVER_ERROR,
-            "failed to read log file".to_string(),
+            "无法读取日志文件".to_string(),
         )
     })?;
 

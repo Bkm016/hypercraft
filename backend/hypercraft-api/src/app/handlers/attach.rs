@@ -29,7 +29,7 @@ pub async fn attach_service(
 ) -> Result<Response, ApiError> {
     if !auth.can_access_service(&id) {
         return Err(ApiError::forbidden(format!(
-            "no permission to access service: {}",
+            "没有权限访问服务: {}",
             id
         )));
     }

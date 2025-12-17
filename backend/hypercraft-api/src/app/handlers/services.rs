@@ -88,7 +88,7 @@ pub async fn update_service(
     // 同步调度任务
     if let Some(schedule) = &payload.schedule {
         if let Err(e) = state.scheduler.upsert_schedule(&id, schedule).await {
-            tracing::warn!(service_id = %id, error = %e, "failed to update schedule");
+            tracing::warn!(service_id = %id, error = %e, "无法更新计划任务");
         }
     } else {
         // 移除调度任务（如果存在）

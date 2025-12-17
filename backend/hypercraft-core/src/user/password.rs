@@ -12,7 +12,7 @@ impl UserManager {
     pub(super) fn validate_password_strength(password: &str) -> Result<()> {
         if password.len() < 8 {
             return Err(ServiceError::PolicyViolation(
-                "password must be at least 8 characters".into(),
+                "密码长度至少为 8 个字符".into(),
             ));
         }
         let mut has_upper = false;
@@ -32,7 +32,7 @@ impl UserManager {
         }
         if !(has_upper && has_lower && (has_digit || has_symbol)) {
             return Err(ServiceError::PolicyViolation(
-                "password must include upper, lower, and number or symbol".into(),
+                "密码必须包含大写字母、小写字母以及数字或符号".into(),
             ));
         }
         Ok(())
@@ -53,11 +53,11 @@ impl UserManager {
         // 校验旧密码（非强制模式）
         if !force {
             let current = current_password
-                .ok_or_else(|| ServiceError::Unauthorized("current password required".into()))?;
+                .ok_or_else(|| ServiceError::Unauthorized("需要输入当前密码".into()))?;
             let valid = verify_password(current, &user.password_hash).await?;
             if !valid {
                 return Err(ServiceError::Unauthorized(
-                    "invalid current password".into(),
+                    "当前密码错误".into(),
                 ));
             }
         }

@@ -21,7 +21,7 @@ pub async fn login(
     let ip = addr.ip().to_string();
     if !state.login_limiter.allow(&ip).await {
         return Err(ApiError::too_many_requests(
-            "too many login attempts, try again later",
+            "请求过于频繁，请稍后再试",
         ));
     }
 
@@ -42,7 +42,7 @@ pub async fn devtoken_login(
     let ip = addr.ip().to_string();
     if !state.login_limiter.allow(&ip).await {
         return Err(ApiError::too_many_requests(
-            "too many login attempts, try again later",
+            "请求过于频繁，请稍后再试",
         ));
     }
 
@@ -50,10 +50,10 @@ pub async fn devtoken_login(
     let dev_token = state
         .dev_token
         .as_ref()
-        .ok_or_else(|| ApiError::unauthorized_with_message("DevToken not configured"))?;
+        .ok_or_else(|| ApiError::unauthorized_with_message("未启用 DevToken"))?;
 
     if &req.dev_token != dev_token {
-        return Err(ApiError::unauthorized_with_message("Invalid DevToken"));
+        return Err(ApiError::unauthorized_with_message("无效的 DevToken"));
     }
 
     // 验证 2FA（如果启用）
@@ -68,7 +68,7 @@ pub async fn devtoken_login(
             ApiError::new(
                 "INTERNAL_ERROR",
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to issue token: {}", e),
+                format!("签发 Token 失败: {}", e),
             )
         })?;
 
@@ -84,7 +84,7 @@ pub async fn refresh(
     let ip = addr.ip().to_string();
     if !state.refresh_limiter.allow(&ip).await {
         return Err(ApiError::too_many_requests(
-            "too many refresh requests, slow down",
+            "请求过于频繁，请稍后再试",
         ));
     }
 

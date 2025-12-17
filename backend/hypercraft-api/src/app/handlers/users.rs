@@ -149,7 +149,7 @@ pub async fn change_password(
     // 限流检查（按用户 ID，防止暴力破解当前密码）
     if !state.password_limiter.allow(&id).await {
         return Err(ApiError::too_many_requests(
-            "too many password change attempts, try again later",
+            "请求过于频繁，请稍后再试",
         ));
     }
 
@@ -158,7 +158,7 @@ pub async fn change_password(
     let is_self = auth.claims.sub == id;
     if !is_admin && !is_self {
         return Err(ApiError::forbidden(
-            "cannot change password for other users",
+            "你不能更改其他人的密码",
         ));
     }
 

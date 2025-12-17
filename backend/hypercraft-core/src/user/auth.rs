@@ -15,26 +15,26 @@ impl UserManager {
         let user = self
             .find_by_username(username)
             .await?
-            .ok_or_else(|| ServiceError::Unauthorized("invalid credentials".into()))?;
+            .ok_or_else(|| ServiceError::Unauthorized("用户名或密码错误".into()))?;
 
         // 验证密码
         let valid = verify_password(password, &user.password_hash).await?;
 
         if !valid {
-            warn!(username = %username, "login failed: invalid password");
-            return Err(ServiceError::Unauthorized("invalid credentials".into()));
+            warn!(username = %username, "登录失败：密码错误");
+            return Err(ServiceError::Unauthorized("用户名或密码错误".into()));
         }
 
         // 检查是否启用 2FA
         if let Some(totp_cfg) = &user.totp_config {
             if totp_cfg.enabled {
                 let code = totp_code.ok_or_else(|| {
-                    ServiceError::TwoFactorRequired("2FA code required".into())
+                    ServiceError::TwoFactorRequired("需要双因素认证代码".into())
                 })?;
 
                 if !self.verify_totp(&user, code).await? {
-                    warn!(username = %username, "login failed: invalid 2FA code");
-                    return Err(ServiceError::Unauthorized("invalid 2FA code".into()));
+                    warn!(username = %username, "登录失败：双因素认证代码无效");
+                    return Err(ServiceError::Unauthorized("双因素认证代码无效".into()));
                 }
             }
         }
@@ -50,7 +50,7 @@ impl UserManager {
         let claims = self.verify_token(refresh_token).await?;
 
         if claims.token_type != TokenType::Refresh {
-            return Err(ServiceError::Unauthorized("invalid token type".into()));
+            return Err(ServiceError::Unauthorized("token 类型错误".into()));
         }
 
         // 获取最新用户信息（若密码/权限已变更会触发 token_version 不匹配）
@@ -147,7 +147,7 @@ impl UserManager {
             &DecodingKey::from_secret(self.jwt_secret.as_bytes()),
             &validation,
         )
-        .map_err(|e| ServiceError::Unauthorized(format!("invalid token: {}", e)))?;
+        .map_err(|e| ServiceError::Unauthorized(format!("token 无效: {}", e)))?;
 
         let claims = token_data.claims;
         let refresh_nonce = claims.refresh_nonce.clone();
@@ -155,15 +155,15 @@ impl UserManager {
         // 校验 token version 以支持撤销
         let user = self.get_user(&claims.sub).await?;
         if claims.token_version != user.token_version {
-            return Err(ServiceError::Unauthorized("token revoked".into()));
+            return Err(ServiceError::Unauthorized("token 已被撤销".into()));
         }
 
         if claims.token_type == TokenType::Refresh {
             let nonce = refresh_nonce
                 .as_deref()
-                .ok_or_else(|| ServiceError::Unauthorized("refresh token missing nonce".into()))?;
+                .ok_or_else(|| ServiceError::Unauthorized("refresh token 缺少 nonce".into()))?;
             if nonce != user.refresh_nonce {
-                return Err(ServiceError::Unauthorized("refresh token revoked".into()));
+                return Err(ServiceError::Unauthorized("refresh token 已被撤销".into()));
             }
         }
 

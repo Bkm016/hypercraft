@@ -37,7 +37,7 @@ impl UserManager {
         let totp_cfg = user
             .totp_config
             .as_ref()
-            .ok_or_else(|| ServiceError::Other("2FA not configured".into()))?;
+            .ok_or_else(|| ServiceError::Other("双因素认证未配置".into()))?;
 
         if !totp_cfg.enabled {
             return Ok(false);
@@ -47,14 +47,14 @@ impl UserManager {
         let secret = self.decrypt_totp_secret(&totp_cfg.secret)?;
         let secret_bytes = Secret::Encoded(secret.clone())
             .to_bytes()
-            .map_err(|e| ServiceError::Other(format!("invalid TOTP secret: {}", e)))?;
+            .map_err(|e| ServiceError::Other(format!("TOTP secret 无效: {}", e)))?;
 
         let totp = TOTP::new(Algorithm::SHA1, 6, 1, 30, secret_bytes)
             .map_err(|e| ServiceError::Other(format!("TOTP creation failed: {}", e)))?;
 
         if totp
             .check_current(code)
-            .map_err(|e| ServiceError::Other(format!("TOTP check failed: {}", e)))?
+            .map_err(|e| ServiceError::Other(format!("TOTP 验证失败: {}", e)))?
         {
             return Ok(true);
         }
@@ -141,17 +141,17 @@ impl UserManager {
         // 验证 TOTP code（防止用户未正确保存 secret）
         let secret_bytes = Secret::Encoded(secret.to_string())
             .to_bytes()
-            .map_err(|e| ServiceError::Other(format!("invalid TOTP secret: {}", e)))?;
+            .map_err(|e| ServiceError::Other(format!("TOTP secret 无效: {}", e)))?;
 
         let totp = TOTP::new(Algorithm::SHA1, 6, 1, 30, secret_bytes)
-            .map_err(|e| ServiceError::Other(format!("TOTP creation failed: {}", e)))?;
+            .map_err(|e| ServiceError::Other(format!("TOTP 创建失败: {}", e)))?;
 
         if !totp
             .check_current(totp_code)
-            .map_err(|e| ServiceError::Other(format!("TOTP check failed: {}", e)))?
+            .map_err(|e| ServiceError::Other(format!("TOTP 验证失败: {}", e)))?
         {
             warn!(user_id = %user_id, "2FA enable failed: invalid TOTP code");
-            return Err(ServiceError::Unauthorized("invalid TOTP code".into()));
+            return Err(ServiceError::Unauthorized("验证代码错误".into()));
         }
 
         // 加密存储 secret
@@ -202,7 +202,7 @@ impl UserManager {
 
         if !verified {
             warn!(user_id = %user_id, "2FA disable failed: invalid verification");
-            return Err(ServiceError::Unauthorized("invalid verification code".into()));
+            return Err(ServiceError::Unauthorized("验证代码无效".into()));
         }
 
         // 禁用 2FA

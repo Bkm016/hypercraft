@@ -95,11 +95,11 @@ impl<S: Send + Sync> FromRequestParts<S> for ServicePermission {
 
 			let Path(service_id) = Path::<String>::from_request_parts(parts, state)
 				.await
-				.map_err(|_| ApiError::bad_request("missing service id in path"))?;
+				.map_err(|_| ApiError::bad_request("无效的服务"))?;
 
 			if !auth.can_access_service(&service_id) {
 				return Err(ApiError::forbidden(format!(
-					"no permission to access service: {}",
+					"没有权限访问服务: {}",
 					service_id
 				)));
 			}
@@ -162,7 +162,7 @@ pub async fn auth_middleware(
 	// 检查该 IP 是否因认证失败过多而被封禁
 	if !state.auth_limiter.check(&client_ip).await {
 		return Err(ApiError::too_many_requests(
-			"too many authentication failures, try again later",
+			"请求过于频繁，请稍后再试",
 		));
 	}
 

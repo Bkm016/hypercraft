@@ -47,14 +47,14 @@ impl ApiConfig {
             .filter(|s| !s.is_empty())
             .map(|token| {
                 if token.len() < 32 {
-                    panic!("Dev token length is too short (<32); please use a strong random value in HC_DEV_TOKEN");
+                    panic!("DevToken 长度过短（<32）；请在 HC_DEV_TOKEN 中使用强随机值");
                 }
                 token
             });
 
         // JWT 密钥，用于签发用户 token（必须独立于 DevToken）
         let jwt_secret = env::var("HC_JWT_SECRET").unwrap_or_else(|_| {
-            info!("HC_JWT_SECRET not set; generating a random secret for this run");
+            info!("HC_JWT_SECRET 未设置；为本次运行生成随机密钥");
             uuid::Uuid::new_v4().to_string()
         });
         let jwt_issuer = env::var("HC_JWT_ISSUER").unwrap_or_else(|_| "hypercraft-api".into());
@@ -135,7 +135,7 @@ async fn main() -> anyhow::Result<()> {
     init_tracing();
 
     let config = ApiConfig::from_env();
-    info!("starting API on {}", config.bind);
+    info!("在 {} 启动 API", config.bind);
 
     let manager = Arc::new(ServiceManager::with_policy(
         config.data_dir.clone(),
@@ -150,11 +150,11 @@ async fn main() -> anyhow::Result<()> {
     // 初始化定时调度器
     let scheduler = Arc::new(ServiceScheduler::new((*manager).clone()));
     if let Err(e) = scheduler.start().await {
-        tracing::error!(error = %e, "failed to start scheduler");
+        tracing::error!(error = %e, "无法启动计划任务");
     } else {
         // 加载所有服务的定时任务
         if let Err(e) = scheduler.reload_all().await {
-            tracing::warn!(error = %e, "failed to reload scheduled tasks");
+            tracing::warn!(error = %e, "无法重新加载计划任务");
         }
     }
 
@@ -188,25 +188,25 @@ async fn main() -> anyhow::Result<()> {
     let server = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
         .with_graceful_shutdown(shutdown_signal());
 
-    info!("server ready, press Ctrl+C to stop");
+    info!("服务器准备就绪，按 Ctrl+C 停止");
 
     if let Err(e) = server.await {
-        tracing::error!(error = %e, "server error");
+        tracing::error!(error = %e, "服务器错误");
     }
 
     // 停止所有运行中的服务
-    info!("stopping all running services...");
+    info!("正在停止所有运行中的服务...");
     if let Err(e) = manager.stop_all_services().await {
-        tracing::warn!(error = %e, "failed to stop services");
+        tracing::warn!(error = %e, "无法停止服务");
     }
 
     // 关闭调度器
-    info!("shutting down scheduler...");
+    info!("正在关闭调度器...");
     if let Err(e) = scheduler.shutdown().await {
-        tracing::warn!(error = %e, "failed to shutdown scheduler");
+        tracing::warn!(error = %e, "无法关闭调度器");
     }
 
-    info!("server stopped");
+    info!("服务器已停止");
     Ok(())
 }
 
@@ -215,13 +215,13 @@ async fn shutdown_signal() {
     let ctrl_c = async {
         tokio::signal::ctrl_c()
             .await
-            .expect("failed to install Ctrl+C handler");
+            .expect("无法插入 Ctrl+C 控制器");
     };
 
     #[cfg(unix)]
     let terminate = async {
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
+            .expect("无法插入 Ctrl+C 控制器")
             .recv()
             .await;
     };
@@ -230,20 +230,20 @@ async fn shutdown_signal() {
     let terminate = std::future::pending::<()>();
 
     tokio::select! {
-        _ = ctrl_c => info!("received Ctrl+C, shutting down..."),
-        _ = terminate => info!("received SIGTERM, shutting down..."),
+        _ = ctrl_c => info!("收到 Ctrl+C，正在关闭..."),
+        _ = terminate => info!("收到 SIGTERM，正在关闭..."),
     }
 }
 
 /// 自动启动配置了 auto_start: true 的服务
 async fn auto_start_services(manager: &Arc<ServiceManager>) {
-    info!("checking for services with auto_start enabled...");
+    info!("检查启用自动启动的服务...");
 
     // 获取所有服务列表
     let services = match manager.list_services().await {
         Ok(s) => s,
         Err(e) => {
-            tracing::error!(error = %e, "failed to list services for auto_start");
+            tracing::error!(error = %e, "获取自动启动的服务列表失败");
             return;
         }
     };
@@ -253,7 +253,7 @@ async fn auto_start_services(manager: &Arc<ServiceManager>) {
         let manifest = match manager.load_manifest(&summary.id).await {
             Ok(m) => m,
             Err(e) => {
-                tracing::warn!(service_id = %summary.id, error = %e, "failed to load manifest");
+                tracing::warn!(service_id = %summary.id, error = %e, "加载 manifest 失败");
                 continue;
             }
         };
@@ -266,21 +266,21 @@ async fn auto_start_services(manager: &Arc<ServiceManager>) {
         let status = match manager.status(&summary.id).await {
             Ok(s) => s,
             Err(e) => {
-                tracing::warn!(service_id = %summary.id, error = %e, "failed to get status");
+                tracing::warn!(service_id = %summary.id, error = %e, "获取服务状态失败");
                 continue;
             }
         };
 
         if status.state == hypercraft_core::ServiceState::Running {
-            info!(service_id = %summary.id, "service already running, skipping auto_start");
+            info!(service_id = %summary.id, "服务已在运行，跳过自动启动");
             continue;
         }
 
         // 启动服务
-        info!(service_id = %summary.id, "auto-starting service...");
+        info!(service_id = %summary.id, "正在自动启动服务...");
         match manager.start(&summary.id).await {
-            Ok(_) => info!(service_id = %summary.id, "service auto-started successfully"),
-            Err(e) => tracing::error!(service_id = %summary.id, error = %e, "failed to auto-start service"),
+            Ok(_) => info!(service_id = %summary.id, "服务自动启动成功"),
+            Err(e) => tracing::error!(service_id = %summary.id, error = %e, "服务自动启动失败"),
         }
     }
 }

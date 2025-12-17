@@ -1,7 +1,7 @@
 use axum::middleware::from_fn_with_state;
 use axum::routing::{get, patch, post, put};
 use axum::Router;
-use axum::http::{header, HeaderName, HeaderValue, Method};
+use axum::http::{header, HeaderValue, Method};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use super::handlers::{
