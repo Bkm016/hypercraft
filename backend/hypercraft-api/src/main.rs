@@ -3,6 +3,7 @@ mod app;
 use app::{app_router, AppState, RateLimiter};
 use dotenvy::dotenv;
 use hypercraft_core::{init_tracing, ServiceManager, ServiceScheduler, UserManager};
+use rand::Rng;
 use std::collections::HashSet;
 use std::env;
 use std::net::SocketAddr;
@@ -29,6 +30,21 @@ struct ApiConfig {
     cors_origins: Vec<String>,
 }
 
+/// 生成包含数字、字母和符号的复杂随机密码
+fn generate_secure_password(length: usize) -> String {
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+                              abcdefghijklmnopqrstuvwxyz\
+                              0123456789\
+                              !@#$%^&*()-_=+[]{}|;:,.<>?";
+    let mut rng = rand::thread_rng();
+    (0..length)
+        .map(|_| {
+            let idx = rng.gen_range(0..CHARSET.len());
+            CHARSET[idx] as char
+        })
+        .collect()
+}
+
 impl ApiConfig {
     fn from_env() -> Self {
         let bind = env::var("HC_BIND")
@@ -40,17 +56,26 @@ impl ApiConfig {
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("./data"));
 
-        // DevToken 用于管理员访问（建议长度 >=16）
-        let dev_token = env::var("HC_DEV_TOKEN")
+        // DevToken 用于管理员访问
+        // 如果未在环境变量中设置，则每次启动生成新的随机密码
+        let dev_token = match env::var("HC_DEV_TOKEN")
             .ok()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
-            .map(|token| {
+        {
+            Some(token) => {
                 if token.len() < 32 {
                     panic!("DevToken 长度过短（<32）；请在 HC_DEV_TOKEN 中使用强随机值");
                 }
-                token
-            });
+                info!("使用配置的 DevToken");
+                Some(token)
+            }
+            None => {
+                let generated = generate_secure_password(40);
+                info!("HC_DEV_TOKEN 未设置，生成随机 DevToken: {}", generated);
+                Some(generated)
+            }
+        };
 
         // JWT 密钥，用于签发用户 token（必须独立于 DevToken）
         let jwt_secret = env::var("HC_JWT_SECRET").unwrap_or_else(|_| {

@@ -24,6 +24,7 @@ urlencoding = "2.1"
 subtle.workspace = true
 cron.workspace = true
 chrono.workspace = true
+rand.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
