@@ -185,32 +185,28 @@ pub async fn auth_middleware(
 	let token = match extract_token(&request) {
 		Some(t) => t,
 		None => {
-			// 检查该 IP 是否因认证失败过多而被封禁
-			if !state.auth_limiter.check(&client_ip).await {
-				tracing::warn!("IP 被限流: {} (路径: {})", client_ip, path);
+			// 无 token，检查并记录认证失败（使用 allow 原子化操作）
+			if !state.auth_limiter.allow(&client_ip).await {
+				tracing::warn!("认证限流触发: IP={}, 路径={} (无token)", client_ip, path);
 				return Err(ApiError::too_many_requests(
 					"请求过于频繁，请稍后再试",
 				));
 			}
-			// 记录认证失败
-			state.auth_limiter.record(&client_ip).await;
 			return Err(ApiError::unauthorized());
 		}
 	};
 
 	// 尝试验证为 JWT UserToken
 	let claims = match state.user_manager.verify_token(&token).await {
-		Ok(c) => c,
+		Ok(c) => c, // ✅ 验证成功，直接返回 claims，后续会放行（不受 auth_limiter 影响）
 		Err(_) => {
-			// 检查该 IP 是否因认证失败过多而被封禁
-			if !state.auth_limiter.check(&client_ip).await {
-				tracing::warn!("IP 被限流: {} (路径: {})", client_ip, path);
+			// Token 验证失败，检查并记录认证失败（使用 allow 原子化操作）
+			if !state.auth_limiter.allow(&client_ip).await {
+				tracing::warn!("认证限流触发: IP={}, 路径={} (token无效)", client_ip, path);
 				return Err(ApiError::too_many_requests(
 					"请求过于频繁，请稍后再试",
 				));
 			}
-			// JWT 验证失败，记录认证失败
-			state.auth_limiter.record(&client_ip).await;
 			return Err(ApiError::unauthorized());
 		}
 	};
