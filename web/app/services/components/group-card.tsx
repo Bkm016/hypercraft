@@ -41,7 +41,7 @@ export interface GroupCardProps {
   operating: Set<string>;
   isAdmin: boolean;
   selected: Set<string>;
-  onToggleSelect: (id: string) => void;
+  onToggleSelect: (id: string, shiftKey: boolean) => void;
   onToggleSelectAll: (ids: string[]) => void;
   isDraggable?: boolean;
 }
@@ -155,7 +155,7 @@ export function GroupCard({
                     operating={operating.has(service.id)}
                     isAdmin={isAdmin}
                     selected={selected.has(service.id)}
-                    onToggleSelect={() => onToggleSelect(service.id)}
+                    onToggleSelect={(shiftKey) => onToggleSelect(service.id, shiftKey)}
                     isDraggable={isDraggable}
                   />
                 ))}

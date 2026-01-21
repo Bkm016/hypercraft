@@ -48,7 +48,7 @@ export interface ServiceCardProps {
   operating: boolean;
   isAdmin: boolean;
   selected: boolean;
-  onToggleSelect: () => void;
+  onToggleSelect: (shiftKey: boolean) => void;
   isDraggable?: boolean;
 }
 
@@ -131,10 +131,19 @@ export function ServiceCard({
       )}
 
       {/* 多选框 */}
-      <Checkbox.Root
-        checked={selected}
-        onCheckedChange={onToggleSelect}
-      />
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleSelect(e.shiftKey);
+        }}
+      >
+        <Checkbox.Root
+          checked={selected}
+          onCheckedChange={() => {}}
+          tabIndex={-1}
+          className="pointer-events-none"
+        />
+      </div>
 
       {/* 状态指示器 */}
       <Tooltip.Root>

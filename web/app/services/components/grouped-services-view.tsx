@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useCallback, useState, useEffect } from "react";
+import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -31,6 +31,7 @@ interface GroupedServicesViewProps {
   isAdmin: boolean;
   selected: Set<string>;
   onToggleSelect: (id: string) => void;
+  onRangeSelect: (ids: string[]) => void;
 }
 
 export function GroupedServicesView({
@@ -45,6 +46,7 @@ export function GroupedServicesView({
   isAdmin,
   selected,
   onToggleSelect,
+  onRangeSelect,
 }: GroupedServicesViewProps) {
   // 本地服务状态，用于乐观更新
   // 对于普通用户，应用本地排序
@@ -53,7 +55,9 @@ export function GroupedServicesView({
   const [activeService, setActiveService] = useState<ServiceSummary | null>(null);
   // 正在保存中，忽略外部更新
   const [isSaving, setIsSaving] = useState(false);
-  
+  // shift 多选：记录上次选择的服务 ID
+  const lastSelectedRef = useRef<string | null>(null);
+
   useEffect(() => {
     // 保存中时不同步外部更新，避免轮询覆盖乐观更新
     if (!isSaving) {
@@ -84,7 +88,7 @@ export function GroupedServicesView({
 
   const groupedServices = useMemo(() => {
     const result: Map<string | null, ServiceSummary[]> = new Map();
-    
+
     for (const group of sortedGroups) {
       result.set(group.id, []);
     }
@@ -105,6 +109,37 @@ export function GroupedServicesView({
 
     return result;
   }, [localServices, groups]);
+
+  // 按显示顺序展开的服务 ID 列表（用于 shift 多选）
+  const displayOrderIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const group of sortedGroups) {
+      const groupServices = groupedServices.get(group.id) || [];
+      groupServices.forEach((s) => ids.push(s.id));
+    }
+    const ungrouped = groupedServices.get(null) || [];
+    ungrouped.forEach((s) => ids.push(s.id));
+    return ids;
+  }, [sortedGroups, groupedServices]);
+
+  // 处理选择（支持 shift 多选）
+  const handleToggleSelectWithShift = useCallback((id: string, shiftKey: boolean) => {
+    if (shiftKey && lastSelectedRef.current && lastSelectedRef.current !== id) {
+      const lastId = lastSelectedRef.current;
+      const currentIndex = displayOrderIds.indexOf(id);
+      const lastIndex = displayOrderIds.indexOf(lastId);
+      if (currentIndex !== -1 && lastIndex !== -1) {
+        const start = Math.min(currentIndex, lastIndex);
+        const end = Math.max(currentIndex, lastIndex);
+        const rangeIds = displayOrderIds.slice(start, end + 1);
+        onRangeSelect(rangeIds);
+        lastSelectedRef.current = id;
+        return;
+      }
+    }
+    onToggleSelect(id);
+    lastSelectedRef.current = id;
+  }, [displayOrderIds, onToggleSelect, onRangeSelect]);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const { active } = event;
@@ -219,7 +254,7 @@ export function GroupedServicesView({
             operating={operating}
             isAdmin={isAdmin}
             selected={selected}
-            onToggleSelect={onToggleSelect}
+            onToggleSelect={handleToggleSelectWithShift}
             onToggleSelectAll={handleToggleSelectAll}
             isDraggable={true}
           />
@@ -240,7 +275,7 @@ export function GroupedServicesView({
           operating={operating}
           isAdmin={isAdmin}
           selected={selected}
-          onToggleSelect={onToggleSelect}
+          onToggleSelect={handleToggleSelectWithShift}
           onToggleSelectAll={handleToggleSelectAll}
           isDraggable={true}
         />
