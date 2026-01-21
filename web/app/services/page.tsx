@@ -10,6 +10,7 @@ import {
   RiSearchLine,
   RiServerLine,
   RiStopCircleLine,
+  RiCommandLine,
 } from "@remixicon/react";
 import * as Button from "@/components/ui/button";
 import * as Input from "@/components/ui/input";
@@ -25,6 +26,7 @@ import { TagFilter } from "./components/tag-filter";
 import { GroupManageModal } from "./components/group-manage-modal";
 import { GroupedServicesView } from "./components/grouped-services-view";
 import { StopServicePopover } from "./components/stop-service-popover";
+import { BatchCommandModal } from "./components/batch-command-modal";
 
 type StateFilter = "all" | "running" | "stopped";
 
@@ -65,6 +67,7 @@ export default function ServicesPage() {
     saveStoredTags(tags);
   }, []);
   const [showGroupModal, setShowGroupModal] = useState(false);
+  const [showBatchCommandModal, setShowBatchCommandModal] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [operating, setOperating] = useState<Set<string>>(new Set());
   const [deletingService, setDeletingService] = useState<ServiceSummary | null>(null);
@@ -190,6 +193,12 @@ export default function ServicesPage() {
     total: services.length,
   }), [services]);
 
+  const serviceNames = useMemo(() => {
+    const map = new Map<string, string>();
+    services.forEach((s) => map.set(s.id, s.name));
+    return map;
+  }, [services]);
+
   const toggleOne = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -274,13 +283,20 @@ export default function ServicesPage() {
                   onShutdown={() => handleBatchAction("shutdown")}
                   onKill={() => handleBatchAction("kill")}
                 >
-                  <CompactButton.Root 
+                  <CompactButton.Root
                     variant="ghost"
                     className="text-error-base hover:bg-error-lighter hover:text-error-base"
                   >
                     <CompactButton.Icon as={RiStopCircleLine} />
                   </CompactButton.Root>
                 </StopServicePopover>
+                <CompactButton.Root
+                  variant="ghost"
+                  onClick={() => setShowBatchCommandModal(true)}
+                  className="text-information-base hover:bg-information-lighter hover:text-information-base"
+                >
+                  <CompactButton.Icon as={RiCommandLine} />
+                </CompactButton.Root>
               </div>
             )}
           </div>
@@ -364,6 +380,14 @@ export default function ServicesPage() {
         groups={groups}
         onUpdate={refreshGroups}
         isAdmin={isAdmin}
+      />
+
+      {/* 批量发送指令弹窗 */}
+      <BatchCommandModal
+        open={showBatchCommandModal}
+        onClose={() => setShowBatchCommandModal(false)}
+        serviceIds={Array.from(selected)}
+        serviceNames={serviceNames}
       />
     </PageLayout>
   );
