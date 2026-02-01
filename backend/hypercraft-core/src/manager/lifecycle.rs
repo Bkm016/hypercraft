@@ -22,7 +22,12 @@ impl ServiceManager {
     #[instrument(skip(self))]
     pub async fn status(&self, id: &str) -> Result<ServiceStatus> {
         // 优先检查 runtime 句柄，并确认进程仍存活；若已退出则清理缓存。
-        if let Some(runtime_pid) = self.runtime.lock().await.get(id).map(|h| h.pid) {
+        // 注意：必须在独立作用域中获取锁再取出 pid，避免 MutexGuard 跨 await 导致死锁。
+        let runtime_pid = {
+            let guard = self.runtime.lock().await;
+            guard.get(id).map(|h| h.pid)
+        };
+        if let Some(runtime_pid) = runtime_pid {
             if let Some((alive, uptime)) = self.process_alive(runtime_pid) {
                 if alive {
                     return Ok(ServiceStatus {
