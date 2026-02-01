@@ -1,34 +1,149 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   RiArrowRightLine,
   RiCpuLine,
+  RiDraggable,
   RiHardDriveLine,
   RiLoader4Line,
   RiRam2Line,
-  RiServerLine,
-  RiUserLine,
+  RiStarFill,
 } from "@remixicon/react";
 import * as Button from "@/components/ui/button";
+import * as CompactButton from "@/components/ui/compact-button";
+import * as Tooltip from "@/components/ui/tooltip";
 import { PageLayout, PageHeader, PageContent, PageCard } from "@/components/layout/page-layout";
 import { ResourceCard } from "@/components/resource-card";
 import { StatCard } from "@/components/stat-card";
 import { api, type ServiceSummary, type SystemStats } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatBytes } from "@/lib/format";
+import { getFavorites, removeFavorite, reorderFavorites } from "@/lib/favorites";
+
+const stateConfig = {
+  running: { dot: "bg-success-base", text: "text-success-base", label: "运行中" },
+  stopped: { dot: "bg-text-soft-400", text: "text-text-soft-400", label: "已停止" },
+  unknown: { dot: "bg-away-base", text: "text-away-base", label: "未知" },
+} as const;
+
+function SortableFavoriteItem({
+  service,
+  onRemove,
+}: {
+  service: ServiceSummary;
+  onRemove: (id: string) => void;
+}) {
+  const state = stateConfig[service.state];
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: service.id });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`group flex items-center justify-between rounded-lg bg-bg-weak-50 px-3 py-2.5 sm:px-4 sm:py-3 transition-colors hover:bg-bg-soft-200 ${
+        isDragging ? "opacity-40" : ""
+      }`}
+    >
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+        <div
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing text-text-soft-400 hover:text-text-sub-600 -ml-1 touch-none"
+        >
+          <RiDraggable className="size-4" />
+        </div>
+        <span className={`size-2 rounded-full shrink-0 ${state.dot}`} />
+        <Link
+          href={`/services/${service.id}`}
+          className="font-medium text-sm text-text-strong-950 truncate hover:underline"
+        >
+          {service.name}
+        </Link>
+      </div>
+      <div className="flex items-center gap-2 shrink-0 ml-2">
+        <span className={`text-xs ${state.text}`}>{state.label}</span>
+        <Tooltip.Root>
+          <Tooltip.Trigger asChild>
+            <CompactButton.Root
+              variant="ghost"
+              size="medium"
+              onClick={() => onRemove(service.id)}
+            >
+              <CompactButton.Icon as={RiStarFill} className="text-away-base" />
+            </CompactButton.Root>
+          </Tooltip.Trigger>
+          <Tooltip.Content>取消收藏</Tooltip.Content>
+        </Tooltip.Root>
+      </div>
+    </div>
+  );
+}
+
+function FavoriteItemOverlay({ service }: { service: ServiceSummary }) {
+  const state = stateConfig[service.state];
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-primary-base bg-bg-white-0 shadow-lg cursor-grabbing">
+      <RiDraggable className="size-4 text-text-soft-400" />
+      <span className={`size-2 rounded-full shrink-0 ${state.dot}`} />
+      <span className="text-sm font-medium text-text-strong-950 truncate">
+        {service.name}
+      </span>
+    </div>
+  );
+}
 
 export default function HomePage() {
   const { isAdmin, isAuthenticated, user } = useAuth();
   const [services, setServices] = useState<ServiceSummary[]>([]);
   const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [activeService, setActiveService] = useState<ServiceSummary | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   useEffect(() => {
     if (isAuthenticated) {
       loadServices();
       loadSystemStats();
+      setFavoriteIds(getFavorites());
       const interval = setInterval(loadSystemStats, 5000);
       return () => clearInterval(interval);
     }
@@ -60,10 +175,36 @@ export default function HomePage() {
     stopped: services.filter((s) => s.state === "stopped").length,
   }), [services]);
 
-  const runningServices = useMemo(() => 
-    services.filter((s) => s.state === "running").slice(0, 5),
-    [services]
-  );
+  // 按收藏顺序排列的服务列表
+  const favoriteServices = useMemo(() => {
+    const serviceMap = new Map(services.map(s => [s.id, s]));
+    return favoriteIds
+      .map(id => serviceMap.get(id))
+      .filter((s): s is ServiceSummary => !!s);
+  }, [services, favoriteIds]);
+
+  const handleRemoveFavorite = useCallback((id: string) => {
+    removeFavorite(id);
+    setFavoriteIds(prev => prev.filter(fid => fid !== id));
+  }, []);
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const svc = favoriteServices.find(s => s.id === event.active.id);
+    setActiveService(svc || null);
+  }, [favoriteServices]);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    setActiveService(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setFavoriteIds(prev => {
+      const oldIndex = prev.indexOf(active.id as string);
+      const newIndex = prev.indexOf(over.id as string);
+      const newOrder = arrayMove(prev, oldIndex, newIndex);
+      reorderFavorites(newOrder);
+      return newOrder;
+    });
+  }, []);
 
   return (
     <PageLayout>
@@ -120,9 +261,9 @@ export default function HomePage() {
             </PageCard>
           )}
 
-          {/* 运行中的服务 */}
+          {/* 收藏的服务 */}
           <PageCard
-            title="运行中的服务"
+            title="收藏的服务"
             actions={
               <Button.Root asChild size="xsmall" variant="neutral" mode="ghost">
                 <Link href="/services">
@@ -136,27 +277,31 @@ export default function HomePage() {
               <div className="flex items-center justify-center py-6 sm:py-8">
                 <RiLoader4Line className="size-5 animate-spin text-text-soft-400" />
               </div>
-            ) : runningServices.length > 0 ? (
-              <div className="space-y-1.5 sm:space-y-2">
-                {runningServices.map((svc) => (
-                  <Link
-                    key={svc.id}
-                    href={`/services/${svc.id}`}
-                    className="flex items-center justify-between rounded-lg bg-bg-weak-50 px-3 py-2.5 sm:px-4 sm:py-3 transition-colors hover:bg-bg-soft-200"
-                  >
-                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                      <span className="size-2 rounded-full bg-success-base shrink-0" />
-                      <span className="font-medium text-sm text-text-strong-950 truncate">{svc.name}</span>
-                    </div>
-                    <span className="text-xs text-text-sub-600 shrink-0 ml-2">
-                      运行中
-                    </span>
-                  </Link>
-                ))}
-              </div>
+            ) : favoriteServices.length > 0 ? (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext items={favoriteIds} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-1.5 sm:space-y-2">
+                    {favoriteServices.map((svc) => (
+                      <SortableFavoriteItem
+                        key={svc.id}
+                        service={svc}
+                        onRemove={handleRemoveFavorite}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+                <DragOverlay>
+                  {activeService && <FavoriteItemOverlay service={activeService} />}
+                </DragOverlay>
+              </DndContext>
             ) : (
               <div className="py-6 sm:py-8 text-center text-sm text-text-soft-400">
-                暂无运行中的服务
+                暂无收藏的服务，在服务列表中点击星标收藏
               </div>
             )}
           </PageCard>
@@ -165,5 +310,3 @@ export default function HomePage() {
     </PageLayout>
   );
 }
-
-

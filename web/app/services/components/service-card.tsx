@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { CSS } from "@dnd-kit/utilities";
 import { useSortable } from "@dnd-kit/sortable";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   RiDeleteBinLine,
   RiDraggable,
@@ -14,8 +14,11 @@ import {
   RiMoreLine,
   RiPlayCircleLine,
   RiPriceTag3Line,
+  RiStarFill,
+  RiStarLine,
   RiStopCircleLine,
 } from "@remixicon/react";
+import { isFavorite, addFavorite, removeFavorite } from "@/lib/favorites";
 import * as Tag from "@/components/ui/tag";
 import * as Checkbox from "@/components/ui/checkbox";
 import * as CompactButton from "@/components/ui/compact-button";
@@ -89,6 +92,11 @@ export function ServiceCard({
   const [tagModalOpen, setTagModalOpen] = useState(false);
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [favorited, setFavorited] = useState(false);
+
+  useEffect(() => {
+    setFavorited(isFavorite(service.id));
+  }, [service.id]);
 
   const {
     attributes,
@@ -216,6 +224,31 @@ export function ServiceCard({
 
       {/* 操作按钮 */}
       <div className="flex items-center gap-0.5 shrink-0">
+        {/* 收藏按钮 */}
+        <Tooltip.Root>
+          <Tooltip.Trigger asChild>
+            <CompactButton.Root
+              variant="ghost"
+              size="medium"
+              onClick={() => {
+                if (favorited) {
+                  removeFavorite(service.id);
+                  setFavorited(false);
+                } else {
+                  addFavorite(service.id);
+                  setFavorited(true);
+                }
+              }}
+            >
+              <CompactButton.Icon
+                as={favorited ? RiStarFill : RiStarLine}
+                className={favorited ? "text-away-base" : ""}
+              />
+            </CompactButton.Root>
+          </Tooltip.Trigger>
+          <Tooltip.Content>{favorited ? "取消收藏" : "收藏"}</Tooltip.Content>
+        </Tooltip.Root>
+
         {operating ? (
           <RiLoader4Line className="size-4 animate-spin text-text-soft-400 mx-2" />
         ) : (
