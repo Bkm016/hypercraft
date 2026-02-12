@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { notification } from "@/hooks/use-notification";
 
 // 固定尺寸，与后端 PTY 完全一致
 export const PTY_ROWS = 300;
@@ -75,6 +76,8 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<HTMLDivElement | null>(null);
   const xtermRef = useRef<import("@xterm/xterm").Terminal | null>(null);
+  const mouseUpRef = useRef<(() => void) | null>(null);
+  const selectingRef = useRef(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // 检查是否滚动到底部（带阈值）
@@ -87,6 +90,8 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
   // 裁剪空白行并滚动到光标（仅在滚动条位于底部时追踪）
   const scrollToCursor = useCallback(() => {
     if (!xtermRef.current || !containerRef.current || !wrapperRef.current) return;
+    // 拖动选择中，跳过自动滚动
+    if (selectingRef.current) return;
 
     const term = xtermRef.current;
     const buffer = term.buffer.active;
@@ -186,6 +191,28 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
         viewport.addEventListener('wheel', wheelHandler, { passive: false, capture: true });
       }
 
+      // 拖动选择时锁定自动滚动，松开时自动复制
+      const mouseDownHandler = () => {
+        selectingRef.current = true;
+      };
+      const mouseUpHandler = async () => {
+        if (!selectingRef.current) return;
+        selectingRef.current = false;
+        const selection = terminal.getSelection();
+        if (selection) {
+          try {
+            await navigator.clipboard.writeText(selection);
+            notification({ status: 'success', title: '已复制到剪贴板' });
+          } catch {
+            notification({ status: 'error', title: '复制失败' });
+          }
+          terminal.clearSelection();
+        }
+      };
+      terminalRef.current.addEventListener('mousedown', mouseDownHandler);
+      document.addEventListener('mouseup', mouseUpHandler);
+      mouseUpRef.current = mouseUpHandler;
+
       xtermRef.current = terminal;
 
       // 初始设置高度
@@ -205,6 +232,10 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
 
     return () => {
       mounted = false;
+      if (mouseUpRef.current) {
+        document.removeEventListener('mouseup', mouseUpRef.current);
+        mouseUpRef.current = null;
+      }
       if (xtermRef.current) {
         xtermRef.current.dispose();
         xtermRef.current = null;
