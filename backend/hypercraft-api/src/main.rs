@@ -28,6 +28,10 @@ struct ApiConfig {
     allowed_cwd_roots: Vec<PathBuf>,
     /// CORS 允许的来源列表（空则允许所有）
     cors_origins: Vec<String>,
+    /// Web 网关的子域名基础域
+    web_gateway_base_domain: Option<String>,
+    /// Web 代理会话有效期（秒）
+    web_proxy_session_ttl: i64,
 }
 
 /// 生成包含数字、字母和符号的复杂随机密码
@@ -137,6 +141,16 @@ impl ApiConfig {
             })
             .unwrap_or_default();
 
+        let web_gateway_base_domain = env::var("HC_WEB_GATEWAY_BASE_DOMAIN")
+            .ok()
+            .map(|value| value.trim().trim_matches('.').to_ascii_lowercase())
+            .filter(|value| !value.is_empty());
+
+        let web_proxy_session_ttl = env::var("HC_WEB_PROXY_SESSION_TTL")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(6 * 60 * 60);
+
         Self {
             bind,
             data_dir,
@@ -147,6 +161,8 @@ impl ApiConfig {
             allowed_commands,
             allowed_cwd_roots,
             cors_origins,
+            web_gateway_base_domain,
+            web_proxy_session_ttl,
         }
     }
 }
@@ -194,6 +210,9 @@ async fn main() -> anyhow::Result<()> {
     let refresh_limiter = Arc::new(RateLimiter::new(10, Duration::from_secs(60)));
     let auth_limiter = Arc::new(RateLimiter::new(10, Duration::from_secs(60)));
     let password_limiter = Arc::new(RateLimiter::new(10, Duration::from_secs(60)));
+    let http_client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
 
     let state = AppState {
         manager: manager.clone(),
@@ -204,6 +223,9 @@ async fn main() -> anyhow::Result<()> {
         refresh_limiter,
         auth_limiter,
         password_limiter,
+        web_gateway_base_domain: config.web_gateway_base_domain.clone(),
+        web_proxy_session_ttl: config.web_proxy_session_ttl,
+        http_client,
     };
 
     let app = app_router(state, config.cors_origins.clone());

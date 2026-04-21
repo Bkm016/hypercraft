@@ -25,6 +25,10 @@ export function useServiceForm({ mode, manifest, onReset }: UseServiceFormOption
     shutdownCommand: "",
     runAs: "",
     logPath: "",
+    webEnabled: false,
+    webUpstream: "",
+    webTitle: "",
+    webHealthPath: "",
     envVars: [],
     scheduleAction: "none",
     scheduleCron: "",
@@ -110,6 +114,10 @@ export function useServiceForm({ mode, manifest, onReset }: UseServiceFormOption
         shutdownCommand: m.shutdown_command || "",
         runAs: m.run_as || "",
         logPath: m.log_path || "",
+        webEnabled: m.web?.enabled ?? false,
+        webUpstream: m.web?.upstream || "",
+        webTitle: m.web?.title || "",
+        webHealthPath: m.web?.health_path || "",
         envVars: m.env
           ? Object.entries(m.env).map(([key, value]) => ({ key, value }))
           : [],
@@ -129,6 +137,10 @@ export function useServiceForm({ mode, manifest, onReset }: UseServiceFormOption
         shutdownCommand: "",
         runAs: "",
         logPath: "",
+        webEnabled: false,
+        webUpstream: "",
+        webTitle: "",
+        webHealthPath: "",
         envVars: [],
         scheduleAction: "none",
         scheduleCron: "",
@@ -169,6 +181,14 @@ export function useServiceForm({ mode, manifest, onReset }: UseServiceFormOption
       run_as: data.runAs.trim() || undefined,
       log_path: data.logPath.trim() || undefined,
       schedule: scheduleConfig,
+      web: data.webEnabled
+        ? {
+            enabled: true,
+            upstream: data.webUpstream.trim(),
+            title: data.webTitle.trim() || undefined,
+            health_path: data.webHealthPath.trim() || undefined,
+          }
+        : undefined,
       ...(isEditMode && originalManifest && {
         tags: originalManifest.tags,
         group: originalManifest.group,
@@ -202,6 +222,9 @@ export function useServiceForm({ mode, manifest, onReset }: UseServiceFormOption
       if (!valid) {
         return `Cron 表达式无效`;
       }
+    }
+    if (data.webEnabled && !data.webUpstream.trim()) {
+      return "启用 Web 网关时必须填写上游地址";
     }
     return null;
   }, [data, isEditMode, cronError, validateCron]);

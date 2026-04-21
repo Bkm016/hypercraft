@@ -7,6 +7,7 @@ mod services;
 mod stats;
 mod two_factor;
 mod users;
+mod web;
 
 pub use attach::attach_service;
 pub use auth::{devtoken_login, get_me, login, refresh};
@@ -27,3 +28,4 @@ pub use users::{
     add_user_service, change_password, create_user, delete_user, get_user, list_users,
     remove_user_service, set_user_services, update_user,
 };
+pub use web::create_web_session;

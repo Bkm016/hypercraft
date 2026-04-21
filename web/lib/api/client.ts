@@ -25,6 +25,7 @@ import type {
   Setup2FAResponse,
   Enable2FARequest,
   Disable2FARequest,
+  WebSessionResponse,
 } from "./types";
 
 function getApiBaseUrl(): string {
@@ -363,6 +364,12 @@ class ApiClient {
 
   async getServiceStatus(id: string): Promise<ServiceStatus> {
     return this.request<ServiceStatus>(`/services/${id}/status`);
+  }
+
+  async createWebSession(id: string): Promise<WebSessionResponse> {
+    return this.request<WebSessionResponse>(`/services/${id}/web/session`, {
+      method: "POST",
+    });
   }
 
   // ==================== 定时调度 API ====================

@@ -158,6 +158,7 @@ mod tests {
             order: 0,
             log_path: None,
             schedule: None,
+            web: None,
         }
     }
 

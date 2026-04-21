@@ -73,6 +73,8 @@ pub enum TokenType {
     Dev,
     /// 普通用户 token
     User,
+    /// Web 代理会话 token
+    Web,
     /// 刷新 token
     Refresh,
 }
@@ -101,6 +103,9 @@ pub struct TokenClaims {
     /// Refresh token 专用随机值（单次使用）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refresh_nonce: Option<String>,
+    /// Web 代理会话绑定的单个服务 ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_id: Option<String>,
     /// 过期时间戳 (Unix timestamp)
     pub exp: i64,
     /// 签发时间戳 (Unix timestamp)

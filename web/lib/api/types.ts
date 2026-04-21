@@ -61,6 +61,13 @@ export interface ValidateCronResponse {
   error?: string;
 }
 
+export interface WebConfig {
+  enabled: boolean;
+  upstream: string;
+  title?: string;
+  health_path?: string;
+}
+
 export interface ServiceManifest {
   id: string;
   name: string;
@@ -79,6 +86,7 @@ export interface ServiceManifest {
   order?: number;
   log_path?: string;
   schedule?: Schedule;
+  web?: WebConfig;
 }
 
 export interface ServiceDetail {
@@ -142,13 +150,14 @@ export interface ChangePasswordRequest {
 
 // ==================== 认证相关 ====================
 
-export type TokenType = "dev" | "user" | "refresh";
+export type TokenType = "dev" | "user" | "web" | "refresh";
 
 export interface TokenClaims {
   sub: string;
   username: string;
   token_type: TokenType;
   service_ids?: string[];
+  service_id?: string;
   exp: number;
   iat: number;
 }
@@ -204,6 +213,10 @@ export type TwoFactorVerification =
 export interface LogsResponse {
   id: string;
   lines: string[];
+}
+
+export interface WebSessionResponse {
+  url: string;
 }
 
 // ==================== API 响应 ====================

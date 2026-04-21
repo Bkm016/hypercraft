@@ -38,6 +38,7 @@ impl UserManager {
         match claims.token_type {
             TokenType::Dev => true, // 管理员可访问所有服务
             TokenType::User => claims.service_ids.contains(&service_id.to_string()),
+            TokenType::Web => claims.service_id.as_deref() == Some(service_id),
             TokenType::Refresh => false, // refresh token 不能用于访问服务
         }
     }

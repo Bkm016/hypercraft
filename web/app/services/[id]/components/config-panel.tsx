@@ -33,6 +33,10 @@ export function ConfigPanel({
     { key: "关闭命令", value: manifest.shutdown_command || "—" },
     { key: "创建时间", value: manifest.created_at ? new Date(manifest.created_at).toLocaleString("zh-CN") : "—" },
     { key: "日志路径", value: manifest.log_path || "—" },
+    { key: "Web 网关", value: manifest.web?.enabled ? "已启用" : "未启用" },
+    { key: "Web 上游", value: manifest.web?.upstream || "—" },
+    { key: "浏览器标题", value: manifest.web?.title || "—" },
+    { key: "健康检查路径", value: manifest.web?.health_path || "—" },
   ];
 
   return (

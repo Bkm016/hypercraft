@@ -97,6 +97,7 @@ impl UserManager {
             service_ids: user.service_ids.clone(),
             token_version: user.token_version,
             refresh_nonce: None,
+            service_id: None,
             exp: access_exp.timestamp(),
             iat: now.timestamp(),
         };
@@ -111,6 +112,7 @@ impl UserManager {
             service_ids: vec![],
             token_version: user.token_version,
             refresh_nonce: Some(user.refresh_nonce.clone()),
+            service_id: None,
             exp: refresh_exp.timestamp(),
             iat: now.timestamp(),
         };
@@ -135,6 +137,37 @@ impl UserManager {
             expires_in: self.access_token_ttl,
             token_type: "Bearer".to_string(),
         })
+    }
+
+    /// 为单个服务签发 Web 代理会话 token。
+    pub fn issue_web_token(
+        &self,
+        claims: &TokenClaims,
+        service_id: &str,
+        ttl_seconds: i64,
+    ) -> Result<String> {
+        let now = Utc::now();
+        let exp = now + Duration::seconds(ttl_seconds);
+        let web_claims = TokenClaims {
+            sub: claims.sub.clone(),
+            username: claims.username.clone(),
+            iss: Some(self.jwt_issuer.clone()),
+            aud: Some(self.jwt_audience.clone()),
+            token_type: TokenType::Web,
+            service_ids: vec![],
+            token_version: claims.token_version,
+            refresh_nonce: None,
+            service_id: Some(service_id.to_string()),
+            exp: exp.timestamp(),
+            iat: now.timestamp(),
+        };
+
+        encode(
+            &Header::default(),
+            &web_claims,
+            &EncodingKey::from_secret(self.jwt_secret.as_bytes()),
+        )
+        .map_err(|e| ServiceError::Other(e.to_string()))
     }
 
     /// 验证 JWT token

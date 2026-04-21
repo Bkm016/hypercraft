@@ -1,4 +1,5 @@
 use super::*;
+use crate::WebConfig;
 
 impl ServiceManager {
     /// 策略校验：命令 & 工作目录白名单。
@@ -44,6 +45,62 @@ impl ServiceManager {
                 )));
             }
         }
+
+        if let Some(web) = &manifest.web {
+            self.validate_web_upstream(web)?;
+        }
+        Ok(())
+    }
+
+    /// Web 上游地址必须限定为宿主机本地地址，避免代理能力被滥用。
+    fn validate_web_upstream(&self, web: &WebConfig) -> Result<()> {
+        if !web.enabled {
+            return Ok(());
+        }
+
+        let upstream = web.upstream.trim();
+        if upstream.is_empty() {
+            return Err(ServiceError::PolicyViolation(
+                "web upstream is required when web is enabled".into(),
+            ));
+        }
+
+        let scheme_end = upstream
+            .find("://")
+            .ok_or_else(|| ServiceError::PolicyViolation("web upstream must include scheme".into()))?;
+        let scheme = &upstream[..scheme_end];
+        if scheme != "http" && scheme != "https" {
+            return Err(ServiceError::PolicyViolation(
+                "web upstream only supports http/https".into(),
+            ));
+        }
+
+        let rest = &upstream[(scheme_end + 3)..];
+        let authority = rest.split('/').next().unwrap_or_default();
+        if authority.is_empty() {
+            return Err(ServiceError::PolicyViolation(
+                "web upstream must include host".into(),
+            ));
+        }
+
+        let host = if authority.starts_with('[') {
+            authority
+                .split(']')
+                .next()
+                .map(|value| format!("{value}]"))
+                .unwrap_or_default()
+        } else {
+            authority.split(':').next().unwrap_or_default().to_string()
+        };
+
+        let allowed = matches!(host.as_str(), "127.0.0.1" | "localhost" | "[::1]");
+        if !allowed {
+            return Err(ServiceError::PolicyViolation(format!(
+                "web upstream host not allowed: {}",
+                host
+            )));
+        }
+
         Ok(())
     }
 }

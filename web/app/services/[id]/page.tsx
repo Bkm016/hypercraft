@@ -21,6 +21,7 @@ import { api, type ServiceDetail } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useServices } from "@/lib/services-context";
 import { StopServicePopover } from "../components/stop-service-popover";
+import { BrowserPanel } from "./components/browser-panel";
 import { LogsPanel } from "./components/logs-panel";
 import { TerminalPanel } from "./components/terminal-panel";
 import { ConfigPanel } from "./components/config-panel";
@@ -37,7 +38,7 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
   const params = use(props.params);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get("tab") as "logs" | "terminal" | "config" | null;
+  const initialTab = searchParams.get("tab") as "logs" | "terminal" | "browser" | "config" | null;
   
   const { isAdmin } = useAuth();
   const { refreshServices } = useServices();
@@ -45,7 +46,7 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [operating, setOperating] = useState(false);
-  const [activeTab, setActiveTab] = useState<"logs" | "terminal" | "config">(initialTab || "terminal");
+  const [activeTab, setActiveTab] = useState<"logs" | "terminal" | "browser" | "config">(initialTab || "terminal");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
@@ -78,6 +79,12 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
       }
     };
   }, [loadService]);
+
+  useEffect(() => {
+    if (service && activeTab === "browser" && !service.manifest.web?.enabled) {
+      setActiveTab("terminal");
+    }
+  }, [activeTab, service]);
 
   // 服务操作
   const handleAction = async (action: "start" | "stop" | "restart" | "shutdown" | "kill") => {
@@ -144,6 +151,8 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
   }
 
   const state = stateConfig[service.status.state];
+
+  const hasBrowserTab = service.manifest.web?.enabled;
 
   return (
     <PageLayout>
@@ -259,19 +268,30 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
           </div>
 
           {/* Tab 导航 */}
-          <TabMenu.Root value={activeTab} onValueChange={(v) => setActiveTab(v as "logs" | "terminal" | "config")} className="mt-3 sm:mt-4">
+          <TabMenu.Root
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as "logs" | "terminal" | "browser" | "config")}
+            className="mt-3 sm:mt-4"
+          >
             <TabMenu.List>
               <TabMenu.Trigger value="terminal">终端</TabMenu.Trigger>
               <TabMenu.Trigger value="logs">日志</TabMenu.Trigger>
+              {hasBrowserTab && <TabMenu.Trigger value="browser">浏览器</TabMenu.Trigger>}
               {isAdmin && <TabMenu.Trigger value="config">配置</TabMenu.Trigger>}
             </TabMenu.List>
           </TabMenu.Root>
         </div>
       </div>
 
-      <PageContent fillHeight={activeTab === "logs" || activeTab === "terminal"}>
+      <PageContent fillHeight={activeTab === "logs" || activeTab === "terminal" || activeTab === "browser"}>
         {activeTab === "logs" && <LogsPanel serviceId={params.id} serviceState={service.status.state} logPath={service.manifest.log_path} />}
         {activeTab === "terminal" && <TerminalPanel serviceId={params.id} />}
+        {activeTab === "browser" && hasBrowserTab && (
+          <BrowserPanel
+            serviceId={params.id}
+            title={service.manifest.web?.title}
+          />
+        )}
         {activeTab === "config" && isAdmin && <ConfigPanel manifest={service.manifest} onEdit={() => setShowEditModal(true)} />}
       </PageContent>
 

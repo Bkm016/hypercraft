@@ -12,6 +12,7 @@ use hypercraft_core::{TokenClaims, TokenType};
 
 use super::error::ApiError;
 use super::state::AppState;
+use super::web_gateway::{extract_gateway_service_id, handle_web_gateway_request, request_host};
 
 /// 认证信息扩展
 #[derive(Debug, Clone)]
@@ -27,14 +28,15 @@ impl AuthInfo {
 
 	/// 检查是否有权限访问指定服务
 	pub fn can_access_service(&self, service_id: &str) -> bool {
-		if self.is_admin() {
-			return true;
-		}
-		match self.claims.token_type {
-			TokenType::User => self.claims.service_ids.contains(&service_id.to_string()),
-			_ => false,
-		}
-	}
+        if self.is_admin() {
+            return true;
+        }
+        match self.claims.token_type {
+            TokenType::User => self.claims.service_ids.contains(&service_id.to_string()),
+            TokenType::Web => self.claims.service_id.as_deref() == Some(service_id),
+            _ => false,
+        }
+    }
 }
 
 /// 要求管理员权限的 Extractor
@@ -211,14 +213,31 @@ pub async fn auth_middleware(
 		}
 	};
 
-	if claims.token_type == TokenType::Refresh {
-		return Err(ApiError::unauthorized_with_message(
-			"refresh token cannot be used for API access",
-		));
-	}
+    if matches!(claims.token_type, TokenType::Refresh | TokenType::Web) {
+        return Err(ApiError::unauthorized_with_message(
+            "this token cannot be used for API access",
+        ));
+    }
 
 	// JWT 验证成功，已认证用户不受限流限制，直接放行
-	let auth_info = AuthInfo { claims };
-	request.extensions_mut().insert(auth_info);
-	Ok(next.run(request).await)
+    let auth_info = AuthInfo { claims };
+    request.extensions_mut().insert(auth_info);
+    Ok(next.run(request).await)
+}
+
+pub async fn web_gateway_middleware(
+    State(state): State<AppState>,
+    request: Request<Body>,
+    next: Next,
+) -> Response {
+    let Some(base_domain) = state.web_gateway_base_domain.as_deref() else {
+        return next.run(request).await;
+    };
+    let Some(host) = request_host(request.headers()) else {
+        return next.run(request).await;
+    };
+    let Some(service_id) = extract_gateway_service_id(&host, base_domain) else {
+        return next.run(request).await;
+    };
+    handle_web_gateway_request(&state, request, service_id).await
 }

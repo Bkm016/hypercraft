@@ -18,4 +18,10 @@ pub struct AppState {
     pub auth_limiter: Arc<crate::app::RateLimiter>,
     /// 密码修改限流（按用户 ID，防止暴力破解当前密码）
     pub password_limiter: Arc<crate::app::RateLimiter>,
+    /// Web 网关对外使用的子域名基础域
+    pub web_gateway_base_domain: Option<String>,
+    /// Web 代理会话有效期（秒）
+    pub web_proxy_session_ttl: i64,
+    /// Web 代理使用的共享 HTTP 客户端
+    pub http_client: reqwest::Client,
 }

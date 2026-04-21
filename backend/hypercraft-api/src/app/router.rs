@@ -6,6 +6,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use super::handlers::{
     add_user_service, attach_service, change_password, create_group, create_service, create_user,
+    create_web_session,
     delete_group, delete_service, delete_user, devtoken_login, disable_2fa, download_log_file,
     enable_2fa, get_logs, get_me, get_schedule, get_service, get_status, get_system_stats,
     get_user, handler_404, health, kill_service, list_groups, list_services, list_users, login,
@@ -14,7 +15,7 @@ use super::handlers::{
     update_schedule, update_service, update_service_group, update_service_tags, update_user,
     validate_cron,
 };
-use super::middleware::auth_middleware;
+use super::middleware::{auth_middleware, web_gateway_middleware};
 use super::state::AppState;
 
 /// 根据配置的来源列表构建 CorsLayer
@@ -90,6 +91,7 @@ pub fn app_router(state: AppState, cors_origins: Vec<String>) -> Router {
         .route("/services/:id/logs", get(get_logs))
         .route("/services/:id/log-file", get(download_log_file))
         .route("/services/:id/attach", get(attach_service))
+        .route("/services/:id/web/session", post(create_web_session))
         .route("/services/:id/tags", patch(update_service_tags))
         .route("/services/:id/group", patch(update_service_group))
         .route(
@@ -135,5 +137,6 @@ pub fn app_router(state: AppState, cors_origins: Vec<String>) -> Router {
         .merge(protected_routes)
         .fallback(handler_404)
         .layer(build_cors_layer(cors_origins))
+        .layer(from_fn_with_state(state.clone(), web_gateway_middleware))
         .with_state(state)
 }

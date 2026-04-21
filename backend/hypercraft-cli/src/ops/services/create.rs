@@ -87,6 +87,7 @@ pub async fn create_service_interactive(
         log_path,
         clear_log_on_start,
         schedule: None,
+        web: None,
     };
 
     println!();

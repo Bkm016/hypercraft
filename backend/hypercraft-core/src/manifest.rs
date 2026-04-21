@@ -2,6 +2,22 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+/// Web 服务配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebConfig {
+    /// 是否启用内嵌浏览器入口
+    #[serde(default)]
+    pub enabled: bool,
+    /// Web 服务在宿主机上的本地上游地址
+    pub upstream: String,
+    /// 浏览器 tab 的展示标题
+    #[serde(default)]
+    pub title: Option<String>,
+    /// 可选的健康检查路径
+    #[serde(default)]
+    pub health_path: Option<String>,
+}
+
 /// 定时调度动作
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
@@ -96,6 +112,9 @@ pub struct ServiceManifest {
     /// 定时调度配置
     #[serde(default)]
     pub schedule: Option<Schedule>,
+    /// 内嵌 Web 服务配置
+    #[serde(default)]
+    pub web: Option<WebConfig>,
 }
 
 fn default_clear_log_on_start() -> bool {

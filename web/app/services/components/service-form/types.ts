@@ -19,6 +19,10 @@ export interface ServiceFormData {
   shutdownCommand: string;
   runAs: string;
   logPath: string;
+  webEnabled: boolean;
+  webUpstream: string;
+  webTitle: string;
+  webHealthPath: string;
   envVars: EnvVar[];
   scheduleAction: "none" | ScheduleAction;
   scheduleCron: string;
