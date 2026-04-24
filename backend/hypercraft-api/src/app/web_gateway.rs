@@ -1,7 +1,10 @@
 use axum::body::{to_bytes, Body};
 use axum::http::header::{self, HeaderMap, HeaderValue};
-use axum::http::{Request, Response, StatusCode, Uri};
-use hypercraft_core::{ServiceManifest, TokenClaims, TokenType, WebConfig};
+use axum::http::{Method, Request, Response, StatusCode, Uri};
+use hypercraft_core::{
+    validate_web_upstream_url, ServiceManifest, TokenClaims, TokenType, WebConfig,
+};
+use std::net::SocketAddr;
 
 use super::state::AppState;
 
@@ -19,23 +22,32 @@ const HOP_BY_HOP_HEADERS: &[&str] = &[
     "transfer-encoding",
     "upgrade",
 ];
+const PROXY_OWNED_REQUEST_HEADERS: &[&str] = &[
+    "forwarded",
+    "x-forwarded-for",
+    "x-forwarded-host",
+    "x-forwarded-proto",
+    "x-real-ip",
+];
 
 pub fn detect_request_scheme(headers: &HeaderMap) -> String {
-    if let Some(value) = headers
+    if let Some(scheme) = headers
         .get("x-forwarded-proto")
         .and_then(|value| value.to_str().ok())
         .map(str::trim)
         .filter(|value| !value.is_empty())
+        .and_then(normalize_http_scheme)
     {
-        return value.to_string();
+        return scheme.to_string();
     }
 
-    if let Some(origin) = headers
+    if let Some(scheme) = headers
         .get(header::ORIGIN)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split("://").next())
+        .and_then(normalize_http_scheme)
     {
-        return origin.to_string();
+        return scheme.to_string();
     }
 
     "http".to_string()
@@ -56,6 +68,7 @@ pub fn build_gateway_url(
     base_domain: &str,
     session_token: &str,
 ) -> String {
+    let scheme = normalize_http_scheme(scheme).unwrap_or("http");
     let (base_host, port) = split_host_port(base_domain.trim().trim_matches('.'));
     let host = build_gateway_host(service_id, &base_host);
     let authority = match port {
@@ -64,11 +77,20 @@ pub fn build_gateway_url(
     };
     format!(
         "{}://{}/?{}={}",
-        scheme,
-        authority,
-        WEB_SESSION_QUERY,
-        session_token
+        scheme, authority, WEB_SESSION_QUERY, session_token
     )
+}
+
+pub fn validate_gateway_upstream(upstream: &str, api_bind: SocketAddr) -> Result<(), String> {
+    parse_gateway_upstream(upstream, api_bind).map(|_| ())
+}
+
+fn parse_gateway_upstream(upstream: &str, api_bind: SocketAddr) -> Result<reqwest::Url, String> {
+    let upstream_url = validate_web_upstream_url(upstream).map_err(|error| error.to_string())?;
+    if is_api_bind_target(&upstream_url, api_bind) {
+        return Err("web upstream cannot target hypercraft api".to_string());
+    }
+    Ok(upstream_url)
 }
 
 pub fn extract_gateway_service_id(host: &str, base_domain: &str) -> Option<String> {
@@ -94,6 +116,19 @@ pub async fn handle_web_gateway_request(
     request: Request<Body>,
     service_id: String,
 ) -> Response<Body> {
+    let (session_token, should_create_cookie) =
+        if let Some(session_token) = extract_query_param(request.uri(), WEB_SESSION_QUERY) {
+            (session_token, true)
+        } else {
+            match extract_cookie(request.headers(), WEB_SESSION_COOKIE) {
+                Some(token) => (token, false),
+                None => return plain_response(StatusCode::UNAUTHORIZED, "missing web session"),
+            }
+        };
+    if !authorize_web_session(state, &session_token, &service_id).await {
+        return plain_response(StatusCode::UNAUTHORIZED, "web session is invalid");
+    }
+
     let manifest = match state.manager.load_manifest(&service_id).await {
         Ok(manifest) => manifest,
         Err(_) => return plain_response(StatusCode::NOT_FOUND, "service not found"),
@@ -103,11 +138,7 @@ pub async fn handle_web_gateway_request(
         None => return plain_response(StatusCode::NOT_FOUND, "web service not enabled"),
     };
 
-    if let Some(session_token) = extract_query_param(request.uri(), WEB_SESSION_QUERY) {
-        if !authorize_web_session(state, &session_token, &service_id).await {
-            return plain_response(StatusCode::UNAUTHORIZED, "web session is invalid");
-        }
-
+    if should_create_cookie {
         let secure = should_mark_session_cookie_secure(request.headers());
         let mut response = Response::builder()
             .status(StatusCode::FOUND)
@@ -117,20 +148,14 @@ pub async fn handle_web_gateway_request(
                 build_session_cookie(&session_token, state.web_proxy_session_ttl, secure),
             )
             .body(Body::empty())
-            .unwrap_or_else(|_| plain_response(StatusCode::INTERNAL_SERVER_ERROR, "redirect failed"));
+            .unwrap_or_else(|_| {
+                plain_response(StatusCode::INTERNAL_SERVER_ERROR, "redirect failed")
+            });
         response.headers_mut().append(
             header::CACHE_CONTROL,
             HeaderValue::from_static("no-store, no-cache, must-revalidate"),
         );
         return response;
-    }
-
-    let session_token = match extract_cookie(request.headers(), WEB_SESSION_COOKIE) {
-        Some(token) => token,
-        None => return plain_response(StatusCode::UNAUTHORIZED, "missing web session"),
-    };
-    if !authorize_web_session(state, &session_token, &service_id).await {
-        return plain_response(StatusCode::UNAUTHORIZED, "web session is invalid");
     }
 
     proxy_request(state, request, &manifest, web).await
@@ -159,7 +184,7 @@ async fn proxy_request(
     web: &WebConfig,
 ) -> Response<Body> {
     let request_headers = request.headers().clone();
-    let upstream_url = match build_upstream_url(&web.upstream, request.uri()) {
+    let upstream_url = match build_upstream_url(&web.upstream, request.uri(), state.api_bind) {
         Ok(url) => url,
         Err(message) => return plain_response(StatusCode::BAD_GATEWAY, message),
     };
@@ -167,13 +192,12 @@ async fn proxy_request(
     let gateway_host = request_host(&request_headers).unwrap_or_default();
     let gateway_scheme = detect_request_scheme(&request_headers);
     let upstream_host = upstream_host_header(&upstream_url);
-    let forwarded_for = request_headers
-        .get("x-forwarded-for")
-        .and_then(|value| value.to_str().ok())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| format!("{}, hypercraft-web-gateway", value))
-        .unwrap_or_else(|| "hypercraft-web-gateway".to_string());
+    if !is_allowed_proxy_method(request.method()) {
+        return plain_response(
+            StatusCode::METHOD_NOT_ALLOWED,
+            "method not allowed for web proxy",
+        );
+    }
     let method = match reqwest::Method::from_bytes(request.method().as_str().as_bytes()) {
         Ok(method) => method,
         Err(_) => return plain_response(StatusCode::BAD_REQUEST, "invalid request method"),
@@ -191,7 +215,10 @@ async fn proxy_request(
 
     let mut upstream_request = state.http_client.request(method, upstream_url.clone());
     for (name, value) in &request_headers {
-        if is_hop_by_hop_header(name.as_str()) || name == header::HOST {
+        if is_hop_by_hop_header(name.as_str())
+            || is_proxy_owned_request_header(name.as_str())
+            || name == header::HOST
+        {
             continue;
         }
 
@@ -213,7 +240,7 @@ async fn proxy_request(
     upstream_request = upstream_request
         .header("x-forwarded-host", gateway_host.clone())
         .header("x-forwarded-proto", gateway_scheme.clone())
-        .header("x-forwarded-for", forwarded_for);
+        .header("x-forwarded-for", "hypercraft-web-gateway");
 
     if !body_bytes.is_empty() {
         upstream_request = upstream_request.body(body_bytes);
@@ -243,6 +270,12 @@ async fn proxy_request(
             if name == header::X_FRAME_OPTIONS {
                 continue;
             }
+            if name == header::SET_COOKIE {
+                if should_forward_upstream_set_cookie(value) {
+                    headers.append(name, value.clone());
+                }
+                continue;
+            }
             if name == header::CONTENT_SECURITY_POLICY {
                 if let Some(rewritten) = rewrite_content_security_policy(value) {
                     headers.append(name, rewritten);
@@ -250,7 +283,9 @@ async fn proxy_request(
                 continue;
             }
             if name == header::LOCATION {
-                if let Some(rewritten) = rewrite_location(value, &upstream_url, &gateway_scheme, &gateway_host) {
+                if let Some(rewritten) =
+                    rewrite_location(value, &upstream_url, &gateway_scheme, &gateway_host)
+                {
                     headers.append(name, rewritten);
                 }
                 continue;
@@ -261,12 +296,17 @@ async fn proxy_request(
 
     response
         .body(Body::from_stream(upstream_response.bytes_stream()))
-        .unwrap_or_else(|_| plain_response(StatusCode::INTERNAL_SERVER_ERROR, "proxy response failed"))
+        .unwrap_or_else(|_| {
+            plain_response(StatusCode::INTERNAL_SERVER_ERROR, "proxy response failed")
+        })
 }
 
-fn build_upstream_url(upstream: &str, uri: &Uri) -> Result<reqwest::Url, String> {
-    let mut target = reqwest::Url::parse(upstream)
-        .map_err(|_| "web upstream is not a valid URL".to_string())?;
+fn build_upstream_url(
+    upstream: &str,
+    uri: &Uri,
+    api_bind: SocketAddr,
+) -> Result<reqwest::Url, String> {
+    let mut target = parse_gateway_upstream(upstream, api_bind)?;
     let base_path = target.path().trim_end_matches('/').to_string();
     let request_path = uri.path();
     let joined_path = if base_path.is_empty() || base_path == "/" {
@@ -274,12 +314,34 @@ fn build_upstream_url(upstream: &str, uri: &Uri) -> Result<reqwest::Url, String>
     } else if request_path == "/" {
         base_path
     } else {
-        format!("{}/{}", base_path.trim_end_matches('/'), request_path.trim_start_matches('/'))
+        format!(
+            "{}/{}",
+            base_path.trim_end_matches('/'),
+            request_path.trim_start_matches('/')
+        )
     };
-    target.set_path(if joined_path.is_empty() { "/" } else { &joined_path });
+    target.set_path(if joined_path.is_empty() {
+        "/"
+    } else {
+        &joined_path
+    });
     target.set_query(uri.query());
     target.set_fragment(None);
     Ok(target)
+}
+
+fn is_api_bind_target(upstream_url: &reqwest::Url, api_bind: SocketAddr) -> bool {
+    let Some(port) = upstream_url.port_or_known_default() else {
+        return false;
+    };
+    if port != api_bind.port() {
+        return false;
+    }
+
+    let Some(host) = upstream_url.host_str() else {
+        return false;
+    };
+    host.eq_ignore_ascii_case("localhost") || matches!(host, "127.0.0.1" | "::1")
 }
 
 fn rewrite_location(
@@ -326,7 +388,13 @@ fn rewrite_content_security_policy(value: &HeaderValue) -> Option<HeaderValue> {
     let directives: Vec<&str> = raw
         .split(';')
         .map(str::trim)
-        .filter(|directive| !directive.is_empty() && !directive.starts_with("frame-ancestors"))
+        .filter(|directive| {
+            if directive.is_empty() {
+                return false;
+            }
+            let name = directive.split_whitespace().next().unwrap_or_default();
+            !name.eq_ignore_ascii_case("frame-ancestors")
+        })
         .collect();
     if directives.is_empty() {
         return None;
@@ -353,17 +421,13 @@ fn build_session_cookie(session_token: &str, ttl_seconds: i64, secure: bool) -> 
         // 这里必须显式放宽 SameSite，并启用 Secure/Partitioned，避免重定向后的第二跳丢失会话。
         return format!(
             "{}={}; Path=/; HttpOnly; SameSite=None; Secure; Partitioned; Max-Age={}",
-            WEB_SESSION_COOKIE,
-            session_token,
-            ttl_seconds
+            WEB_SESSION_COOKIE, session_token, ttl_seconds
         );
     }
 
     format!(
         "{}={}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}",
-        WEB_SESSION_COOKIE,
-        session_token,
-        ttl_seconds
+        WEB_SESSION_COOKIE, session_token, ttl_seconds
     )
 }
 
@@ -384,7 +448,9 @@ fn extract_query_param(uri: &Uri, key: &str) -> Option<String> {
         query.split('&').find_map(|pair| {
             let (query_key, value) = pair.split_once('=')?;
             if query_key == key {
-                urlencoding::decode(value).ok().map(|value| value.into_owned())
+                urlencoding::decode(value)
+                    .ok()
+                    .map(|value| value.into_owned())
             } else {
                 None
             }
@@ -422,6 +488,48 @@ fn is_hop_by_hop_header(name: &str) -> bool {
     HOP_BY_HOP_HEADERS
         .iter()
         .any(|header_name| header_name.eq_ignore_ascii_case(name))
+}
+
+fn is_proxy_owned_request_header(name: &str) -> bool {
+    PROXY_OWNED_REQUEST_HEADERS
+        .iter()
+        .any(|header_name| header_name.eq_ignore_ascii_case(name))
+}
+
+fn is_allowed_proxy_method(method: &Method) -> bool {
+    matches!(
+        method,
+        &Method::GET
+            | &Method::HEAD
+            | &Method::POST
+            | &Method::PUT
+            | &Method::PATCH
+            | &Method::DELETE
+            | &Method::OPTIONS
+    )
+}
+
+fn normalize_http_scheme(value: &str) -> Option<&'static str> {
+    let scheme = value.split(',').next().unwrap_or_default().trim();
+    if scheme.eq_ignore_ascii_case("https") {
+        return Some("https");
+    }
+    if scheme.eq_ignore_ascii_case("http") {
+        return Some("http");
+    }
+    None
+}
+
+fn should_forward_upstream_set_cookie(value: &HeaderValue) -> bool {
+    let Ok(raw) = value.to_str() else {
+        return false;
+    };
+    let cookie_name = raw
+        .split(';')
+        .next()
+        .and_then(|pair| pair.trim().split_once('='))
+        .map(|(name, _)| name.trim());
+    cookie_name != Some(WEB_SESSION_COOKIE)
 }
 
 fn build_gateway_host(service_id: &str, base_domain: &str) -> String {
@@ -470,7 +578,9 @@ fn nibble_to_hex(nibble: u8) -> u8 {
 fn split_host_port(host: &str) -> (String, Option<u16>) {
     if let Some(rest) = host.strip_prefix('[') {
         if let Some((ipv6_host, remainder)) = rest.split_once(']') {
-            let port = remainder.strip_prefix(':').and_then(|value| value.parse().ok());
+            let port = remainder
+                .strip_prefix(':')
+                .and_then(|value| value.parse().ok());
             return (ipv6_host.to_string(), port);
         }
     }
@@ -496,4 +606,56 @@ fn should_mark_session_cookie_secure(headers: &HeaderMap) -> bool {
                 || host.to_ascii_lowercase().ends_with(".localhost")
         })
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detect_request_scheme_rejects_invalid_forwarded_proto() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-proto", HeaderValue::from_static("javascript"));
+        assert_eq!(detect_request_scheme(&headers), "http");
+    }
+
+    #[test]
+    fn detect_request_scheme_allows_https_forwarded_proto() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-proto", HeaderValue::from_static("https"));
+        assert_eq!(detect_request_scheme(&headers), "https");
+    }
+
+    #[test]
+    fn build_gateway_url_clamps_scheme() {
+        let url = build_gateway_url("svc", "javascript", "localhost:8080", "token");
+        assert!(url.starts_with("http://svc-737663.localhost:8080/"));
+    }
+
+    #[test]
+    fn gateway_upstream_rejects_api_bind_port() {
+        let api_bind = "0.0.0.0:2334".parse().unwrap();
+        let result = validate_gateway_upstream("http://localhost:2334", api_bind);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn gateway_upstream_allows_different_local_port() {
+        let api_bind = "0.0.0.0:2334".parse().unwrap();
+        let result = validate_gateway_upstream("http://localhost:3001", api_bind);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn upstream_cannot_overwrite_proxy_session_cookie() {
+        let value = HeaderValue::from_static("hc_web_session=bad; Path=/");
+        assert!(!should_forward_upstream_set_cookie(&value));
+    }
+
+    #[test]
+    fn csp_frame_ancestors_rewrite_is_case_insensitive() {
+        let value = HeaderValue::from_static("default-src 'self'; Frame-Ancestors 'none'");
+        let rewritten = rewrite_content_security_policy(&value).unwrap();
+        assert_eq!(rewritten.to_str().unwrap(), "default-src 'self'");
+    }
 }

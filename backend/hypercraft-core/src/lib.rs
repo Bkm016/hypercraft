@@ -5,6 +5,7 @@ mod manager;
 mod manifest;
 mod models;
 pub mod user;
+mod web;
 
 pub use error::{Result, ServiceError};
 pub use manager::scheduler::ServiceScheduler;
@@ -16,9 +17,10 @@ pub use user::{
     LoginRequest, RefreshRequest, Setup2FARequest, Setup2FAResponse, TokenClaims, TokenType,
     TwoFactorVerification, UpdateUserRequest, User, UserManager, UserSummary,
 };
+pub use web::validate_web_upstream_url;
 
 /// 初始化 tracing 日志系统
-/// 
+///
 /// 使用环境变量 `RUST_LOG` 设置日志级别，默认为 `info`。
 pub fn init_tracing() {
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};

@@ -1,4 +1,5 @@
 use hypercraft_core::{ServiceManager, ServiceScheduler, UserManager};
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 /// Shared application state for handlers.
@@ -24,4 +25,6 @@ pub struct AppState {
     pub web_proxy_session_ttl: i64,
     /// Web 代理使用的共享 HTTP 客户端
     pub http_client: reqwest::Client,
+    /// API 监听地址，用于阻止 Web 上游反向指向控制面。
+    pub api_bind: SocketAddr,
 }

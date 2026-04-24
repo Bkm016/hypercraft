@@ -212,6 +212,8 @@ async fn main() -> anyhow::Result<()> {
     let password_limiter = Arc::new(RateLimiter::new(10, Duration::from_secs(60)));
     let http_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(30))
         .build()?;
 
     let state = AppState {
@@ -226,14 +228,18 @@ async fn main() -> anyhow::Result<()> {
         web_gateway_base_domain: config.web_gateway_base_domain.clone(),
         web_proxy_session_ttl: config.web_proxy_session_ttl,
         http_client,
+        api_bind: config.bind,
     };
 
     let app = app_router(state, config.cors_origins.clone());
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
 
     // Graceful shutdown 处理
-    let server = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-        .with_graceful_shutdown(shutdown_signal());
+    let server = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal());
 
     info!("服务器准备就绪，按 Ctrl+C 停止");
 

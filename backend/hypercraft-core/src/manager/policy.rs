@@ -1,5 +1,5 @@
 use super::*;
-use crate::WebConfig;
+use crate::{validate_web_upstream_url, WebConfig};
 
 impl ServiceManager {
     /// 策略校验：命令 & 工作目录白名单。
@@ -22,27 +22,26 @@ impl ServiceManager {
         // cwd 白名单：必须在 data_dir 或配置的前缀下
         if let Some(cwd) = &manifest.cwd {
             // 特殊值 "*" 表示无限制
-            if self.allowed_cwd_roots.iter().any(|p| p.as_os_str() == "*") {
-                return Ok(());
-            }
-            let cwd_path = PathBuf::from(cwd);
-            let canonical = cwd_path
-                .canonicalize()
-                .map_err(|_| ServiceError::PolicyViolation("cwd not accessible".into()))?;
-            let mut ok = canonical.starts_with(&self.data_dir);
-            if !ok {
-                for root in &self.allowed_cwd_roots {
-                    if canonical.starts_with(root) {
-                        ok = true;
-                        break;
+            if !self.allowed_cwd_roots.iter().any(|p| p.as_os_str() == "*") {
+                let cwd_path = PathBuf::from(cwd);
+                let canonical = cwd_path
+                    .canonicalize()
+                    .map_err(|_| ServiceError::PolicyViolation("cwd not accessible".into()))?;
+                let mut ok = canonical.starts_with(&self.data_dir);
+                if !ok {
+                    for root in &self.allowed_cwd_roots {
+                        if canonical.starts_with(root) {
+                            ok = true;
+                            break;
+                        }
                     }
                 }
-            }
-            if !ok {
-                return Err(ServiceError::PolicyViolation(format!(
-                    "cwd not allowed: {}",
-                    canonical.display()
-                )));
+                if !ok {
+                    return Err(ServiceError::PolicyViolation(format!(
+                        "cwd not allowed: {}",
+                        canonical.display()
+                    )));
+                }
             }
         }
 
@@ -58,49 +57,12 @@ impl ServiceManager {
             return Ok(());
         }
 
-        let upstream = web.upstream.trim();
-        if upstream.is_empty() {
+        if web.upstream.trim().is_empty() {
             return Err(ServiceError::PolicyViolation(
                 "web upstream is required when web is enabled".into(),
             ));
         }
-
-        let scheme_end = upstream
-            .find("://")
-            .ok_or_else(|| ServiceError::PolicyViolation("web upstream must include scheme".into()))?;
-        let scheme = &upstream[..scheme_end];
-        if scheme != "http" && scheme != "https" {
-            return Err(ServiceError::PolicyViolation(
-                "web upstream only supports http/https".into(),
-            ));
-        }
-
-        let rest = &upstream[(scheme_end + 3)..];
-        let authority = rest.split('/').next().unwrap_or_default();
-        if authority.is_empty() {
-            return Err(ServiceError::PolicyViolation(
-                "web upstream must include host".into(),
-            ));
-        }
-
-        let host = if authority.starts_with('[') {
-            authority
-                .split(']')
-                .next()
-                .map(|value| format!("{value}]"))
-                .unwrap_or_default()
-        } else {
-            authority.split(':').next().unwrap_or_default().to_string()
-        };
-
-        let allowed = matches!(host.as_str(), "127.0.0.1" | "localhost" | "[::1]");
-        if !allowed {
-            return Err(ServiceError::PolicyViolation(format!(
-                "web upstream host not allowed: {}",
-                host
-            )));
-        }
-
+        validate_web_upstream_url(&web.upstream)?;
         Ok(())
     }
 }

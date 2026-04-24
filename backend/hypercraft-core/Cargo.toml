@@ -32,6 +32,7 @@ sha2 = "0.10"
 base64 = "0.22"
 rand = "0.8"
 urlencoding = "2.1"
+url.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

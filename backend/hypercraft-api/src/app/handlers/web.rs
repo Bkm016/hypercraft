@@ -4,7 +4,9 @@ use axum::Json;
 use serde::Serialize;
 
 use crate::app::middleware::ServicePermission;
-use crate::app::web_gateway::{build_gateway_url, detect_request_scheme};
+use crate::app::web_gateway::{
+    build_gateway_url, detect_request_scheme, validate_gateway_upstream,
+};
 use crate::app::{ApiError, AppState};
 
 #[derive(Debug, Serialize)]
@@ -26,6 +28,9 @@ pub async fn create_web_session(
         .ok_or_else(|| ApiError::bad_request("service web gateway is not enabled"))?;
     if web.upstream.trim().is_empty() {
         return Err(ApiError::bad_request("service web upstream is empty"));
+    }
+    if let Err(message) = validate_gateway_upstream(&web.upstream, state.api_bind) {
+        return Err(ApiError::bad_request(message));
     }
 
     let base_domain = state.web_gateway_base_domain.clone().ok_or_else(|| {

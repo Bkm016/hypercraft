@@ -4,8 +4,8 @@ use crate::models::{ServiceState, ServiceStatus, ServiceSummary};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex as StdMutex};
-use tokio::sync::{broadcast, mpsc, Mutex};
 use sysinfo::System;
+use tokio::sync::{broadcast, mpsc, Mutex};
 
 mod attach;
 mod groups;
@@ -221,6 +221,37 @@ mod tests {
         let manager = ServiceManager::with_policy(dir.path(), Some(allowed), vec![]);
         let mut m = manifest("svc1");
         m.command = "blocked.exe".into();
+        let err = manager.create_service(m).await.unwrap_err();
+        matches!(err, ServiceError::PolicyViolation(_));
+    }
+
+    #[tokio::test]
+    async fn policy_validates_web_when_cwd_is_unrestricted() {
+        let dir = TempDir::new().unwrap();
+        let manager = ServiceManager::with_policy(dir.path(), None, vec![PathBuf::from("*")]);
+        let mut m = manifest("svc1");
+        m.cwd = Some("C:/anywhere".into());
+        m.web = Some(crate::WebConfig {
+            enabled: true,
+            upstream: "http://example.com:3000".into(),
+            title: None,
+            health_path: None,
+        });
+        let err = manager.create_service(m).await.unwrap_err();
+        matches!(err, ServiceError::PolicyViolation(_));
+    }
+
+    #[tokio::test]
+    async fn policy_rejects_web_upstream_credentials() {
+        let dir = TempDir::new().unwrap();
+        let manager = ServiceManager::new(dir.path());
+        let mut m = manifest("svc1");
+        m.web = Some(crate::WebConfig {
+            enabled: true,
+            upstream: "http://user:pass@localhost:3000".into(),
+            title: None,
+            health_path: None,
+        });
         let err = manager.create_service(m).await.unwrap_err();
         matches!(err, ServiceError::PolicyViolation(_));
     }
