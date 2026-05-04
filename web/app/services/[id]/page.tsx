@@ -285,7 +285,13 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
 
       <PageContent fillHeight={activeTab === "logs" || activeTab === "terminal" || activeTab === "browser"}>
         {activeTab === "logs" && <LogsPanel serviceId={params.id} serviceState={service.status.state} logPath={service.manifest.log_path} />}
-        {activeTab === "terminal" && <TerminalPanel serviceId={params.id} />}
+        {activeTab === "terminal" && (
+          <TerminalPanel
+            serviceId={params.id}
+            ptyRows={service.manifest.pty_rows}
+            terminalTui={service.manifest.terminal_tui}
+          />
+        )}
         {activeTab === "browser" && hasBrowserTab && (
           <BrowserPanel
             serviceId={params.id}

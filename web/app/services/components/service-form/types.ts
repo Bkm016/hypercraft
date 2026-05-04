@@ -19,6 +19,8 @@ export interface ServiceFormData {
   shutdownCommand: string;
   runAs: string;
   logPath: string;
+  ptyRows: number;
+  terminalTui: boolean;
   webEnabled: boolean;
   webUpstream: string;
   webTitle: string;

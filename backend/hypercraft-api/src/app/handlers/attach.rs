@@ -20,6 +20,8 @@ use sysinfo::Signal;
 use crate::app::middleware::AuthInfo;
 use crate::app::{ApiError, AppState};
 
+const DEFAULT_PTY_COLS: u16 = 155;
+
 /// POST /services/:id/attach - WebSocket 连接到服务终端
 pub async fn attach_service(
     State(state): State<AppState>,
@@ -35,9 +37,20 @@ pub async fn attach_service(
     }
 
     let handle = state.manager.attach(&id).await?;
+    let manifest = state.manager.load_manifest(&id).await.ok();
+    let replay_logs = manifest
+        .as_ref()
+        .map(|manifest| !manifest.terminal_tui)
+        .unwrap_or(true);
+    if let Some(manifest) = manifest.as_ref().filter(|manifest| manifest.terminal_tui) {
+        let _ = state
+            .manager
+            .resize_pty(&id, manifest.pty_rows.clamp(5, 500), DEFAULT_PTY_COLS)
+            .await;
+    }
     let manager = state.manager.clone();
 
-    Ok(ws.on_upgrade(move |socket| handle_socket(socket, manager, id, handle)))
+    Ok(ws.on_upgrade(move |socket| handle_socket(socket, manager, id, handle, replay_logs)))
 }
 
 /// 处理 WebSocket 连接
@@ -46,15 +59,18 @@ async fn handle_socket(
     manager: Arc<ServiceManager>,
     id: String,
     handle: hypercraft_core::AttachHandle,
+    replay_logs: bool,
 ) {
     let (mut ws_tx, mut ws_rx) = socket.split();
     let pty_tx = handle.input;
     let mut pty_rx = handle.output;
 
     // 发送最近的原始日志（保留所有控制序列，确保 xterm 状态同步）
-    if let Ok(logs) = manager.tail_logs_raw(&id, 64 * 1024) {
-        if !logs.is_empty() {
-            let _ = ws_tx.send(Message::Binary(logs)).await;
+    if replay_logs {
+        if let Ok(logs) = manager.tail_logs_raw(&id, 64 * 1024) {
+            if !logs.is_empty() {
+                let _ = ws_tx.send(Message::Binary(logs)).await;
+            }
         }
     }
 

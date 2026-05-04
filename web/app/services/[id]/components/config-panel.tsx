@@ -30,6 +30,8 @@ export function ConfigPanel({
     { key: "自动启动", value: manifest.auto_start ? "是" : "否" },
     { key: "自动重启", value: manifest.auto_restart ? "是" : "否" },
     { key: "启动时清空日志", value: (manifest.clear_log_on_start ?? true) ? "是" : "否" },
+    { key: "PTY 行数", value: String(manifest.pty_rows ?? 300) },
+    { key: "TUI 终端", value: manifest.terminal_tui ? "是" : "否" },
     { key: "关闭命令", value: manifest.shutdown_command || "—" },
     { key: "创建时间", value: manifest.created_at ? new Date(manifest.created_at).toLocaleString("zh-CN") : "—" },
     { key: "日志路径", value: manifest.log_path || "—" },

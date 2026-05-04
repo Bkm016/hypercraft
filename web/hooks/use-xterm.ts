@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { notification } from "@/hooks/use-notification";
 
 // 固定尺寸，与后端 PTY 完全一致
-export const PTY_ROWS = 300;
+export const DEFAULT_PTY_ROWS = 300;
 export const PTY_COLS = 155;
 
 // xterm 主题配置
@@ -39,6 +39,10 @@ export interface UseXtermOptions {
   smartTrim?: boolean;
   /** 初始高度（行数） */
   initialRows?: number;
+  /** 后端 PTY 行数 */
+  ptyRows?: number;
+  /** 是否使用固定 PTY 视口 */
+  fixedViewport?: boolean;
 }
 
 export interface UseXtermReturn {
@@ -70,6 +74,8 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
     showCursor = true,
     smartTrim = false,
     initialRows = 3,
+    ptyRows = DEFAULT_PTY_ROWS,
+    fixedViewport = false,
   } = options;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -90,6 +96,7 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
   // 裁剪空白行并滚动到光标（仅在滚动条位于底部时追踪）
   const scrollToCursor = useCallback(() => {
     if (!xtermRef.current || !containerRef.current || !wrapperRef.current) return;
+    if (fixedViewport) return;
     // 拖动选择中，跳过自动滚动
     if (selectingRef.current) return;
 
@@ -123,7 +130,7 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
     const wasAtBottom = isAtBottom();
 
     // 裁剪：最后内容行 + 2 行余量
-    const visibleRows = Math.min(lastContentRow + 2, PTY_ROWS);
+    const visibleRows = Math.min(lastContentRow + 2, ptyRows);
     wrapperRef.current.style.height = `${visibleRows * cellHeight + 16}px`;
 
     // 仅当之前在底部时才自动滚动追踪
@@ -135,7 +142,7 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
         containerRef.current.scrollTop = contentBottom - containerRef.current.clientHeight;
       }
     }
-  }, [smartTrim, isAtBottom]);
+  }, [fixedViewport, smartTrim, ptyRows, isAtBottom]);
 
   // 初始化 xterm.js
   useEffect(() => {
@@ -158,7 +165,7 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
         disableStdin: readOnly,
         fontSize: isMobile ? 11 : 13,
         fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, Monaco, "Courier New", monospace',
-        rows: PTY_ROWS,
+        rows: ptyRows,
         cols: PTY_COLS,
         theme: {
           ...XTERM_THEME,
@@ -167,7 +174,7 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
         },
         allowProposedApi: true,
         scrollback: 0,
-        convertEol: true,
+        convertEol: !fixedViewport,
       });
 
       terminal.loadAddon(new WebLinksAddon());
@@ -175,6 +182,7 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
 
       // 拦截 xterm 所有滚轮事件，转发给外部容器
       const wheelHandler = (e: Event) => {
+        if (fixedViewport) return;
         const wheelEvent = e as WheelEvent;
         e.preventDefault();
         e.stopPropagation();
@@ -193,9 +201,11 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
 
       // 拖动选择时锁定自动滚动，松开时自动复制
       const mouseDownHandler = () => {
+        if (fixedViewport) return;
         selectingRef.current = true;
       };
       const mouseUpHandler = async () => {
+        if (fixedViewport) return;
         if (!selectingRef.current) return;
         selectingRef.current = false;
         const selection = terminal.getSelection();
@@ -220,7 +230,8 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
         if (wrapperRef.current) {
           const cellHeight = (terminal as any)._core._renderService?.dimensions?.css?.cell?.height;
           if (cellHeight) {
-            wrapperRef.current.style.height = `${initialRows * cellHeight + 16}px`;
+            const rows = fixedViewport ? ptyRows : initialRows;
+            wrapperRef.current.style.height = `${rows * cellHeight + 16}px`;
           }
         }
       }, 50);
@@ -241,7 +252,7 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
         xtermRef.current = null;
       }
     };
-  }, [readOnly, showCursor, initialRows]);
+  }, [readOnly, showCursor, initialRows, ptyRows, fixedViewport]);
 
   // 写入数据
   const write = useCallback((data: string | Uint8Array) => {

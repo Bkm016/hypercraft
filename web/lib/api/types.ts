@@ -85,6 +85,8 @@ export interface ServiceManifest {
   group?: string | null;
   order?: number;
   log_path?: string;
+  pty_rows?: number;
+  terminal_tui?: boolean;
   schedule?: Schedule;
   web?: WebConfig;
 }

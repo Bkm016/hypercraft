@@ -1,4 +1,5 @@
 use super::*;
+use portable_pty::PtySize;
 
 impl ServiceManager {
     /// 建立 attach：需要当前 manager 已经持有子进程句柄。
@@ -20,5 +21,22 @@ impl ServiceManager {
                     .into(),
             ))
         }
+    }
+
+    /// 调整运行中服务的 PTY 尺寸，用于触发 TUI 程序重绘当前屏幕。
+    pub async fn resize_pty(&self, id: &str, rows: u16, cols: u16) -> Result<()> {
+        let guard = self.runtime.lock().await;
+        let Some(entry) = guard.get(id) else {
+            return Err(ServiceError::NotRunning(id.to_string()));
+        };
+        entry
+            .pty
+            .resize(PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|error| ServiceError::Other(error.to_string()))
     }
 }

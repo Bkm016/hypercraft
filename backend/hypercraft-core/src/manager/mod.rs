@@ -157,6 +157,8 @@ mod tests {
             group: None,
             order: 0,
             log_path: None,
+            pty_rows: 300,
+            terminal_tui: false,
             schedule: None,
             web: None,
         }

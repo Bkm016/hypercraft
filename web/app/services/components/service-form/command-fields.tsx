@@ -42,11 +42,29 @@ export function CommandFields({ data, setField }: CommandFieldsProps) {
         />
       </FormDialog.Field>
 
+      <FormDialog.Field label="日志路径" hint="留空则不启用">
+        <FormDialog.Input
+          value={data.logPath}
+          onChange={(e) => setField("logPath", e.target.value)}
+          placeholder="/var/log/my-service.log"
+          className="font-mono"
+        />
+      </FormDialog.Field>
+
       <FormDialog.Field label="运行用户" hint="仅限 Linux，留空使用当前用户">
         <FormDialog.Input
           placeholder="www-data"
           value={data.runAs}
           onChange={(e) => setField("runAs", e.target.value)}
+          className="font-mono"
+        />
+      </FormDialog.Field>
+
+      <FormDialog.Field label="关闭命令" hint="留空使用 stop">
+        <FormDialog.Input
+          value={data.shutdownCommand}
+          onChange={(e) => setField("shutdownCommand", e.target.value)}
+          placeholder="stop"
           className="font-mono"
         />
       </FormDialog.Field>

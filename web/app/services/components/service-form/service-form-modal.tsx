@@ -135,7 +135,7 @@ export function ServiceFormModal({
 
   return (
     <FormDialog.Root open={open} onOpenChange={(o) => !o && onClose()} size="lg">
-      <FormDialog.Content>
+      <FormDialog.Content onInteractOutside={(e) => e.preventDefault()}>
         <form onSubmit={handleSubmit}>
           <FormDialog.Header icon={RiServerLine} title={title} description={description} />
 

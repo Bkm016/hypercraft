@@ -16,6 +16,8 @@ const LOG_MAX_SIZE: u64 = 2 * 1024 * 1024;
 const LOG_RETAIN_SIZE: u64 = 1 * 1024 * 1024;
 /// 每写入多少行检查一次文件大小
 const LOG_CHECK_INTERVAL: u32 = 100;
+/// PTY 默认宽度
+const DEFAULT_PTY_COLS: u16 = 155;
 
 impl ServiceManager {
     /// 刷新状态：优先查看 runtime 句柄，其次 pid 文件。
@@ -330,8 +332,8 @@ impl ServiceManager {
         let pty_system = native_pty_system();
         let pair = pty_system
             .openpty(PtySize {
-                rows: 300,
-                cols: 155,
+                rows: manifest.pty_rows.clamp(5, 500),
+                cols: DEFAULT_PTY_COLS,
                 pixel_width: 0,
                 pixel_height: 0,
             })

@@ -15,6 +15,8 @@ import { useXterm } from "@/hooks/use-xterm";
 
 export interface TerminalPanelProps {
   serviceId: string;
+  ptyRows?: number;
+  terminalTui?: boolean;
 }
 
 // 状态配置
@@ -25,7 +27,7 @@ const statusConfig: Record<TerminalStatus, { label: string; color: string; dotCo
   error: { label: "连接错误", color: "text-red-400", dotColor: "bg-red-400" },
 };
 
-export function TerminalPanel({ serviceId }: TerminalPanelProps) {
+export function TerminalPanel({ serviceId, ptyRows = 300, terminalTui = false }: TerminalPanelProps) {
   const [zenMode, setZenMode] = useState(false);
   const lastTapRef = useRef<number>(0);
 
@@ -43,8 +45,10 @@ export function TerminalPanel({ serviceId }: TerminalPanelProps) {
   } = useXterm({
     readOnly: false,
     showCursor: true,
-    smartTrim: true,
+    smartTrim: !terminalTui,
     initialRows: 20,
+    ptyRows,
+    fixedViewport: terminalTui,
   });
 
   // 处理终端数据
@@ -76,6 +80,7 @@ export function TerminalPanel({ serviceId }: TerminalPanelProps) {
   // 初始化完成后显示欢迎信息
   useEffect(() => {
     if (!isInitialized) return;
+    if (terminalTui) return;
 
     writeln("\x1b[1;36m╭────────────────────────╮\x1b[0m");
     writeln("\x1b[1;36m│\x1b[0m  \x1b[1;33mHypercraft Terminal\x1b[0m   \x1b[1;36m│\x1b[0m");
@@ -88,7 +93,7 @@ export function TerminalPanel({ serviceId }: TerminalPanelProps) {
         containerRef.current.scrollTop = 0;
       }
     }, 100);
-  }, [isInitialized, writeln, containerRef]);
+  }, [isInitialized, terminalTui, writeln, containerRef]);
 
   // 连接状态变化时的提示
   const prevStatusRef = useRef<TerminalStatus>("disconnected");
@@ -97,6 +102,7 @@ export function TerminalPanel({ serviceId }: TerminalPanelProps) {
 
   useEffect(() => {
     if (!xtermRef.current) return;
+    if (terminalTui) return;
 
     const prevStatus = prevStatusRef.current;
     prevStatusRef.current = status;
@@ -121,7 +127,7 @@ export function TerminalPanel({ serviceId }: TerminalPanelProps) {
         writeln(`\x1b[1;31m${error}，正在重连...\x1b[0m`);
       }
     }
-  }, [status, error, isInitialized, writeln, xtermRef]);
+  }, [status, error, isInitialized, terminalTui, writeln, xtermRef]);
 
   // 断开连接清理
   useEffect(() => {

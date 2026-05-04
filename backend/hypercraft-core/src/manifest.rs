@@ -109,6 +109,12 @@ pub struct ServiceManifest {
     /// 服务日志的输出路径
     #[serde(default)]
     pub log_path: Option<String>,
+    /// 后端 PTY 行数，TUI 服务可调小以避免全屏程序撑高布局
+    #[serde(default = "default_pty_rows")]
+    pub pty_rows: u16,
+    /// 是否按 TUI 终端渲染，启用后 attach 不回放历史 raw 日志
+    #[serde(default)]
+    pub terminal_tui: bool,
     /// 定时调度配置
     #[serde(default)]
     pub schedule: Option<Schedule>,
@@ -119,4 +125,8 @@ pub struct ServiceManifest {
 
 fn default_clear_log_on_start() -> bool {
     true
+}
+
+fn default_pty_rows() -> u16 {
+    300
 }

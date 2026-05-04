@@ -25,6 +25,8 @@ export function useServiceForm({ mode, manifest, onReset }: UseServiceFormOption
     shutdownCommand: "",
     runAs: "",
     logPath: "",
+    ptyRows: 300,
+    terminalTui: false,
     webEnabled: false,
     webUpstream: "",
     webTitle: "",
@@ -114,6 +116,8 @@ export function useServiceForm({ mode, manifest, onReset }: UseServiceFormOption
         shutdownCommand: m.shutdown_command || "",
         runAs: m.run_as || "",
         logPath: m.log_path || "",
+        ptyRows: m.pty_rows ?? 300,
+        terminalTui: m.terminal_tui ?? false,
         webEnabled: m.web?.enabled ?? false,
         webUpstream: m.web?.upstream || "",
         webTitle: m.web?.title || "",
@@ -137,6 +141,8 @@ export function useServiceForm({ mode, manifest, onReset }: UseServiceFormOption
         shutdownCommand: "",
         runAs: "",
         logPath: "",
+        ptyRows: 300,
+        terminalTui: false,
         webEnabled: false,
         webUpstream: "",
         webTitle: "",
@@ -180,6 +186,8 @@ export function useServiceForm({ mode, manifest, onReset }: UseServiceFormOption
       shutdown_command: data.shutdownCommand.trim() || undefined,
       run_as: data.runAs.trim() || undefined,
       log_path: data.logPath.trim() || undefined,
+      pty_rows: data.ptyRows,
+      terminal_tui: data.terminalTui,
       schedule: scheduleConfig,
       web: data.webEnabled
         ? {
@@ -225,6 +233,9 @@ export function useServiceForm({ mode, manifest, onReset }: UseServiceFormOption
     }
     if (data.webEnabled && !data.webUpstream.trim()) {
       return "启用 Web 网关时必须填写上游地址";
+    }
+    if (!Number.isInteger(data.ptyRows) || data.ptyRows < 5 || data.ptyRows > 500) {
+      return "PTY 行数必须是 5 到 500 之间的整数";
     }
     return null;
   }, [data, isEditMode, cronError, validateCron]);

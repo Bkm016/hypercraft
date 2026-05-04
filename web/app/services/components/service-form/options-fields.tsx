@@ -36,23 +36,25 @@ export function OptionsFields({ data, setField }: OptionsFieldsProps) {
         description="每次启动服务时清空之前的日志文件"
       />
 
-      <FormDialog.Field label="日志路径" hint="留空则不启用">
-        <FormDialog.Input
-          value={data.logPath}
-          onChange={(e) => setField("logPath", e.target.value)}
-          placeholder="/var/log/my-service.log"
-          className="font-mono"
-        />
-      </FormDialog.Field>
+      <FormDialog.Switch
+        checked={data.terminalTui}
+        onCheckedChange={(v) => setField("terminalTui", v)}
+        label="启用 TUI 终端"
+        description="适配 opencode、Claude、Codex CLI 等全屏终端程序"
+      />
 
-      <FormDialog.Field label="关闭命令" hint="留空使用 stop">
-        <FormDialog.Input
-          value={data.shutdownCommand}
-          onChange={(e) => setField("shutdownCommand", e.target.value)}
-          placeholder="stop"
-          className="font-mono"
-        />
-      </FormDialog.Field>
+      {data.terminalTui && (
+        <FormDialog.Field label="PTY 行数" hint="TUI 服务可设为 24、30 或 40">
+          <FormDialog.Input
+            type="number"
+            min={5}
+            max={500}
+            value={data.ptyRows}
+            onChange={(e) => setField("ptyRows", Number(e.target.value))}
+            className="font-mono"
+          />
+        </FormDialog.Field>
+      )}
 
       <FormDialog.Switch
         checked={data.webEnabled}

@@ -85,6 +85,8 @@ pub async fn create_service_interactive(
         group: None,
         order: 0,
         log_path,
+        pty_rows: 300,
+        terminal_tui: false,
         clear_log_on_start,
         schedule: None,
         web: None,
