@@ -53,19 +53,30 @@ export interface ServiceCardProps {
   selected: boolean;
   onToggleSelect: (shiftKey: boolean) => void;
   isDraggable?: boolean;
+  /** 分组内列表：无单行边框，与组容器共用一张卡 */
+  compact?: boolean;
 }
 
-// 拖拽时显示的简化版卡片
+// 拖拽浮层与组内 compact 行同款排版，仅加描边便于跟手
 export function ServiceCardDragOverlay({ service }: { service: ServiceSummary }) {
   const state = stateConfig[service.state];
+  const isRunning = service.state === "running";
 
   return (
-    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-primary-base bg-bg-white-0 shadow-lg cursor-grabbing">
-      <RiDraggable className="size-4 text-text-soft-400" />
-      <span className={`size-2.5 rounded-full shrink-0 ${state.dot}`} />
-      <span className="text-xs font-normal text-text-strong-950 truncate">
+    <div className="flex cursor-grabbing items-stretch border border-stroke-sub-300 bg-bg-white-0 shadow-md">
+      <div className="flex w-10 shrink-0 items-center justify-center text-text-soft-400">
+        <RiDraggable className="size-4" />
+      </div>
+      <div className="flex min-w-0 flex-1 items-center gap-2 my-3 mr-3 sm:gap-3 sm:mr-4">
+      <span className={`size-2 shrink-0 rounded-full ${state.dot}`} />
+      <span
+        className={`min-w-0 flex-1 truncate text-sm font-medium ${
+          isRunning ? "text-text-strong-950" : "text-text-soft-400"
+        }`}
+      >
         {service.name}
       </span>
+      </div>
     </div>
   );
 }
@@ -84,6 +95,7 @@ export function ServiceCard({
   selected,
   onToggleSelect,
   isDraggable = false,
+  compact = false,
 }: ServiceCardProps) {
   const state = stateConfig[service.state];
   const isRunning = service.state === "running";
@@ -119,44 +131,75 @@ export function ServiceCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`group flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-colors ${
-        isDragging
-          ? "opacity-40 border-dashed border-stroke-sub-300 bg-bg-weak-50"
-          : selected
-            ? "border-primary-base bg-primary-alpha-10"
-            : "border-stroke-soft-200 bg-bg-white-0 hover:border-stroke-sub-300"
+      className={`group flex transition-colors ${
+        compact ? "items-stretch" : "items-center gap-2 rounded-lg border px-2.5 py-1.5"
+      } ${
+        compact
+          ? isDragging
+            ? "opacity-40 bg-bg-weak-50"
+            : selected
+              ? "bg-primary-alpha-10"
+              : "hover:bg-bg-weak-50"
+          : isDragging
+            ? "opacity-40 border border-dashed border-stroke-sub-300 bg-bg-weak-50"
+            : selected
+              ? "border border-primary-base bg-primary-alpha-10"
+              : "border border-stroke-soft-200 bg-bg-white-0 hover:border-stroke-sub-300"
       }`}
     >
-      {/* 拖拽手柄 */}
-      {isDraggable && (
+      {compact && isDraggable ? (
         <div
           {...attributes}
           {...listeners}
-          className="cursor-grab active:cursor-grabbing text-text-soft-400 hover:text-text-sub-600 -ml-1 touch-none"
+          className="flex w-10 shrink-0 cursor-grab touch-none items-center justify-center text-text-soft-400 active:cursor-grabbing hover:text-text-sub-600"
+          aria-label="拖拽排序"
         >
           <RiDraggable className="size-4" />
         </div>
-      )}
+      ) : null}
 
-      {/* 多选框 */}
+      {!compact && isDraggable ? (
+        <div
+          {...attributes}
+          {...listeners}
+          className="flex w-10 shrink-0 cursor-grab touch-none items-center justify-center text-text-soft-400 active:cursor-grabbing hover:text-text-sub-600"
+          aria-label="拖拽排序"
+        >
+          <RiDraggable className="size-4" />
+        </div>
+      ) : null}
+
       <div
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleSelect(e.shiftKey);
+        className={
+          compact
+            ? `flex min-w-0 flex-1 items-center gap-2 my-3 mr-3 sm:gap-3 sm:mr-4 ${isDraggable ? "" : "ml-3 sm:ml-4"}`
+            : "contents"
+        }
+      >
+      <div
+        className="flex shrink-0 items-center"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => {
+          if (e.shiftKey) {
+            e.preventDefault();
+            onToggleSelect(true);
+          }
         }}
       >
         <Checkbox.Root
           checked={selected}
-          onCheckedChange={() => {}}
-          tabIndex={-1}
-          className="pointer-events-none"
+          onCheckedChange={() => onToggleSelect(false)}
         />
       </div>
 
       {/* 状态指示器 */}
       <Tooltip.Root>
         <Tooltip.Trigger asChild>
-          <span className={`size-2.5 rounded-full shrink-0 ${state.dot}`} />
+          <span
+            className={`relative shrink-0 rounded-full ${compact ? "size-2" : "size-2.5"} ${state.dot} ${
+              isRunning ? "before:absolute before:inset-0 before:animate-ping before:rounded-full before:bg-success-base before:opacity-40" : ""
+            }`}
+          />
         </Tooltip.Trigger>
         <Tooltip.Content>{state.label}</Tooltip.Content>
       </Tooltip.Root>
@@ -166,7 +209,13 @@ export function ServiceCard({
         href={`/services/${service.id}`}
         className="flex-1 min-w-0"
       >
-        <div className="text-xs font-normal text-text-strong-950 truncate transition-colors">
+        <div
+          className={`truncate ${
+            compact ? "text-sm font-medium" : "text-xs font-normal"
+          } ${
+            isRunning ? "text-text-strong-950" : "text-text-soft-400"
+          }`}
+        >
           {service.name}
         </div>
       </Link>
@@ -193,7 +242,7 @@ export function ServiceCard({
           </div>
 
           {/* 桌面端：完整标签 */}
-          <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+          <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
             {service.tags.slice(0, 2).map((rawTag) => {
               const parsed = parseTag(rawTag);
               const color = getTagColor(parsed);
@@ -223,7 +272,7 @@ export function ServiceCard({
       )}
 
       {/* 操作按钮 */}
-      <div className="flex items-center gap-0.5 shrink-0">
+      <div className="flex shrink-0 items-center gap-0.5">
         {/* 收藏按钮 */}
         <Tooltip.Root>
           <Tooltip.Trigger asChild>
@@ -375,6 +424,7 @@ export function ServiceCard({
             )}
           </>
         )}
+      </div>
       </div>
     </div>
   );

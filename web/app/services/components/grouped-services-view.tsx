@@ -16,6 +16,7 @@ import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { RiServerLine } from "@remixicon/react";
 import { api, type ServiceSummary, type ServiceGroup } from "@/lib/api";
 import { GroupCard } from "./group-card";
+import { GroupMasonry, estimateGroupCardHeight, type GroupMasonryItem } from "./group-masonry";
 import { ServiceCardDragOverlay } from "./service-card";
 import { applyServiceOrder, applyGroupOrder, updateLocalServiceOrder } from "../local-order";
 
@@ -234,61 +235,75 @@ export function GroupedServicesView({
 
   const hasAnyServices = localServices.length > 0;
 
-  const content = (
-    <div className="space-y-4">
-      {sortedGroups.map((group) => {
-        const groupServices = groupedServices.get(group.id) || [];
-        if (groupServices.length === 0) return null;
-        return (
-          <GroupCard
-            key={group.id}
-            group={group}
-            services={groupServices}
-            allTags={allTags}
-            allGroups={groups}
-            onServiceAction={onServiceAction}
-            onRefresh={onRefresh}
-            onDelete={onDelete}
-            onEdit={onEdit}
-            onDuplicate={onDuplicate}
-            operating={operating}
-            isAdmin={isAdmin}
-            selected={selected}
-            onToggleSelect={handleToggleSelectWithShift}
-            onToggleSelectAll={handleToggleSelectAll}
-            isDraggable={true}
-          />
-        );
-      })}
+  const masonryItems = useMemo((): GroupMasonryItem[] => {
+    const list: GroupMasonryItem[] = [];
+    const cardProps = {
+      allTags,
+      allGroups: groups,
+      onServiceAction,
+      onRefresh,
+      onDelete,
+      onEdit,
+      onDuplicate,
+      operating,
+      isAdmin,
+      selected,
+      onToggleSelect: handleToggleSelectWithShift,
+      onToggleSelectAll: handleToggleSelectAll,
+      isDraggable: true as const,
+    };
 
-      {(groupedServices.get(null)?.length || 0) > 0 && (
-        <GroupCard
-          group={null}
-          services={groupedServices.get(null) || []}
-          allTags={allTags}
-          allGroups={groups}
-          onServiceAction={onServiceAction}
-          onRefresh={onRefresh}
-          onDelete={onDelete}
-          onEdit={onEdit}
-          onDuplicate={onDuplicate}
-          operating={operating}
-          isAdmin={isAdmin}
-          selected={selected}
-          onToggleSelect={handleToggleSelectWithShift}
-          onToggleSelectAll={handleToggleSelectAll}
-          isDraggable={true}
-        />
-      )}
+    for (const group of sortedGroups) {
+      const groupServices = groupedServices.get(group.id) || [];
+      if (groupServices.length === 0) continue;
+      const running = groupServices.filter((s) => s.state === "running").length;
+      const collapsedDefault = running === 0;
+      list.push({
+        key: group.id,
+        estimateHeight: estimateGroupCardHeight(groupServices.length, collapsedDefault),
+        node: (
+          <GroupCard group={group} services={groupServices} {...cardProps} />
+        ),
+      });
+    }
 
-      {!hasAnyServices && (
-        <div className="text-center py-16 text-text-soft-400">
-          <RiServerLine className="size-12 mx-auto mb-3 opacity-50" />
-          <p className="text-base font-medium text-text-sub-600">暂无服务</p>
-          <p className="text-sm mt-1">点击右上角按钮创建第一个服务</p>
-        </div>
-      )}
+    const ungrouped = groupedServices.get(null) || [];
+    if (ungrouped.length > 0) {
+      const running = ungrouped.filter((s) => s.state === "running").length;
+      const collapsedDefault = running === 0;
+      list.push({
+        key: "ungrouped",
+        estimateHeight: estimateGroupCardHeight(ungrouped.length, collapsedDefault),
+        node: <GroupCard group={null} services={ungrouped} {...cardProps} />,
+      });
+    }
+
+    return list;
+  }, [
+    sortedGroups,
+    groupedServices,
+    allTags,
+    groups,
+    onServiceAction,
+    onRefresh,
+    onDelete,
+    onEdit,
+    onDuplicate,
+    operating,
+    isAdmin,
+    selected,
+    handleToggleSelectWithShift,
+    handleToggleSelectAll,
+  ]);
+
+  const content = !hasAnyServices ? (
+    <div className="py-16 text-center text-text-soft-400">
+      <RiServerLine className="mx-auto mb-3 size-12 opacity-50" />
+      <p className="text-base font-medium text-text-sub-600">暂无服务</p>
+      <p className="mt-1 text-sm">点击右上角按钮创建第一个服务</p>
     </div>
+  ) : (
+    <GroupMasonry items={masonryItems} />
   );
 
   // 所有用户都支持拖拽排序（admin 保存到远程，普通用户保存到本地）

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { RiArrowDownSLine, RiServerLine } from "@remixicon/react";
+import { RiArrowDownSLine } from "@remixicon/react";
 import * as Checkbox from "@/components/ui/checkbox";
 import { type ServiceSummary, type ServiceGroup } from "@/lib/api";
 import { ServiceCard } from "./service-card";
@@ -24,7 +24,6 @@ function saveCollapsedState(state: Record<string, boolean>) {
   try {
     localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify(state));
   } catch {
-    // ignore storage errors
   }
 }
 
@@ -65,7 +64,10 @@ export function GroupCard({
 }: GroupCardProps) {
   const groupKey = group?.id || "ungrouped";
   const [collapsed, setCollapsed] = useState(() => {
-    return getCollapsedState()[groupKey] ?? false;
+    const stored = getCollapsedState()[groupKey];
+    if (stored !== undefined) return stored;
+    const running = services.filter((s) => s.state === "running").length;
+    return running === 0;
   });
 
   const toggleCollapsed = useCallback(() => {
@@ -86,60 +88,61 @@ export function GroupCard({
     onToggleSelectAll(services.map((s) => s.id));
   };
 
-  // 分组颜色，未分组使用默认灰色
   const groupColor = group?.color || "#6b7280";
-
-  // 服务 ID 列表，用于 SortableContext
   const serviceIds = useMemo(() => services.map((s) => s.id), [services]);
 
   return (
-    <div className="rounded-xl border border-stroke-soft-200 bg-bg-white-0 overflow-hidden shadow-sm transition-all hover:shadow-md">
-      {/* 分组标题 */}
-      <div 
-        className="flex items-center gap-2.5 px-3 py-2 bg-bg-weak-50 border-b border-stroke-soft-200 cursor-pointer select-none group/header hover:bg-bg-weak-100 transition-colors"
+    <section className="overflow-hidden border border-stroke-soft-200 bg-bg-white-0">
+      <div
+        role="button"
+        tabIndex={0}
+        className="flex cursor-pointer select-none border-b border-stroke-soft-200 transition-colors hover:bg-bg-weak-50"
         onClick={toggleCollapsed}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleCollapsed();
+          }
+        }}
       >
-        {/* 颜色指示条 */}
-        <div 
-          className="w-1 h-4 rounded-full shrink-0"
+        <div
+          className="my-2 w-0.5 shrink-0 self-stretch rounded-full"
           style={{ backgroundColor: groupColor }}
+          aria-hidden
         />
-
-        {/* 全选当前分组 */}
-        <div onClick={(e) => e.stopPropagation()} className="flex items-center">
-          <Checkbox.Root
-            checked={allSelected ? true : someSelected ? "indeterminate" : false}
-            onCheckedChange={toggleAllInGroup}
-          />
-        </div>
-        
-        {/* 分组名称 */}
-        <span className="text-sm font-medium text-text-strong-950 truncate flex-1 mt-0.5">
-          {group?.name || "未分组"}
-        </span>
-        
-        {/* 统计信息 */}
-        <div className="flex items-center gap-3 text-xs shrink-0">
-          <div className="flex items-center gap-1.5" title="运行中">
-            <span className="size-1.5 rounded-full bg-success-base" />
-            <span className="text-text-sub-600 font-medium">{runningCount}/{services.length}</span>
+        <div className="flex min-w-0 flex-1 items-center gap-2 py-2.5 pl-3 pr-4 md:pl-4 md:pr-5">
+          <div
+            className="shrink-0"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <Checkbox.Root
+              checked={allSelected ? true : someSelected ? "indeterminate" : false}
+              onCheckedChange={toggleAllInGroup}
+            />
           </div>
-          
-          {/* 折叠图标 */}
-          <div className={`transition-transform duration-200 text-text-soft-400 group-hover/header:text-text-sub-600 ${collapsed ? '-rotate-90' : ''}`}>
-            <RiArrowDownSLine className="size-5" />
+          <h3 className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wider text-text-sub-600">
+            {group?.name || "未分组"}
+          </h3>
+          <div className="flex shrink-0 items-center gap-2 text-xs text-text-sub-600">
+            <span className="tabular-nums">
+              <span className="text-text-strong-950">{runningCount}</span>
+              <span className="text-text-soft-400"> / {services.length}</span>
+            </span>
+            <RiArrowDownSLine
+              className={`size-4 text-text-soft-400 transition-transform duration-200 ${collapsed ? "-rotate-90" : ""}`}
+            />
           </div>
         </div>
       </div>
 
-      {/* 服务列表 */}
-      <div 
+      <div
         className="grid transition-[grid-template-rows] duration-200 ease-out"
-        style={{ gridTemplateRows: collapsed ? '0fr' : '1fr' }}
+        style={{ gridTemplateRows: collapsed ? "0fr" : "1fr" }}
       >
-        <div className="overflow-hidden">
-          <div className="p-3 space-y-1.5 bg-bg-white-0">
-            {services.length > 0 ? (
+        <div className="min-h-0 overflow-hidden">
+          {services.length > 0 ? (
+            <div className="divide-y divide-stroke-soft-200">
               <SortableContext items={serviceIds} strategy={verticalListSortingStrategy}>
                 {services.map((service) => (
                   <ServiceCard
@@ -157,18 +160,18 @@ export function GroupCard({
                     selected={selected.has(service.id)}
                     onToggleSelect={(shiftKey) => onToggleSelect(service.id, shiftKey)}
                     isDraggable={isDraggable}
+                    compact
                   />
                 ))}
               </SortableContext>
-            ) : (
-              <div className="text-center py-6 text-sm text-text-soft-400">
-                <RiServerLine className="size-8 mx-auto mb-2 opacity-50" />
-                暂无服务
-              </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <p className="px-3 py-6 text-center text-sm text-text-soft-400 sm:px-4">
+              暂无服务
+            </p>
+          )}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
