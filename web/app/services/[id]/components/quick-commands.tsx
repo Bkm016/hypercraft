@@ -17,6 +17,7 @@ import * as Tooltip from "@/components/ui/tooltip";
 import * as CompactButton from "@/components/ui/compact-button";
 import * as Button from "@/components/ui/button";
 import * as Input from "@/components/ui/input";
+import { SearchField } from "@/components/ui/search-field";
 import * as ColorPickerPrimitive from "@/components/ui/color-picker";
 import { PRESET_COLORS } from "../../components/tag-utils";
 
@@ -211,27 +212,13 @@ export function QuickCommands({ serviceId, onSend }: QuickCommandsProps) {
 
             {/* 搜索框 */}
             <div className="border-b border-stroke-soft-200 p-3">
-              <Input.Root size="small">
-                <Input.Wrapper>
-                  <Input.Icon as={RiSearchLine} />
-                  <Input.Input
-                    ref={inputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="搜索指令..."
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery("")}
-                      className="shrink-0 text-text-soft-400 hover:text-text-sub-600"
-                    >
-                      <RiCloseLine className="size-4" />
-                    </button>
-                  )}
-                </Input.Wrapper>
-              </Input.Root>
+              <SearchField
+                ref={inputRef}
+                variant="embedded"
+                placeholder="搜索指令…"
+                value={searchQuery}
+                onValueChange={setSearchQuery}
+              />
             </div>
 
             {/* 指令列表 */}

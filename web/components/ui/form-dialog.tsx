@@ -152,7 +152,7 @@ function FormDialogHeader({
       {Icon && (
         <div
           className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-xl md:size-12",
+            "flex size-10 shrink-0 items-center justify-center rounded-lg md:size-12",
             "bg-linear-to-b from-bg-white-0 to-bg-weak-50",
             "ring-1 ring-inset ring-stroke-soft-200",
             "shadow-sm"
@@ -175,7 +175,7 @@ function FormDialogHeader({
         <DialogPrimitive.Close
           className={cn(
             "absolute right-3 top-3 md:right-5 md:top-5",
-            "flex size-9 items-center justify-center rounded-xl",
+            "flex size-9 items-center justify-center rounded-lg",
             "text-text-soft-400 transition-all duration-200",
             "hover:bg-bg-weak-50 hover:text-text-strong-950",
             "focus:outline-none focus:ring-2 focus:ring-primary-alpha-10",
@@ -286,7 +286,7 @@ function FormDialogError({ message, className }: FormDialogErrorProps) {
   return (
     <div
       className={cn(
-        "flex items-center gap-3 rounded-xl bg-error-lighter px-4 py-3",
+        "flex items-center gap-3 rounded-lg bg-error-lighter px-4 py-3",
         className
       )}
     >
@@ -366,7 +366,7 @@ const FormDialogButton = React.forwardRef<
         disabled={disabled || loading}
         className={cn(
           // base
-          "relative inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4",
+          "relative inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4",
           "text-label-sm font-medium",
           "transition-all duration-150 ease-out",
           // disabled
@@ -410,7 +410,7 @@ const FormDialogInput = React.forwardRef<HTMLInputElement, FormDialogInputProps>
           ref={ref}
           className={cn(
             // base
-            "h-10 w-full rounded-xl bg-bg-white-0 text-paragraph-sm text-text-strong-950",
+            "h-10 w-full rounded-lg bg-bg-white-0 text-paragraph-sm text-text-strong-950",
             "ring-1 ring-inset ring-stroke-soft-200",
             "transition-all duration-150 ease-out",
             // placeholder
@@ -453,7 +453,7 @@ const FormDialogTextarea = React.forwardRef<
       ref={ref}
       className={cn(
         // base
-        "min-h-[100px] w-full resize-none rounded-xl bg-bg-white-0 px-3 py-2.5",
+        "min-h-[100px] w-full resize-none rounded-lg bg-bg-white-0 px-3 py-2.5",
         "text-paragraph-sm text-text-strong-950",
         "ring-1 ring-inset ring-stroke-soft-200",
         "transition-all duration-150 ease-out",
@@ -503,7 +503,7 @@ function FormDialogSwitch({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-4 rounded-xl px-4 py-4",
+        "flex items-center justify-between gap-4 rounded-lg px-4 py-4",
         "border border-stroke-soft-200 bg-bg-weak-50/50",
         "transition-all duration-200",
         !disabled && "hover:border-stroke-sub-300 hover:bg-bg-weak-50",

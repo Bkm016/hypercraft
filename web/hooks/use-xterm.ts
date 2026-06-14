@@ -9,10 +9,10 @@ export const PTY_COLS = 155;
 
 // xterm 主题配置
 const XTERM_THEME = {
-  background: "#0a0a0a",
-  foreground: "#d4d4d4",
-  selectionBackground: "rgba(255, 255, 255, 0.2)",
-  black: "#1e1e1e",
+  background: "#050505",
+  foreground: "#e8e8e8",
+  selectionBackground: "rgba(255, 255, 255, 0.18)",
+  black: "#050505",
   red: "#f44747",
   green: "#608b4e",
   yellow: "#dcdcaa",
@@ -169,8 +169,8 @@ export function useXterm(options: UseXtermOptions = {}): UseXtermReturn {
         cols: PTY_COLS,
         theme: {
           ...XTERM_THEME,
-          cursor: showCursor ? "#d4d4d4" : "#0a0a0a",
-          cursorAccent: showCursor ? "#0a0a0a" : "#0a0a0a",
+          cursor: showCursor ? "#e8e8e8" : "#050505",
+          cursorAccent: showCursor ? "#050505" : "#050505",
         },
         allowProposedApi: true,
         scrollback: 0,

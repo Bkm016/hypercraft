@@ -11,6 +11,7 @@ import {
 import * as Checkbox from "@/components/ui/checkbox";
 import * as FormDialog from "@/components/ui/form-dialog";
 import * as Input from "@/components/ui/input";
+import { SearchField } from "@/components/ui/search-field";
 import { api } from "@/lib/api";
 import { cn } from "@/utils/cn";
 import { notification } from "@/hooks/use-notification";
@@ -196,26 +197,13 @@ export function TagEditModal({
             {/* 搜索框 + 新建按钮 */}
             <div className="border-b border-stroke-soft-200 p-4 space-y-3">
               <div className="flex items-center gap-2">
-                <Input.Root size="small" className="flex-1">
-                  <Input.Wrapper>
-                    <Input.Icon as={RiSearchLine} />
-                    <Input.Input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="搜索标签..."
-                    />
-                    {searchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setSearchQuery("")}
-                        className="shrink-0 text-text-soft-400 hover:text-text-sub-600"
-                      >
-                        <RiCloseLine className="size-4" />
-                      </button>
-                    )}
-                  </Input.Wrapper>
-                </Input.Root>
+                <SearchField
+                  variant="embedded"
+                  className="min-w-0 flex-1"
+                  placeholder="搜索标签…"
+                  value={searchQuery}
+                  onValueChange={setSearchQuery}
+                />
                 <button
                   type="button"
                   onClick={() => setShowCreateForm(!showCreateForm)}

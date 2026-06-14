@@ -13,6 +13,7 @@ import {
 import * as Popover from "@/components/ui/popover";
 import * as Button from "@/components/ui/button";
 import * as Input from "@/components/ui/input";
+import { SearchField } from "@/components/ui/search-field";
 import * as Checkbox from "@/components/ui/checkbox";
 import { api } from "@/lib/api";
 import { notification } from "@/hooks/use-notification";
@@ -242,33 +243,19 @@ export function TagEditPopover({
 
             {/* 搜索/添加框 */}
             <div className="border-b border-stroke-soft-200 p-3">
-              <Input.Root size="small">
-                <Input.Wrapper>
-                  <Input.Icon as={RiSearchLine} />
-                  <Input.Input
-                    ref={inputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && canCreateNewTag) {
-                        e.preventDefault();
-                        switchToCreate();
-                      }
-                    }}
-                    placeholder="搜索或输入新标签..."
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery("")}
-                      className="shrink-0 text-text-soft-400 hover:text-text-sub-600"
-                    >
-                      <RiCloseLine className="size-4" />
-                    </button>
-                  )}
-                </Input.Wrapper>
-              </Input.Root>
+              <SearchField
+                ref={inputRef}
+                variant="embedded"
+                placeholder="搜索或输入新标签…"
+                value={searchQuery}
+                onValueChange={setSearchQuery}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && canCreateNewTag) {
+                    e.preventDefault();
+                    switchToCreate();
+                  }
+                }}
+              />
 
               {/* 创建新标签按钮 */}
               {canCreateNewTag && (

@@ -73,7 +73,7 @@ function SortableFavoriteItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={`group flex items-center justify-between rounded-lg bg-bg-weak-50 px-3 py-2.5 sm:px-4 sm:py-3 transition-colors hover:bg-bg-soft-200 ${
+      className={`group flex items-center justify-between px-3 py-3 transition-colors hover:bg-bg-weak-50 sm:px-4 ${
         isDragging ? "opacity-40" : ""
       }`}
     >
@@ -216,30 +216,32 @@ export default function HomePage() {
       <PageContent>
         <div className="space-y-4 sm:space-y-6">
           {/* 统计卡片 */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-4">
-            <StatCard label="全部" value={stats.total} />
+          <div className="grid grid-cols-1 divide-y border border-stroke-soft-200 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <StatCard label="全部" value={stats.total} accentClass="bg-text-strong-950" />
             <StatCard
               label="运行中"
               value={stats.running}
               valueClass="text-success-base"
               indicator="bg-success-base"
+              accentClass="bg-success-base"
             />
             <StatCard
               label="已停止"
               value={stats.stopped}
-              valueClass="text-text-soft-400"
+              valueClass="text-text-sub-600"
               indicator="bg-text-soft-400"
+              accentClass="bg-text-soft-400"
             />
           </div>
 
           {/* 系统资源 */}
           {systemStats && (
             <PageCard title="系统资源">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="grid w-full grid-cols-1 items-stretch divide-y border-stroke-soft-200 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
                 <ResourceCard
                   icon={RiCpuLine}
                   label="CPU"
-                  value={`${systemStats.cpu_usage.toFixed(1)}%`}
+                  value="实时采样"
                   usage={systemStats.cpu_usage}
                   color="primary"
                 />
@@ -285,7 +287,7 @@ export default function HomePage() {
                 onDragEnd={handleDragEnd}
               >
                 <SortableContext items={favoriteIds} strategy={verticalListSortingStrategy}>
-                  <div className="space-y-1.5 sm:space-y-2">
+                  <div className="divide-y divide-stroke-soft-200 border border-stroke-soft-200">
                     {favoriteServices.map((svc) => (
                       <SortableFavoriteItem
                         key={svc.id}

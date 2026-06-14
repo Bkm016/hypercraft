@@ -72,7 +72,7 @@ export function BrowserPanel({
   return (
     <div
       className={`terminal-dark flex min-h-0 flex-1 flex-col overflow-hidden ${
-        zenMode ? "fixed inset-0 z-50" : "rounded-xl border border-white/10"
+        zenMode ? "fixed inset-0 z-50" : "rounded-lg border border-white/10"
       }`}
     >
       <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-3 py-2 sm:px-4 sm:py-3">
@@ -114,13 +114,13 @@ export function BrowserPanel({
       </div>
 
       {loading && (
-        <div className="flex min-h-0 flex-1 items-center justify-center bg-[#0a0a0a]">
+        <div className="flex min-h-0 flex-1 items-center justify-center hc-terminal-surface">
           <RiLoader4Line className="size-8 animate-spin text-neutral-500" />
         </div>
       )}
 
       {!loading && error && (
-        <div className="flex min-h-0 flex-1 items-center justify-center bg-[#0a0a0a] p-6">
+        <div className="flex min-h-0 flex-1 items-center justify-center hc-terminal-surface p-6">
           <div className="flex flex-col items-center justify-center text-center">
             <RiShieldCheckLine className="mb-4 size-12 text-neutral-500" />
             <h3 className="text-base font-medium text-neutral-200">无法打开浏览器视图</h3>
@@ -135,7 +135,7 @@ export function BrowserPanel({
       )}
 
       {!loading && !error && sessionUrl && (
-        <div className="min-h-0 flex-1 bg-[#0a0a0a]" onDoubleClick={toggleZenMode}>
+        <div className="min-h-0 flex-1 hc-terminal-surface" onDoubleClick={toggleZenMode}>
           <iframe
             key={sessionUrl}
             src={sessionUrl}

@@ -17,7 +17,7 @@ export const inputVariants = tv({
   slots: {
     root: [
       // base
-      'group relative flex w-full overflow-hidden bg-bg-white-0 text-text-strong-950 shadow-regular-xs',
+      'group relative flex w-full overflow-hidden bg-bg-white-0 text-text-strong-950',
       'transition duration-200 ease-out',
       'divide-x divide-stroke-soft-200',
       // before
@@ -25,11 +25,10 @@ export const inputVariants = tv({
       'before:pointer-events-none before:rounded-[inherit]',
       'before:transition before:duration-200 before:ease-out',
       // hover
-      'hover:shadow-none',
       // focus
-      'has-[input:focus]:shadow-button-important-focus has-[input:focus]:before:ring-stroke-strong-950',
+      'has-[input:focus]:ring-2 has-[input:focus]:ring-[var(--ring-focus)] has-[input:focus]:before:ring-transparent',
       // disabled
-      'has-[input:disabled]:shadow-none has-[input:disabled]:before:ring-transparent',
+      'has-[input:disabled]:before:ring-transparent',
     ],
     wrapper: [
       // base
@@ -92,9 +91,9 @@ export const inputVariants = tv({
   variants: {
     size: {
       medium: {
-        root: 'rounded-10',
+        root: 'rounded-sm',
         wrapper: 'gap-2 px-3',
-        input: 'h-10',
+        input: 'h-8',
       },
       small: {
         root: 'rounded-lg',

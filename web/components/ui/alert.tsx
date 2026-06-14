@@ -60,7 +60,7 @@ export const alertVariants = tv({
         closeIcon: 'size-5',
       },
       large: {
-        root: 'rounded-xl p-3.5 pb-4 text-paragraph-sm',
+        root: 'rounded-lg p-3.5 pb-4 text-paragraph-sm',
         wrapper: 'items-start gap-3',
         icon: 'size-5',
         closeIcon: 'size-5',

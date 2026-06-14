@@ -209,7 +209,7 @@ export function LogsPanel({ serviceId, serviceState, logPath }: LogsPanelProps) 
   }, [clear, reset]);
 
   return (
-    <div className="terminal-dark flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/10">
+    <div className="terminal-dark flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/10">
       {/* 头部工具栏 */}
       <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-3 py-2 sm:px-4 sm:py-3">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -286,7 +286,7 @@ export function LogsPanel({ serviceId, serviceState, logPath }: LogsPanelProps) 
       {/* 日志内容区 */}
       <div
         ref={containerRef}
-        className="min-h-0 flex-1 overflow-auto bg-[#0a0a0a]"
+        className="min-h-0 flex-1 overflow-auto hc-terminal-surface"
       >
         <div ref={wrapperRef} className="overflow-x-auto overflow-y-hidden">
           <div ref={terminalRef} className="p-2" />

@@ -168,7 +168,7 @@ export function TerminalPanel({ serviceId, ptyRows = 300, terminalTui = false }:
 
   return (
     <div className={`terminal-dark flex min-h-0 flex-1 flex-col overflow-hidden ${
-      zenMode ? "fixed inset-0 z-50" : "rounded-xl border border-white/10"
+      zenMode ? "fixed inset-0 z-50" : "rounded-lg border border-white/10"
     }`}>
       {/* 头部工具栏 */}
       <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-3 py-2 sm:px-4 sm:py-3">
@@ -220,7 +220,7 @@ export function TerminalPanel({ serviceId, ptyRows = 300, terminalTui = false }:
       {/* 终端容器 */}
       <div
         ref={containerRef}
-        className="min-h-0 flex-1 overflow-auto bg-[#0a0a0a]"
+        className="min-h-0 flex-1 overflow-auto hc-terminal-surface"
         onDoubleClick={toggleZenMode}
         onTouchEnd={handleTouchEnd}
       >

@@ -9,7 +9,7 @@ import {
   RiSearchLine,
 } from "@remixicon/react";
 import * as Popover from "@/components/ui/popover";
-import * as Input from "@/components/ui/input";
+import { SearchField } from "@/components/ui/search-field";
 import { api, type ServiceGroup } from "@/lib/api";
 import { notification } from "@/hooks/use-notification";
 import { cn } from "@/utils/cn";
@@ -101,27 +101,13 @@ export function GroupSelectPopover({
         {/* 搜索框 */}
         {groups.length > 5 && (
           <div className="border-b border-stroke-soft-200 p-3">
-            <Input.Root size="small">
-              <Input.Wrapper>
-                <Input.Icon as={RiSearchLine} />
-                <Input.Input
-                  ref={inputRef}
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="搜索分组..."
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery("")}
-                    className="shrink-0 text-text-soft-400 hover:text-text-sub-600"
-                  >
-                    <RiCloseLine className="size-4" />
-                  </button>
-                )}
-              </Input.Wrapper>
-            </Input.Root>
+            <SearchField
+              ref={inputRef}
+              variant="embedded"
+              placeholder="搜索分组…"
+              value={searchQuery}
+              onValueChange={setSearchQuery}
+            />
           </div>
         )}
 
@@ -203,7 +189,7 @@ export function GroupSelectPopover({
 
         {/* Loading overlay */}
         {saving && (
-          <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-bg-white-0/80">
+          <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-bg-white-0/80">
             <RiLoader4Line className="size-5 animate-spin text-primary-base" />
           </div>
         )}

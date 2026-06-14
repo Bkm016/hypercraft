@@ -47,19 +47,19 @@ export const buttonVariants = tv({
     },
     size: {
       medium: {
-        root: 'h-10 gap-3 rounded-10 px-3.5 text-label-sm',
+        root: 'h-8 gap-2 rounded-sm px-3 text-label-sm',
         icon: '-mx-1',
       },
       small: {
-        root: 'h-9 gap-3 rounded-lg px-3 text-label-sm',
+        root: 'h-8 gap-2 rounded-sm px-2.5 text-label-sm',
         icon: '-mx-1',
       },
       xsmall: {
-        root: 'h-8 gap-2.5 rounded-lg px-2.5 text-label-sm',
+        root: 'h-7 gap-2 rounded-sm px-2 text-label-sm',
         icon: '-mx-1',
       },
       xxsmall: {
-        root: 'h-7 gap-2.5 rounded-lg px-2 text-label-sm',
+        root: 'h-7 gap-1.5 rounded-sm px-2 text-label-sm',
         icon: '-mx-1',
       },
     },
@@ -72,7 +72,7 @@ export const buttonVariants = tv({
       class: {
         root: [
           // base
-          'bg-primary-base text-static-white',
+          'bg-primary-base text-text-white-0',
           // hover
           'hover:bg-primary-darker',
           // focus
@@ -145,9 +145,9 @@ export const buttonVariants = tv({
       class: {
         root: [
           // base
-          'bg-bg-white-0 text-text-sub-600 shadow-regular-xs ring-stroke-soft-200',
+          'bg-bg-white-0 text-text-sub-600 ring-stroke-soft-200',
           // hover
-          'hover:bg-bg-weak-50 hover:text-text-strong-950 hover:shadow-none hover:ring-transparent',
+          'hover:bg-[var(--overlay-hover)] hover:text-text-strong-950 hover:ring-transparent',
           // focus
           'focus-visible:text-text-strong-950 focus-visible:shadow-button-important-focus focus-visible:ring-stroke-strong-950',
         ],
@@ -161,7 +161,7 @@ export const buttonVariants = tv({
           // base
           'bg-bg-weak-50 text-text-sub-600 ring-transparent',
           // hover
-          'hover:bg-bg-white-0 hover:text-text-strong-950 hover:shadow-regular-xs hover:ring-stroke-soft-200',
+          'hover:bg-bg-white-0 hover:text-text-strong-950 hover:ring-stroke-soft-200',
           // focus
           'focus-visible:bg-bg-white-0 focus-visible:text-text-strong-950 focus-visible:shadow-button-important-focus focus-visible:ring-stroke-strong-950',
         ],

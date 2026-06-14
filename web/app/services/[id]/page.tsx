@@ -204,7 +204,7 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
                   {operating ? "..." : state.label}
                 </span>
               </div>
-              <h1 className="text-base sm:text-xl font-semibold text-text-strong-950 truncate">{service.manifest.name}</h1>
+              <h1 className="truncate text-base font-semibold tracking-tight text-text-strong-950 sm:text-lg">{service.manifest.name}</h1>
             </div>
 
             {/* 桌面端按钮 */}

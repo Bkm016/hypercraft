@@ -6,13 +6,12 @@ import {
   RiAddLine,
   RiDeleteBinLine,
   RiLoader4Line,
-  RiSearchLine,
   RiUserLine,
 } from "@remixicon/react";
 import * as Button from "@/components/ui/button";
 import * as Checkbox from "@/components/ui/checkbox";
 import * as CompactButton from "@/components/ui/compact-button";
-import * as Input from "@/components/ui/input";
+import { SearchField } from "@/components/ui/search-field";
 import * as Tooltip from "@/components/ui/tooltip";
 import { CreateUserModal } from "./components/create-user-modal";
 import { DeleteUserModal } from "./components/delete-user-modal";
@@ -143,17 +142,13 @@ export default function UsersPage() {
         }
       >
         <PageToolbar>
-          <Input.Root size="small" className="flex-1 sm:flex-none sm:w-64">
-            <Input.Wrapper>
-              <Input.Icon as={RiSearchLine} />
-              <Input.Input
-                type="text"
-                placeholder="搜索用户..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </Input.Wrapper>
-          </Input.Root>
+          <SearchField
+            variant="toolbar"
+            className="min-w-0 flex-1 sm:w-56 sm:flex-none"
+            placeholder="搜索用户…"
+            value={search}
+            onValueChange={setSearch}
+          />
 
           {selected.size > 0 && isAdmin && (
             <div className="flex items-center gap-2 shrink-0">

@@ -8,7 +8,7 @@ import {
   RiSearchLine,
 } from "@remixicon/react";
 import * as FormDialog from "@/components/ui/form-dialog";
-import * as Input from "@/components/ui/input";
+import { SearchField } from "@/components/ui/search-field";
 import { api, type ServiceGroup } from "@/lib/api";
 import { cn } from "@/utils/cn";
 import { notification } from "@/hooks/use-notification";
@@ -95,26 +95,12 @@ export function GroupSelectModal({
             {/* 搜索框 */}
             {groups.length > 5 && (
               <div className="border-b border-stroke-soft-200 p-4">
-                <Input.Root size="small">
-                  <Input.Wrapper>
-                    <Input.Icon as={RiSearchLine} />
-                    <Input.Input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="搜索分组..."
-                    />
-                    {searchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setSearchQuery("")}
-                        className="shrink-0 text-text-soft-400 hover:text-text-sub-600"
-                      >
-                        <RiCloseLine className="size-4" />
-                      </button>
-                    )}
-                  </Input.Wrapper>
-                </Input.Root>
+                <SearchField
+                  variant="embedded"
+                  placeholder="搜索分组…"
+                  value={searchQuery}
+                  onValueChange={setSearchQuery}
+                />
               </div>
             )}
 

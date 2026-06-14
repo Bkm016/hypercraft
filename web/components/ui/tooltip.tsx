@@ -30,7 +30,7 @@ export const tooltipVariants = tv({
         arrow: 'rounded-bl-[3px]',
       },
       medium: {
-        content: 'rounded-xl p-3 text-label-sm',
+        content: 'rounded-lg p-3 text-label-sm',
         arrow: 'rounded-bl-sm',
       },
     },

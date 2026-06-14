@@ -33,7 +33,7 @@ export function EnvVarsFields({ envVars, onAdd, onRemove, onUpdate }: EnvVarsFie
       </div>
 
       {envVars.length > 0 ? (
-        <div className="space-y-2 rounded-xl border border-stroke-soft-200 bg-bg-weak-50/50 p-3">
+        <div className="space-y-2 rounded-lg border border-stroke-soft-200 bg-bg-weak-50/50 p-3">
           {envVars.map((env, index) => (
             <div key={index} className="flex items-center gap-2">
               <FormDialog.Input
@@ -61,7 +61,7 @@ export function EnvVarsFields({ envVars, onAdd, onRemove, onUpdate }: EnvVarsFie
           ))}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-stroke-soft-200 py-8 text-center">
+        <div className="rounded-lg border border-dashed border-stroke-soft-200 py-8 text-center">
           <RiInformationLine className="mx-auto size-5 text-text-soft-400" />
           <p className="mt-2 text-xs text-text-soft-400">
             点击上方"添加"按钮添加环境变量

@@ -185,7 +185,7 @@ export function BatchCommandModal({
                     </span>
                   )}
                 </div>
-                <div className="max-h-48 overflow-y-auto rounded-xl border border-stroke-soft-200">
+                <div className="max-h-48 overflow-y-auto rounded-lg border border-stroke-soft-200">
                   {results.map((result) => (
                     <div
                       key={result.id}

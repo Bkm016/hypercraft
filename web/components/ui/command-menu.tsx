@@ -28,7 +28,7 @@ const CommandDialog = ({
         overlayClassName={cn('justify-start pt-20', overlayClassName)}
         showClose={false}
         className={cn(
-          'flex max-h-full max-w-[600px] flex-col overflow-hidden rounded-2xl',
+          'flex max-h-full max-w-[600px] flex-col overflow-hidden rounded-sm border border-stroke-soft-200',
           className,
         )}
       >

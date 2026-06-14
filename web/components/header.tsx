@@ -32,8 +32,8 @@ export default function Header() {
   );
 
   return (
-    <div className="sticky top-0 z-40 border-b border-stroke-soft-200 backdrop-blur supports-backdrop-filter:bg-bg-white-0/80">
-      <header className="flex h-14 items-center justify-between px-5">
+    <div className="sticky top-0 z-40 border-b border-stroke-soft-200 bg-bg-white-0">
+      <header className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 md:px-6">
         <div className="flex items-center gap-3">
           {/* 移动端导航菜单 */}
           {isAuthenticated && (
@@ -50,7 +50,7 @@ export default function Header() {
 
           {/* 桌面端导航 */}
           {isAuthenticated && (
-            <nav className="hidden items-center gap-1 text-sm text-text-sub-600 md:flex">
+            <nav className="ml-2 hidden items-center gap-6 md:flex">
               {visibleNavItems.map((item) => {
                 const active =
                   pathname === item.href || pathname?.startsWith(item.href + "/");
@@ -58,10 +58,10 @@ export default function Header() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`rounded-lg px-3 py-1.5 transition duration-200 ${
+                    className={`relative py-4 text-sm font-medium transition-colors ${
                       active
-                        ? "bg-bg-weak-50 font-medium text-text-strong-950"
-                        : "hover:bg-bg-weak-50 hover:text-text-strong-950"
+                        ? "text-text-strong-950 after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-full after:bg-text-strong-950"
+                        : "text-text-sub-600 hover:text-text-strong-950"
                     }`}
                   >
                     {item.label}

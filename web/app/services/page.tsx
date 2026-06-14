@@ -7,13 +7,12 @@ import {
   RiLoader4Line,
   RiFolderLine,
   RiPlayCircleLine,
-  RiSearchLine,
   RiServerLine,
   RiStopCircleLine,
   RiCommandLine,
 } from "@remixicon/react";
 import * as Button from "@/components/ui/button";
-import * as Input from "@/components/ui/input";
+import { SearchField } from "@/components/ui/search-field";
 import * as CompactButton from "@/components/ui/compact-button";
 import * as TabMenu from "@/components/ui/tab-menu-horizontal";
 import { PageLayout, PageHeader, PageToolbar, PageContent, PageFooter, PageEmpty } from "@/components/layout/page-layout";
@@ -74,6 +73,7 @@ export default function ServicesPage() {
   const [editingService, setEditingService] = useState<ServiceManifest | null>(null);
   const [duplicatingService, setDuplicatingService] = useState<ServiceManifest | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
 
   // 收集所有标签
   const allTags = useMemo(() => {
@@ -187,6 +187,8 @@ export default function ServicesPage() {
     });
   }, [services, filter, search, selectedTags]);
 
+
+
   const stats = useMemo(() => ({
     running: services.filter((s) => s.state === "running").length,
     stopped: services.filter((s) => s.state === "stopped").length,
@@ -256,17 +258,13 @@ export default function ServicesPage() {
 
           {/* 搜索 + 标签筛选 + 批量操作 */}
           <div className="flex w-full items-center gap-2 md:w-auto md:gap-3 md:shrink-0">
-            <Input.Root size="small" className="min-w-0 flex-1 md:w-52 md:flex-none">
-              <Input.Wrapper>
-                <Input.Icon as={RiSearchLine} />
-                <Input.Input
-                  type="text"
-                  placeholder="搜索服务..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </Input.Wrapper>
-            </Input.Root>
+            <SearchField
+              variant="toolbar"
+              className="min-w-0 flex-1 sm:max-w-[14rem] md:w-56 md:flex-none"
+              placeholder="搜索服务…"
+              value={search}
+              onValueChange={setSearch}
+            />
 
             {allTags.length > 0 && (
               <TagFilter

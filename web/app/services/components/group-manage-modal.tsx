@@ -156,7 +156,7 @@ export function GroupManageModal({
                   </SortableContext>
                 </DndContext>
               ) : (
-                <div className="text-center py-8 text-text-soft-400 border border-dashed border-stroke-soft-200 rounded-xl">
+                <div className="text-center py-8 text-text-soft-400 rounded-lg border border-dashed border-stroke-soft-200">
                   <RiFolderLine className="size-10 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">
                     {isAdmin ? "暂无分组，点击下方按钮创建" : "暂无分组"}
