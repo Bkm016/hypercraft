@@ -203,6 +203,8 @@ export default function UsersPage() {
                   user={user}
                   selected={selected.has(user.id)}
                   isAdmin={isAdmin}
+                  services={services}
+                  groups={groups}
                   onToggle={() => toggleOne(user.id)}
                   onEdit={() => setEditingUser(user)}
                   onDelete={() => setDeletingUser(user)}
@@ -232,6 +234,8 @@ export default function UsersPage() {
                     user={user}
                     selected={selected.has(user.id)}
                     isAdmin={isAdmin}
+                    services={services}
+                    groups={groups}
                     onToggle={() => toggleOne(user.id)}
                     onEdit={() => setEditingUser(user)}
                     onDelete={() => setDeletingUser(user)}

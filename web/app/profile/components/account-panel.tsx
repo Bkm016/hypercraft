@@ -4,17 +4,17 @@ import {
 	RiKeyLine,
 	RiRefreshLine,
 	RiServerLine,
-	RiTimeLine,
 	RiUserLine,
 } from "@remixicon/react";
 import * as Button from "@/components/ui/button";
 import { PageCard } from "@/components/layout/page-layout";
-import type { TokenClaims, ServiceSummary } from "@/lib/api";
+import type { TokenClaims, ServiceGroup, ServiceSummary } from "@/lib/api";
 
 interface AccountPanelProps {
 	user: TokenClaims;
 	isAdmin: boolean;
 	services: ServiceSummary[];
+	groups: ServiceGroup[];
 	refreshing: boolean;
 	onRefreshToken: () => void;
 }
@@ -23,16 +23,18 @@ export function AccountPanel({
 	user,
 	isAdmin,
 	services,
+	groups,
 	refreshing,
 	onRefreshToken,
 }: AccountPanelProps) {
-	// 计算 token 过期时间
 	const getTokenExpiry = () => {
 		const expiryTime = user.exp * 1000;
 		const now = Date.now();
 		const diff = expiryTime - now;
 
-		if (diff <= 0) return "已过期";
+		if (diff <= 0) {
+			return "已过期";
+		}
 
 		const minutes = Math.floor(diff / 60000);
 		const hours = Math.floor(minutes / 60);
@@ -43,101 +45,111 @@ export function AccountPanel({
 		return `${minutes} 分钟后`;
 	};
 
-	// 获取用户有权限的服务名称
-	const getUserServices = () => {
-		if (!user?.service_ids) return [];
-		return user.service_ids.map((id) => {
-			const service = services.find((s) => s.id === id);
-			return service?.name || id;
+	const formatDate = (timestamp: number) => {
+		return new Date(timestamp * 1000).toLocaleString("zh-CN", {
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+			hour: "2-digit",
+			minute: "2-digit",
 		});
 	};
 
-	// 格式化时间
-	const formatDate = (timestamp: number) => {
-		return new Date(timestamp * 1000).toLocaleString("zh-CN");
-	};
+	const serviceIds = user.service_ids ?? [];
+	const groupById = new Map(groups.map((g) => [g.id, g]));
+	const permittedServices = serviceIds.includes("*")
+		? null
+		: serviceIds
+				.map((id) => services.find((s) => s.id === id))
+				.filter((s): s is ServiceSummary => s != null);
 
 	return (
 		<div className="space-y-6">
-			{/* 账号信息 */}
-			<PageCard title="账号信息" description="你的基本账号信息">
-				<div className="space-y-4">
-					<InfoRow
-						icon={<RiUserLine className="size-4" />}
-						label="用户名"
-						value={user.username}
-					/>
-					<InfoRow
-						icon={<RiUserLine className="size-4" />}
-						label="用户 ID"
-						value={
-							<code className="rounded bg-bg-weak-50 px-1.5 py-0.5 text-xs">
+			<PageCard title="账号资料" description="当前登录身份与可访问范围">
+				<div className="flex items-center gap-3 rounded-lg bg-bg-weak-50 px-4 py-3">
+					<div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-bg-white-0">
+						<RiUserLine className="size-5 text-text-sub-600" />
+					</div>
+					<div className="min-w-0 flex-1">
+						<p className="truncate text-sm font-medium text-text-strong-950">
+							{user.username}
+						</p>
+						<p className="mt-0.5 text-xs text-text-sub-600">
+							{isAdmin ? "管理员" : "普通用户"}
+							<span className="text-text-soft-400"> · </span>
+							<span className="font-mono text-[11px] text-text-soft-400">
 								{user.sub}
-							</code>
-						}
-					/>
-					<InfoRow
-						icon={<RiUserLine className="size-4" />}
-						label="角色"
-						value={
-							<span
-								className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${
-									isAdmin
-										? "bg-away-lighter text-away-base"
-										: "bg-bg-weak-50 text-text-sub-600"
-								}`}
-							>
-								{isAdmin ? "管理员" : "用户"}
 							</span>
-						}
-					/>
-					{!isAdmin && (
-						<InfoRow
-							icon={<RiServerLine className="size-4" />}
-							label="服务权限"
-							value={
-								<div className="flex flex-wrap gap-1.5">
-									{getUserServices().length > 0 ? (
-										getUserServices().map((name) => (
-											<span
-												key={name}
-												className="rounded bg-bg-weak-50 px-2 py-0.5 text-xs text-text-sub-600"
-											>
-												{name}
-											</span>
-										))
-									) : (
-										<span className="text-text-soft-400">无服务权限</span>
-									)}
-								</div>
-							}
-						/>
-					)}
-					<InfoRow
-						icon={<RiTimeLine className="size-4" />}
-						label="Token 签发时间"
-						value={formatDate(user.iat)}
-					/>
+						</p>
+						<p className="mt-1 text-xs text-text-soft-400">
+							令牌签发于 {formatDate(user.iat)}
+						</p>
+					</div>
 				</div>
+
+				{!isAdmin && (
+					<div className="mt-4">
+						<p className="mb-2 text-xs font-medium text-text-soft-400">
+							服务权限
+						</p>
+						{serviceIds.includes("*") ? (
+							<div className="flex items-center gap-2.5 rounded-lg bg-bg-weak-50 px-3 py-2.5">
+								<span className="size-2 shrink-0 rounded-full bg-away-base" />
+								<span className="text-sm font-medium text-text-strong-950">
+									全部服务
+								</span>
+							</div>
+						) : permittedServices && permittedServices.length > 0 ? (
+							<div className="max-h-52 space-y-1.5 overflow-y-auto overscroll-contain">
+								{permittedServices.map((svc) => {
+									const group = svc.group
+										? groupById.get(svc.group)
+										: undefined;
+									return (
+										<div
+											key={svc.id}
+											className="flex items-center gap-2.5 rounded-lg bg-bg-weak-50 px-3 py-2.5 transition-colors hover:bg-bg-soft-200"
+										>
+											<span
+												className="size-2 shrink-0 rounded-full"
+												style={{
+													backgroundColor:
+														group?.color ?? "#a3a3a3",
+												}}
+											/>
+											<span className="min-w-0 flex-1 truncate text-sm font-medium text-text-strong-950">
+												{svc.name}
+											</span>
+										</div>
+									);
+								})}
+							</div>
+						) : (
+							<div className="flex items-center gap-3 rounded-lg bg-bg-weak-50 px-4 py-3">
+								<div className="rounded-lg bg-bg-white-0 p-2">
+									<RiServerLine className="size-4 text-text-soft-400" />
+								</div>
+								<p className="text-sm text-text-sub-600">
+									暂未分配服务，请联系管理员开通
+								</p>
+							</div>
+						)}
+					</div>
+				)}
 			</PageCard>
 
-			{/* Token 状态 */}
-			<PageCard title="Token 状态" description="访问令牌的有效期信息">
+			<PageCard title="访问令牌" description="到期前可刷新以延长当前会话">
 				<div className="flex items-center justify-between rounded-lg bg-bg-weak-50 px-4 py-3">
 					<div className="flex items-center gap-3">
-						<div className="rounded-lg bg-primary-alpha-10 p-2">
+						<div className="rounded-lg bg-bg-white-0 p-2">
 							<RiKeyLine className="size-4 text-primary-base" />
 						</div>
 						<div>
 							<p className="text-sm font-medium text-text-strong-950">
-								访问令牌
+								剩余有效期
 							</p>
 							<p className="text-xs text-text-sub-600">
-								将在{" "}
-								<span className="font-medium text-away-base">
-									{getTokenExpiry()}
-								</span>{" "}
-								过期
+								{getTokenExpiry()}
 							</p>
 						</div>
 					</div>
@@ -151,7 +163,7 @@ export function AccountPanel({
 						{refreshing ? (
 							<>
 								<RiRefreshLine className="size-3.5 animate-spin" />
-								刷新中...
+								处理中...
 							</>
 						) : (
 							<>
@@ -162,26 +174,6 @@ export function AccountPanel({
 					</Button.Root>
 				</div>
 			</PageCard>
-		</div>
-	);
-}
-
-function InfoRow({
-	icon,
-	label,
-	value,
-}: {
-	icon: React.ReactNode;
-	label: string;
-	value: React.ReactNode;
-}) {
-	return (
-		<div className="flex items-center justify-between border-b border-stroke-soft-200 pb-4 last:border-0 last:pb-0">
-			<div className="flex items-center gap-2 text-text-sub-600">
-				{icon}
-				<span className="text-sm">{label}</span>
-			</div>
-			<div className="text-sm text-text-strong-950">{value}</div>
 		</div>
 	);
 }

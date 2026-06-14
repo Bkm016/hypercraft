@@ -82,20 +82,17 @@ export function EditUserModal({
             <div className="border-t border-stroke-soft-200" />
 
             {/* 服务权限 */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-medium uppercase tracking-wider text-text-soft-400">
-                服务权限
-              </h4>
+            <FormDialog.Field
+              label="服务权限"
+              hint="决定该用户可打开哪些服务控制台"
+            >
               <ServicePermissionPicker
                 services={services}
                 groups={groups}
                 selectedIds={selectedServices}
                 onChange={setSelectedServices}
               />
-              <p className="text-xs text-text-soft-400">
-                选择用户可以访问的服务
-              </p>
-            </div>
+            </FormDialog.Field>
           </FormDialog.Body>
 
           <FormDialog.Footer>

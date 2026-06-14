@@ -7,7 +7,7 @@ import {
 	PageContent,
 } from "@/components/layout/page-layout";
 import { useAuth } from "@/lib/auth";
-import { api, type ServiceSummary } from "@/lib/api";
+import { api, type ServiceGroup, type ServiceSummary } from "@/lib/api";
 import {
 	ProfileSidebar,
 	AccountPanel,
@@ -26,6 +26,7 @@ export default function ProfilePage() {
 
 	// 服务列表（用于显示服务名称）
 	const [services, setServices] = useState<ServiceSummary[]>([]);
+	const [groups, setGroups] = useState<ServiceGroup[]>([]);
 
 	// 判断是否是 DevToken 用户（没有密码可改）
 	const isDevToken = user?.sub === "dev" || user?.token_type === "dev";
@@ -39,8 +40,12 @@ export default function ProfilePage() {
 
 	const loadServices = async () => {
 		try {
-			const data = await api.listServices();
-			setServices(data);
+			const [servicesData, groupsData] = await Promise.all([
+				api.listServices(),
+				api.listGroups(),
+			]);
+			setServices(servicesData);
+			setGroups(groupsData);
 		} catch {
 			// 忽略错误
 		}
@@ -141,6 +146,7 @@ export default function ProfilePage() {
 								user={user}
 								isAdmin={isAdmin}
 								services={services}
+								groups={groups}
 								refreshing={refreshing}
 								onRefreshToken={handleRefreshToken}
 							/>

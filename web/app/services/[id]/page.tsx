@@ -46,10 +46,13 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [operating, setOperating] = useState(false);
-  const [activeTab, setActiveTab] = useState<"logs" | "terminal" | "browser" | "config">(initialTab || "terminal");
+  const [activeTab, setActiveTab] = useState<"logs" | "terminal" | "browser" | "config">(
+    initialTab || "terminal",
+  );
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const defaultTabAppliedRef = useRef(false);
 
   // 加载服务详情
   const loadService = useCallback(async () => {
@@ -66,19 +69,48 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
   }, [params.id]);
 
   useEffect(() => {
+    defaultTabAppliedRef.current = false;
     loadService();
-    
-    // 启用 2 秒轮询以保持状态同步
+
     pollingRef.current = setInterval(() => {
       loadService();
     }, 2000);
-    
+
     return () => {
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
       }
     };
   }, [loadService]);
+
+  useEffect(() => {
+    if (!service || defaultTabAppliedRef.current) {
+      return;
+    }
+    defaultTabAppliedRef.current = true;
+
+    const hasBrowser = !!service.manifest.web?.enabled;
+    const urlTab = searchParams.get("tab") as
+      | "logs"
+      | "terminal"
+      | "browser"
+      | "config"
+      | null;
+
+    if (urlTab === "browser" && !hasBrowser) {
+      setActiveTab("terminal");
+      return;
+    }
+    if (urlTab === "config" && !isAdmin) {
+      setActiveTab(hasBrowser ? "browser" : "terminal");
+      return;
+    }
+    if (urlTab) {
+      setActiveTab(urlTab);
+      return;
+    }
+    setActiveTab(hasBrowser ? "browser" : "terminal");
+  }, [service, isAdmin, searchParams]);
 
   useEffect(() => {
     if (service && activeTab === "browser" && !service.manifest.web?.enabled) {
@@ -274,9 +306,11 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
             className="mt-3 sm:mt-4"
           >
             <TabMenu.List>
+              {hasBrowserTab && (
+                <TabMenu.Trigger value="browser">浏览器</TabMenu.Trigger>
+              )}
               <TabMenu.Trigger value="terminal">终端</TabMenu.Trigger>
               <TabMenu.Trigger value="logs">日志</TabMenu.Trigger>
-              {hasBrowserTab && <TabMenu.Trigger value="browser">浏览器</TabMenu.Trigger>}
               {isAdmin && <TabMenu.Trigger value="config">配置</TabMenu.Trigger>}
             </TabMenu.List>
           </TabMenu.Root>

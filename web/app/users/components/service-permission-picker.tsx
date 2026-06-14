@@ -229,14 +229,13 @@ export function ServicePermissionPicker({
 
   return (
     <div className="space-y-3">
-      {/* 已选服务标签显示 */}
-      <div className="min-h-[42px] rounded-xl border border-stroke-soft-200 bg-bg-weak-50/30 p-2">
+      <div className="rounded-lg bg-bg-weak-50 p-2">
         {selectedServices.length === 0 ? (
-          <p className="px-2 py-1 text-sm text-text-soft-400">未选择任何服务</p>
+          <p className="px-2 py-2 text-sm text-text-soft-400">暂未选择服务</p>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="max-h-40 space-y-1 overflow-y-auto overscroll-contain">
             {selectedServices.map((svc) => (
-              <ServiceTag
+              <SelectedServiceRow
                 key={svc.id}
                 service={svc}
                 group={groups.find((g) => g.id === svc.group)}
@@ -248,23 +247,21 @@ export function ServicePermissionPicker({
         )}
       </div>
 
-      {/* 添加/编辑按钮 */}
       <Popover.Root open={isOpen} onOpenChange={setIsOpen} modal={false}>
         <Popover.Trigger asChild>
           <button
             type="button"
             disabled={disabled}
             className={cn(
-              "flex w-full items-center justify-center gap-2 rounded-lg border border-stroke-soft-200 px-3 py-2 text-sm",
-              "transition-colors hover:bg-bg-weak-50",
-              "disabled:cursor-not-allowed disabled:opacity-50"
+              "flex w-full items-center justify-center gap-2 rounded-lg bg-bg-weak-50 px-3 py-2.5 text-sm transition-colors hover:bg-bg-soft-200",
+              "disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
             <RiSearchLine className="size-4 text-text-soft-400" />
             <span className="text-text-sub-600">
               {selectedServices.length > 0
-                ? `已选择 ${selectedServices.length} 个服务，点击编辑`
-                : "点击选择服务"}
+                ? `添加或调整（已选 ${selectedServices.length}）`
+                : "选择可访问的服务"}
             </span>
           </button>
         </Popover.Trigger>
@@ -360,37 +357,33 @@ export function ServicePermissionPicker({
   );
 }
 
-// 服务标签组件
-interface ServiceTagProps {
+interface SelectedServiceRowProps {
   service: ServiceSummary;
   group?: ServiceGroup;
   onRemove: () => void;
   disabled?: boolean;
 }
 
-function ServiceTag({ service, group, onRemove, disabled }: ServiceTagProps) {
+function SelectedServiceRow({
+  service,
+  group,
+  onRemove,
+  disabled,
+}: SelectedServiceRowProps) {
   return (
-    <div
-      className={cn(
-        "group inline-flex items-center gap-1.5 rounded-md bg-bg-white-0 px-2 py-1",
-        "border border-stroke-soft-200 text-xs",
-        "transition-colors hover:border-stroke-sub-300"
-      )}
-    >
-      {group && (
-        <div
-          className="size-2 rounded-full shrink-0"
-          style={{ backgroundColor: group.color || "#9ca3af" }}
-        />
-      )}
-      <span className="max-w-[120px] truncate text-text-strong-950">
+    <div className="flex items-center gap-2 rounded-md bg-bg-white-0 px-2.5 py-1.5">
+      <span
+        className="size-2 shrink-0 rounded-full"
+        style={{ backgroundColor: group?.color ?? "#a3a3a3" }}
+      />
+      <span className="min-w-0 flex-1 truncate text-sm text-text-strong-950">
         {service.name}
       </span>
       {!disabled && (
         <button
           type="button"
           onClick={onRemove}
-          className="shrink-0 text-text-soft-400 transition-colors hover:text-error-base"
+          className="shrink-0 rounded p-0.5 text-text-soft-400 transition-colors hover:bg-bg-weak-50 hover:text-error-base"
         >
           <RiCloseLine className="size-3.5" />
         </button>

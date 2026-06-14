@@ -55,7 +55,7 @@ export function ProfileSidebar({
 			})}
 
 			{/* 分隔线 */}
-			<div className="mt-3! mb-3 border-t border-stroke-soft-200" />
+			<div className="!mt-3 !mb-3 border-t border-stroke-soft-200" />
 
 			{/* 退出登录按钮 */}
 			<button
