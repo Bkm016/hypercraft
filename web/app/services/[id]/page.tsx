@@ -16,6 +16,7 @@ import * as Button from "@/components/ui/button";
 import * as TabMenu from "@/components/ui/tab-menu-horizontal";
 import * as Dropdown from "@/components/ui/dropdown";
 import * as CompactButton from "@/components/ui/compact-button";
+import { ServiceStatusBadge } from "@/components/ui/service-status";
 import { PageLayout, PageContent, PageEmpty } from "@/components/layout/page-layout";
 import { api, type ServiceDetail } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -27,12 +28,6 @@ import { TerminalPanel } from "./components/terminal-panel";
 import { ConfigPanel } from "./components/config-panel";
 import { DeleteServiceModal } from "../components/delete-service-modal";
 import { ServiceFormModal } from "../components/service-form/service-form-modal";
-
-const stateConfig = {
-  running: { label: "运行中", dot: "bg-success-base", text: "text-success-base" },
-  stopped: { label: "已停止", dot: "bg-text-soft-400", text: "text-text-soft-400" },
-  unknown: { label: "未知", dot: "bg-away-base", text: "text-away-base" },
-} as const;
 
 export default function ServiceDetailPage(props: { params: Promise<{ id: string }> }) {
   const params = use(props.params);
@@ -182,8 +177,6 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
     );
   }
 
-  const state = stateConfig[service.status.state];
-
   const hasBrowserTab = service.manifest.web?.enabled;
 
   return (
@@ -194,16 +187,14 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
           {/* 标题行 */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              <div className="flex items-center gap-1.5 border-2 rounded-lg border-stroke-soft-200 bg-bg-weak-50 px-1.5 py-0.5 sm:px-2 sm:py-1 shrink-0">
-                {operating ? (
-                  <RiLoader4Line className="size-3.5 sm:size-4 animate-spin text-text-soft-400" />
-                ) : (
-                  <span className={`size-1.5 sm:size-2 rounded-full ${state.dot}`} />
-                )}
-                <span className={`text-xs sm:text-sm font-medium ${operating ? "text-text-soft-400" : state.text}`}>
-                  {operating ? "..." : state.label}
+              {operating ? (
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-stroke-soft-200 bg-bg-white-0 px-2 py-1 text-xs font-medium text-text-soft-400 shadow-regular-xs">
+                  <RiLoader4Line className="size-3.5 animate-spin" />
+                  处理中
                 </span>
-              </div>
+              ) : (
+                <ServiceStatusBadge state={service.status.state} className="shrink-0" />
+              )}
               <h1 className="truncate text-base font-semibold tracking-tight text-text-strong-950 sm:text-lg">{service.manifest.name}</h1>
             </div>
 

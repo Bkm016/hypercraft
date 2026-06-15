@@ -33,6 +33,7 @@ import {
 import * as Button from "@/components/ui/button";
 import * as CompactButton from "@/components/ui/compact-button";
 import * as Tooltip from "@/components/ui/tooltip";
+import { ServiceStatusDot, SERVICE_STATE_CONFIG } from "@/components/ui/service-status";
 import { PageLayout, PageHeader, PageContent, PageCard } from "@/components/layout/page-layout";
 import { ResourceCard } from "@/components/resource-card";
 import { StatCard } from "@/components/stat-card";
@@ -41,12 +42,6 @@ import { useAuth } from "@/lib/auth";
 import { formatBytes } from "@/lib/format";
 import { getFavorites, removeFavorite, reorderFavorites } from "@/lib/favorites";
 
-const stateConfig = {
-  running: { dot: "bg-success-base", text: "text-success-base", label: "运行中" },
-  stopped: { dot: "bg-text-soft-400", text: "text-text-soft-400", label: "已停止" },
-  unknown: { dot: "bg-away-base", text: "text-away-base", label: "未知" },
-} as const;
-
 function SortableFavoriteItem({
   service,
   onRemove,
@@ -54,7 +49,7 @@ function SortableFavoriteItem({
   service: ServiceSummary;
   onRemove: (id: string) => void;
 }) {
-  const state = stateConfig[service.state];
+  const state = SERVICE_STATE_CONFIG[service.state];
   const {
     attributes,
     listeners,
@@ -85,7 +80,7 @@ function SortableFavoriteItem({
         >
           <RiDraggable className="size-4" />
         </div>
-        <span className={`size-2 rounded-full shrink-0 ${state.dot}`} />
+        <ServiceStatusDot state={service.state} size="sm" />
         <Link
           href={`/services/${service.id}`}
           className="font-medium text-sm text-text-strong-950 truncate hover:underline"
@@ -113,12 +108,10 @@ function SortableFavoriteItem({
 }
 
 function FavoriteItemOverlay({ service }: { service: ServiceSummary }) {
-  const state = stateConfig[service.state];
-
   return (
-    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-primary-base bg-bg-white-0 shadow-lg cursor-grabbing">
+    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-stroke-sub-300 bg-bg-white-0 shadow-regular-md cursor-grabbing">
       <RiDraggable className="size-4 text-text-soft-400" />
-      <span className={`size-2 rounded-full shrink-0 ${state.dot}`} />
+      <ServiceStatusDot state={service.state} size="sm" />
       <span className="text-sm font-medium text-text-strong-950 truncate">
         {service.name}
       </span>
@@ -216,7 +209,7 @@ export default function HomePage() {
       <PageContent>
         <div className="space-y-4 sm:space-y-6">
           {/* 统计卡片 */}
-          <div className="grid grid-cols-1 divide-y border border-stroke-soft-200 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <div className="grid grid-cols-1 divide-y divide-stroke-soft-200 overflow-hidden rounded-xl border border-stroke-soft-200 bg-bg-white-0 shadow-regular-xs sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             <StatCard label="全部" value={stats.total} accentClass="bg-text-strong-950" />
             <StatCard
               label="运行中"
@@ -287,7 +280,7 @@ export default function HomePage() {
                 onDragEnd={handleDragEnd}
               >
                 <SortableContext items={favoriteIds} strategy={verticalListSortingStrategy}>
-                  <div className="divide-y divide-stroke-soft-200 border border-stroke-soft-200">
+                  <div className="overflow-hidden rounded-lg border border-stroke-soft-200 divide-y divide-stroke-soft-200">
                     {favoriteServices.map((svc) => (
                       <SortableFavoriteItem
                         key={svc.id}

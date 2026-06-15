@@ -32,7 +32,7 @@ export default function Header() {
   );
 
   return (
-    <div className="sticky top-0 z-40 border-b border-stroke-soft-200 bg-bg-white-0">
+    <div className="sticky top-0 z-40 border-b border-stroke-soft-200 bg-bg-white-0/80 backdrop-blur-md supports-[backdrop-filter]:bg-bg-white-0/70">
       <header className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 md:px-6">
         <div className="flex items-center gap-3">
           {/* 移动端导航菜单 */}
@@ -58,9 +58,9 @@ export default function Header() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`relative py-4 text-sm font-medium transition-colors ${
+                    className={`relative flex h-14 items-center text-sm font-medium transition-colors ${
                       active
-                        ? "text-text-strong-950 after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-full after:bg-text-strong-950"
+                        ? "text-text-strong-950 after:absolute after:-bottom-px after:left-0 after:h-0.5 after:w-full after:rounded-full after:bg-text-strong-950"
                         : "text-text-sub-600 hover:text-text-strong-950"
                     }`}
                   >
@@ -77,16 +77,18 @@ export default function Header() {
           
           {isAuthenticated && user && (
             <>
-              <Link 
+              <Link
                 href="/profile"
-                className="hidden items-center gap-2 border-l border-stroke-soft-200 pl-3 md:flex hover:opacity-80 transition-opacity"
+                className="hidden items-center gap-2 rounded-lg border border-stroke-soft-200 bg-bg-white-0 px-2.5 py-1.5 text-sm text-text-sub-600 shadow-regular-xs transition-colors hover:bg-bg-weak-50 hover:text-text-strong-950 md:flex"
               >
-                <div className="flex items-center gap-1.5 text-sm text-text-sub-600">
-                  <RiUserLine className="size-4" />
-                  {isAdmin ? <span className="rounded bg-away-lighter px-1.5 py-0.5 text-xs font-medium text-away-base">
+                <RiUserLine className="size-4 shrink-0" />
+                {isAdmin ? (
+                  <span className="rounded-md bg-away-lighter px-1.5 py-0.5 text-xs font-medium text-away-base">
                     管理员
-                  </span> : <span>{user.username}</span>}
-                </div>
+                  </span>
+                ) : (
+                  <span className="font-medium">{user.username}</span>
+                )}
               </Link>
               <Button.Root
                 variant="error"

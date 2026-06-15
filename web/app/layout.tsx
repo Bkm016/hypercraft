@@ -43,7 +43,7 @@ export default function RootLayout({
       <head>
         <Script src="/config.js" strategy="beforeInteractive" />
       </head>
-      <body className="bg-bg-white-0 text-text-strong-950">
+      <body className="bg-bg-page text-text-strong-950">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

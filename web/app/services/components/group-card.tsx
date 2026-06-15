@@ -4,6 +4,8 @@ import { useState, useCallback, useMemo } from "react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { RiArrowDownSLine } from "@remixicon/react";
 import * as Checkbox from "@/components/ui/checkbox";
+import { SectionHeader } from "@/components/ui/section-header";
+import { CountBadge } from "@/components/ui/count-badge";
 import { type ServiceSummary, type ServiceGroup } from "@/lib/api";
 import { ServiceCard } from "./service-card";
 
@@ -92,11 +94,11 @@ export function GroupCard({
   const serviceIds = useMemo(() => services.map((s) => s.id), [services]);
 
   return (
-    <section className="overflow-hidden border border-stroke-soft-200 bg-bg-white-0">
+    <section className="overflow-hidden rounded-xl border border-stroke-soft-200 bg-bg-white-0 shadow-regular-xs">
       <div
         role="button"
         tabIndex={0}
-        className="flex cursor-pointer select-none border-b border-stroke-soft-200 transition-colors hover:bg-bg-weak-50"
+        className={`flex cursor-pointer select-none transition-colors hover:bg-bg-weak-50 ${collapsed ? "" : "border-b border-stroke-soft-200"}`}
         onClick={toggleCollapsed}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -121,14 +123,11 @@ export function GroupCard({
               onCheckedChange={toggleAllInGroup}
             />
           </div>
-          <h3 className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wider text-text-sub-600">
+          <SectionHeader className="min-w-0 flex-1">
             {group?.name || "未分组"}
-          </h3>
-          <div className="flex shrink-0 items-center gap-2 text-xs text-text-sub-600">
-            <span className="tabular-nums">
-              <span className="text-text-strong-950">{runningCount}</span>
-              <span className="text-text-soft-400"> / {services.length}</span>
-            </span>
+          </SectionHeader>
+          <div className="flex shrink-0 items-center gap-2">
+            <CountBadge value={runningCount} total={services.length} />
             <RiArrowDownSLine
               className={`size-4 text-text-soft-400 transition-transform duration-200 ${collapsed ? "-rotate-90" : ""}`}
             />

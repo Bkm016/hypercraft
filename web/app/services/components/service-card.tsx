@@ -24,8 +24,9 @@ import * as Checkbox from "@/components/ui/checkbox";
 import * as CompactButton from "@/components/ui/compact-button";
 import * as Tooltip from "@/components/ui/tooltip";
 import * as Popover from "@/components/ui/popover";
+import { MenuItem } from "@/components/ui/menu-item";
+import { ServiceStatusDot, SERVICE_STATE_CONFIG } from "@/components/ui/service-status";
 import { type ServiceSummary, type ServiceGroup } from "@/lib/api";
-import { formatBytes } from "@/lib/format";
 import { TagEditPopover } from "./tag-edit-popover";
 import { TagEditModal } from "./mobile/tag-edit-modal";
 import { GroupSelectPopover } from "./group-select-popover";
@@ -33,11 +34,8 @@ import { GroupSelectModal } from "./mobile/group-select-modal";
 import { StopServicePopover } from "./stop-service-popover";
 import { parseTag, getTagColor } from "./tag-utils";
 
-export const stateConfig = {
-  running: { dot: "bg-success-base", text: "text-success-base", label: "运行中" },
-  stopped: { dot: "bg-text-soft-400", text: "text-text-soft-400", label: "已停止" },
-  unknown: { dot: "bg-away-base", text: "text-away-base", label: "未知" },
-} as const;
+// 兼容旧引用：状态配置已统一到 ServiceStatus 组件
+export const stateConfig = SERVICE_STATE_CONFIG;
 
 export interface ServiceCardProps {
   service: ServiceSummary;
@@ -59,16 +57,15 @@ export interface ServiceCardProps {
 
 // 拖拽浮层与组内 compact 行同款排版，仅加描边便于跟手
 export function ServiceCardDragOverlay({ service }: { service: ServiceSummary }) {
-  const state = stateConfig[service.state];
   const isRunning = service.state === "running";
 
   return (
-    <div className="flex cursor-grabbing items-stretch border border-stroke-sub-300 bg-bg-white-0 shadow-md">
+    <div className="flex cursor-grabbing items-stretch rounded-lg border border-stroke-sub-300 bg-bg-white-0 shadow-regular-md">
       <div className="flex w-10 shrink-0 items-center justify-center text-text-soft-400">
         <RiDraggable className="size-4" />
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-2 my-3 mr-3 sm:gap-3 sm:mr-4">
-      <span className={`size-2 shrink-0 rounded-full ${state.dot}`} />
+      <ServiceStatusDot state={service.state} size="sm" />
       <span
         className={`min-w-0 flex-1 truncate text-sm font-medium ${
           isRunning ? "text-text-strong-950" : "text-text-soft-400"
@@ -195,11 +192,9 @@ export function ServiceCard({
       {/* 状态指示器 */}
       <Tooltip.Root>
         <Tooltip.Trigger asChild>
-          <span
-            className={`relative shrink-0 rounded-full ${compact ? "size-2" : "size-2.5"} ${state.dot} ${
-              isRunning ? "before:absolute before:inset-0 before:animate-ping before:rounded-full before:bg-success-base before:opacity-40" : ""
-            }`}
-          />
+          <span className="inline-flex shrink-0">
+            <ServiceStatusDot state={service.state} size={compact ? "sm" : "md"} />
+          </span>
         </Tooltip.Trigger>
         <Tooltip.Content>{state.label}</Tooltip.Content>
       </Tooltip.Root>
@@ -210,9 +205,7 @@ export function ServiceCard({
         className="flex-1 min-w-0"
       >
         <div
-          className={`truncate ${
-            compact ? "text-sm font-medium" : "text-xs font-normal"
-          } ${
+          className={`truncate text-sm font-medium ${
             isRunning ? "text-text-strong-950" : "text-text-soft-400"
           }`}
         >
@@ -358,48 +351,41 @@ export function ServiceCard({
                       <CompactButton.Icon as={RiMoreLine} />
                     </CompactButton.Root>
                   </Popover.Trigger>
-                  <Popover.Content align="end" className="w-32 p-1" showArrow={false}>
+                  <Popover.Content align="end" className="w-36 p-1" showArrow={false}>
                     {/* 移动端显示标签和分组选项 */}
-                    <button
-                      type="button"
+                    <MenuItem
+                      icon={RiPriceTag3Line}
+                      className="sm:hidden"
                       onClick={() => { setMoreMenuOpen(false); setTagModalOpen(true); }}
-                      className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-text-sub-600 transition-colors hover:bg-bg-weak-50 hover:text-text-strong-950 sm:hidden"
                     >
-                      <RiPriceTag3Line className="size-4" />
-                      <span>编辑标签</span>
-                    </button>
-                    <button
-                      type="button"
+                      编辑标签
+                    </MenuItem>
+                    <MenuItem
+                      icon={RiFolderLine}
+                      className="sm:hidden"
                       onClick={() => { setMoreMenuOpen(false); setGroupModalOpen(true); }}
-                      className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-text-sub-600 transition-colors hover:bg-bg-weak-50 hover:text-text-strong-950 sm:hidden"
                     >
-                      <RiFolderLine className="size-4" />
-                      <span>编辑分组</span>
-                    </button>
-                    <button
-                      type="button"
+                      编辑分组
+                    </MenuItem>
+                    <MenuItem
+                      icon={RiFileCopyLine}
                       onClick={() => { setMoreMenuOpen(false); onDuplicate(); }}
-                      className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-text-sub-600 transition-colors hover:bg-bg-weak-50 hover:text-text-strong-950"
                     >
-                      <RiFileCopyLine className="size-4" />
-                      <span>复制</span>
-                    </button>
-                    <button
-                      type="button"
+                      复制
+                    </MenuItem>
+                    <MenuItem
+                      icon={RiEditLine}
                       onClick={() => { setMoreMenuOpen(false); onEdit(); }}
-                      className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-text-sub-600 transition-colors hover:bg-bg-weak-50 hover:text-text-strong-950"
                     >
-                      <RiEditLine className="size-4" />
-                      <span>编辑</span>
-                    </button>
-                    <button
-                      type="button"
+                      编辑
+                    </MenuItem>
+                    <MenuItem
+                      icon={RiDeleteBinLine}
+                      destructive
                       onClick={() => { setMoreMenuOpen(false); onDelete(); }}
-                      className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-error-base transition-colors hover:bg-error-lighter"
                     >
-                      <RiDeleteBinLine className="size-4" />
-                      <span>删除</span>
-                    </button>
+                      删除
+                    </MenuItem>
                   </Popover.Content>
                 </Popover.Root>
 

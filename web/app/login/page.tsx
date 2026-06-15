@@ -138,7 +138,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="flex items-start gap-2 border border-error-base/30 bg-error-lighter px-3 py-2.5 text-sm text-error-base">
+              <div className="flex items-start gap-2 rounded-lg border border-error-base/30 bg-error-lighter px-3 py-2.5 text-sm text-error-base">
                 <RiErrorWarningLine className="mt-0.5 size-4 shrink-0" />
                 <span>{error}</span>
               </div>

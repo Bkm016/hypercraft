@@ -14,6 +14,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { RiServerLine } from "@remixicon/react";
+import { PageEmpty } from "@/components/layout/page-layout";
 import { api, type ServiceSummary, type ServiceGroup } from "@/lib/api";
 import { GroupCard } from "./group-card";
 import { GroupMasonry, estimateGroupCardHeight, type GroupMasonryItem } from "./group-masonry";
@@ -297,11 +298,11 @@ export function GroupedServicesView({
   ]);
 
   const content = !hasAnyServices ? (
-    <div className="py-16 text-center text-text-soft-400">
-      <RiServerLine className="mx-auto mb-3 size-12 opacity-50" />
-      <p className="text-base font-medium text-text-sub-600">暂无服务</p>
-      <p className="mt-1 text-sm">点击右上角按钮创建第一个服务</p>
-    </div>
+    <PageEmpty
+      icon={<RiServerLine />}
+      title="暂无服务"
+      description="点击右上角按钮创建第一个服务"
+    />
   ) : (
     <GroupMasonry items={masonryItems} />
   );

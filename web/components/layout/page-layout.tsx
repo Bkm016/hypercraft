@@ -65,7 +65,7 @@ const maxWidthMap = {
 export function PageLayout({ children, variant = "default" }: PageLayoutProps) {
   if (variant === "centered") {
     return (
-      <div className="flex flex-1 items-center justify-center bg-bg-white-0 p-6">
+      <div className="flex flex-1 items-center justify-center bg-bg-page p-6">
         {children}
       </div>
     );
@@ -73,7 +73,7 @@ export function PageLayout({ children, variant = "default" }: PageLayoutProps) {
 
   if (variant === "full") {
     return (
-      <div className="flex flex-1 flex-col overflow-hidden bg-bg-white-0">
+      <div className="flex flex-1 flex-col overflow-hidden bg-bg-page">
         {children}
       </div>
     );
@@ -81,7 +81,7 @@ export function PageLayout({ children, variant = "default" }: PageLayoutProps) {
 
   // default
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-bg-white-0">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-bg-page">
       {children}
     </div>
   );
@@ -95,10 +95,10 @@ export function PageHeader({ title, description, actions, children }: PageHeader
     <div className="z-30 border-b border-stroke-soft-200 bg-bg-white-0">
       <div className="mx-auto max-w-7xl px-4 py-5 md:px-6 md:py-6">
         <div className="flex items-start justify-between gap-3 md:gap-4">
-          <div className="min-w-0 flex-1 border-l-2 border-text-strong-950 pl-4 md:pl-5">
+          <div className="min-w-0 flex-1">
             <h1 className="text-xl font-semibold tracking-tight text-text-strong-950 md:text-2xl">{title}</h1>
             {description && (
-              <p className="mt-0.5 text-xs text-text-sub-600 md:mt-1 md:text-sm">{description}</p>
+              <p className="mt-1 text-sm text-text-sub-600">{description}</p>
             )}
           </div>
           {actions && (
@@ -185,8 +185,8 @@ export function PageCard({
   fillHeight?: boolean;
 }) {
   const cardClass = fillHeight 
-    ? `flex min-h-0 flex-1 flex-col overflow-hidden border border-stroke-soft-200 bg-bg-white-0 ${className}`
-    : `border border-stroke-soft-200 bg-bg-white-0 ${className}`;
+    ? `flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-stroke-soft-200 bg-bg-white-0 shadow-regular-xs ${className}`
+    : `rounded-xl border border-stroke-soft-200 bg-bg-white-0 shadow-regular-xs ${className}`;
   
   const contentClass = fillHeight
     ? `flex min-h-0 flex-1 flex-col overflow-hidden ${noPadding ? "" : "p-4 md:p-5"}`
@@ -217,7 +217,7 @@ export function PageCard({
  */
 export function PageTable({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`overflow-hidden rounded-sm border border-stroke-soft-200 bg-bg-white-0 ${className}`}>
+    <div className={`overflow-hidden rounded-xl border border-stroke-soft-200 bg-bg-white-0 shadow-regular-xs ${className}`}>
       <table className="w-full text-sm">{children}</table>
     </div>
   );
@@ -264,15 +264,17 @@ export function PageEmpty({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
+    <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
       {icon && (
-        <div className="mb-4 text-text-soft-400">{icon}</div>
+        <div className="mb-5 flex size-14 items-center justify-center rounded-2xl border border-stroke-soft-200 bg-bg-white-0 text-text-soft-400 shadow-regular-xs [&_svg]:size-6">
+          {icon}
+        </div>
       )}
-      <h3 className="text-base font-medium text-text-strong-950">{title}</h3>
+      <h3 className="text-base font-semibold tracking-tight text-text-strong-950">{title}</h3>
       {description && (
-        <p className="mt-1 text-sm text-text-sub-600">{description}</p>
+        <p className="mt-1.5 max-w-sm text-sm text-text-sub-600">{description}</p>
       )}
-      {action && <div className="mt-4">{action}</div>}
+      {action && <div className="mt-5">{action}</div>}
     </div>
   );
 }

@@ -13,39 +13,42 @@
 @custom-variant hover (&:hover);
 
 :root {
-  --bg-white-0: #f4f4f5;
-  --bg-weak-50: #ececee;
-  --bg-soft-200: #e4e4e7;
-  --bg-sub-300: #d4d4d4;
+  /* 页面底色与卡片表面分层：浅灰底 + 纯白卡片，让卡片浮起 */
+  --bg-page: #f6f6f7;
+  --bg-white-0: #ffffff;
+  --bg-weak-50: #f3f3f4;
+  --bg-soft-200: #e9e9ec;
+  --bg-sub-300: #d6d6da;
   --bg-surface-800: #262626;
   --bg-strong-950: #0a0a0a;
 
   --text-strong-950: #0a0a0a;
-  --text-sub-600: #525252;
-  --text-soft-400: #737373;
-  --text-disabled-300: #a3a3a3;
+  --text-sub-600: #51525c;
+  --text-soft-400: #82828b;
+  --text-disabled-300: #a8a8af;
   --text-white-0: #fafafa;
 
   --stroke-strong-950: #0a0a0a;
-  --stroke-sub-300: #d4d4d4;
-  --stroke-soft-200: #d8d8dc;
-  --stroke-white-0: #f4f4f5;
+  --stroke-sub-300: #d4d4d8;
+  --stroke-soft-200: #e7e7ea;
+  --stroke-white-0: #ffffff;
 
   --primary-darker: #000000;
   --primary-dark: #0a0a0a;
   --primary-base: #171717;
   --primary-alpha-24: rgba(23, 23, 23, 0.2);
   --primary-alpha-16: rgba(23, 23, 23, 0.12);
-  --primary-alpha-10: rgba(23, 23, 23, 0.08);
+  --primary-alpha-10: rgba(23, 23, 23, 0.06);
 
   --checkbox-fill: #171717;
   --checkbox-mark: #ffffff;
 
-  --group-header-bg: #ebebed;
-  --group-header-bg-hover: #e2e2e6;
+  --group-header-bg: #fafafa;
+  --group-header-bg-hover: #f3f3f4;
 
   --ring-focus: #a3a3a3;
-  --overlay-hover: rgba(0, 0, 0, 0.04);
+  --overlay-hover: rgba(10, 10, 10, 0.04);
+  --overlay: rgba(10, 10, 10, 0.32);
 
   --success-dark: #0b4627;
   --success-base: #16a34a;
@@ -66,29 +69,44 @@
   --faded-base: #737373;
   --faded-light: #e5e5e5;
   --faded-lighter: #ececee;
+
+  --information-dark: #1e3a8a;
+  --information-base: #2563eb;
+  --information-light: #bfdbfe;
+  --information-lighter: #eff6ff;
+
+  /* 极轻阴影标度：白卡片在浅灰底上的层次（用 elev 命名避免覆盖 Tailwind 默认 shadow-*） */
+  --elev-xs: 0 1px 2px 0 rgba(16, 17, 18, 0.05);
+  --elev-sm: 0 1px 2px 0 rgba(16, 17, 18, 0.04), 0 2px 5px -1px rgba(16, 17, 18, 0.05);
+  --elev-md: 0 4px 8px -2px rgba(16, 17, 18, 0.06), 0 2px 4px -2px rgba(16, 17, 18, 0.05);
+  --elev-lg: 0 12px 24px -6px rgba(16, 17, 18, 0.1), 0 4px 8px -4px rgba(16, 17, 18, 0.06);
+  --elev-overlay: 0 8px 24px -6px rgba(16, 17, 18, 0.12), 0 2px 6px -2px rgba(16, 17, 18, 0.08);
 }
 
 .dark {
-  --bg-white-0: #050505;
-  --bg-weak-50: #000000;
-  --bg-soft-200: #121212;
-  --bg-sub-300: #404040;
+  /* 暗色统一为同一冷中性色阶：页面底紧贴卡片表面下一档，避免突兀的纯黑 */
+  --bg-page: #0e0e11;
+  --bg-white-0: #17171a;
+  --bg-weak-50: #202024;
+  --bg-soft-200: #28282d;
+  --bg-sub-300: #38383f;
   --bg-surface-800: #e5e5e5;
   --bg-strong-950: #fafafa;
 
   --text-strong-950: #fafafa;
-  --text-sub-600: #a3a3a3;
-  --text-soft-400: #737373;
-  --text-disabled-300: #525252;
+  --text-sub-600: #a0a0a8;
+  --text-soft-400: #76767e;
+  --text-disabled-300: #525258;
   --text-white-0: #0a0a0a;
 
   --stroke-strong-950: #fafafa;
-  --stroke-sub-300: #404040;
-  --stroke-soft-200: rgba(255, 255, 255, 0.12);
+  --stroke-sub-300: #3a3a3f;
+  --stroke-soft-200: rgba(255, 255, 255, 0.1);
   --stroke-white-0: #0a0a0a;
 
   --ring-focus: #525252;
   --overlay-hover: rgba(255, 255, 255, 0.06);
+  --overlay: rgba(0, 0, 0, 0.6);
 
   --primary-darker: #e5e5e5;
   --primary-dark: #fafafa;
@@ -100,8 +118,8 @@
   --checkbox-fill: #fafafa;
   --checkbox-mark: #0a0a0a;
 
-  --group-header-bg: #0c0c0c;
-  --group-header-bg-hover: #111111;
+  --group-header-bg: #1b1b1e;
+  --group-header-bg-hover: #202024;
 
   --success-dark: #86efac;
   --success-base: #22c55e;
@@ -122,9 +140,22 @@
   --faded-base: #737373;
   --faded-light: rgba(163, 163, 163, 0.2);
   --faded-lighter: rgba(163, 163, 163, 0.12);
+
+  --information-dark: #93c5fd;
+  --information-base: #3b82f6;
+  --information-light: rgba(59, 130, 246, 0.2);
+  --information-lighter: rgba(59, 130, 246, 0.12);
+
+  /* 暗色阴影更深，弹层靠阴影 + 描边共同浮起 */
+  --elev-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --elev-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.5);
+  --elev-md: 0 6px 16px -4px rgba(0, 0, 0, 0.6);
+  --elev-lg: 0 16px 32px -8px rgba(0, 0, 0, 0.7);
+  --elev-overlay: 0 12px 32px -8px rgba(0, 0, 0, 0.72);
 }
 
 @theme {
+  --color-bg-page: var(--bg-page);
   --color-bg-white-0: var(--bg-white-0);
   --color-bg-weak-50: var(--bg-weak-50);
   --color-bg-soft-200: var(--bg-soft-200);
@@ -173,6 +204,13 @@
   --color-faded-light: var(--faded-light);
   --color-faded-lighter: var(--faded-lighter);
 
+  --color-information-dark: var(--information-dark);
+  --color-information-base: var(--information-base);
+  --color-information-light: var(--information-light);
+  --color-information-lighter: var(--information-lighter);
+
+  --color-overlay: var(--overlay);
+
   --color-static-black: #0a0a0a;
   --color-static-white: #ffffff;
 
@@ -216,12 +254,38 @@
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-  --radius-10: 0.25rem;
-  --radius-20: 0.375rem;
+  /* 字阶：统一标签/正文/小标题字号与字重 */
+  --text-subheading-xs: 0.6875rem;
+  --text-subheading-xs--line-height: 1rem;
+  --text-subheading-xs--font-weight: 500;
+  --text-subheading-xs--letter-spacing: 0.04em;
+  --text-label-xs: 0.75rem;
+  --text-label-xs--line-height: 1rem;
+  --text-label-xs--font-weight: 500;
+  --text-label-sm: 0.8125rem;
+  --text-label-sm--line-height: 1.25rem;
+  --text-label-sm--font-weight: 500;
+  --text-label-md: 0.875rem;
+  --text-label-md--line-height: 1.25rem;
+  --text-label-md--font-weight: 500;
+  --text-paragraph-xs: 0.75rem;
+  --text-paragraph-xs--line-height: 1rem;
+  --text-paragraph-sm: 0.875rem;
+  --text-paragraph-sm--line-height: 1.25rem;
 
-  --shadow-regular-xs: none;
-  --shadow-regular-sm: none;
-  --shadow-regular-md: none;
+  /* 柔化全局圆角标度：控件 ~6px、卡片 ~10px */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-10: 0.5rem;
+  --radius-20: 0.625rem;
+
+  --shadow-regular-xs: var(--elev-xs);
+  --shadow-regular-sm: var(--elev-sm);
+  --shadow-regular-md: var(--elev-md);
+  --shadow-regular-lg: var(--elev-lg);
+  --shadow-overlay: var(--elev-overlay);
 
   --shadow-button-primary-focus: 0 0 0 2px var(--bg-white-0), 0 0 0 4px var(--primary-alpha-16);
   --shadow-button-important-focus: 0 0 0 2px var(--bg-white-0), 0 0 0 4px var(--primary-alpha-16);
@@ -229,7 +293,7 @@
 }
 
 body {
-  background-color: var(--bg-white-0);
+  background-color: var(--bg-page);
   color: var(--text-strong-950);
   font-family: var(--font-sans);
   margin: 0;
@@ -265,7 +329,7 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: var(--stroke-sub-300);
-  border-radius: 0;
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {

@@ -32,9 +32,9 @@ export function ResourceCard({ icon: Icon, label, value, usage, color }: Resourc
         </span>
       </div>
 
-      <div className={`mt-3 h-1.5 w-full ${colors.bar}`}>
+      <div className={`mt-3 h-1.5 w-full overflow-hidden rounded-full ${colors.bar}`}>
         <div
-          className={`h-full ${colors.fill} transition-all duration-300`}
+          className={`h-full rounded-full ${colors.fill} transition-all duration-300`}
           style={{ width: `${Math.min(100, usage)}%` }}
         />
       </div>

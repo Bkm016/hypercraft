@@ -66,7 +66,7 @@ const TabMenuHorizontalList = React.forwardRef<
       <TabsPrimitive.List
         ref={mergeRefs(forwardedRef, listRef)}
         className={cn(
-          'group/tab-list relative flex h-12 items-center gap-6 whitespace-nowrap border-y border-stroke-soft-200',
+          'group/tab-list relative flex h-11 items-center gap-6 whitespace-nowrap border-b border-stroke-soft-200',
           className,
         )}
         {...rest}
@@ -103,9 +103,11 @@ const TabMenuHorizontalTrigger = React.forwardRef<
       ref={forwardedRef}
       className={cn(
         // base
-        'group/tab-item h-12 py-3.5 text-label-sm text-text-sub-600 outline-none',
+        'group/tab-item h-11 py-3 text-label-sm text-text-sub-600 outline-none',
         'flex items-center justify-center gap-1.5',
         'transition duration-200 ease-out',
+        // hover
+        'hover:text-text-strong-950',
         // focus
         'focus:outline-none',
         // active
