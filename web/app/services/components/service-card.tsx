@@ -28,9 +28,7 @@ import { MenuItem } from "@/components/ui/menu-item";
 import { ServiceStatusDot, SERVICE_STATE_CONFIG } from "@/components/ui/service-status";
 import { type ServiceSummary, type ServiceGroup } from "@/lib/api";
 import { TagEditPopover } from "./tag-edit-popover";
-import { TagEditModal } from "./mobile/tag-edit-modal";
 import { GroupSelectPopover } from "./group-select-popover";
-import { GroupSelectModal } from "./mobile/group-select-modal";
 import { StopServicePopover } from "./stop-service-popover";
 import { parseTag, getTagColor } from "./tag-utils";
 
@@ -55,25 +53,19 @@ export interface ServiceCardProps {
   compact?: boolean;
 }
 
-// 拖拽浮层与组内 compact 行同款排版，仅加描边便于跟手
+// 拖拽浮层与组内 compact 行同款单行排版，仅加描边便于跟手
 export function ServiceCardDragOverlay({ service }: { service: ServiceSummary }) {
   const isRunning = service.state === "running";
 
   return (
-    <div className="flex cursor-grabbing items-stretch rounded-lg border border-stroke-sub-300 bg-bg-white-0 shadow-regular-md">
-      <div className="flex w-10 shrink-0 items-center justify-center text-text-soft-400">
+    <div className="flex cursor-grabbing items-center gap-3 rounded-lg border border-stroke-sub-300 bg-bg-white-0 py-2 pl-2 pr-4 shadow-overlay">
+      <span className="flex w-6 shrink-0 items-center justify-center text-text-soft-400">
         <RiDraggable className="size-4" />
-      </div>
-      <div className="flex min-w-0 flex-1 items-center gap-2 my-3 mr-3 sm:gap-3 sm:mr-4">
+      </span>
       <ServiceStatusDot state={service.state} size="sm" />
-      <span
-        className={`min-w-0 flex-1 truncate text-sm font-medium ${
-          isRunning ? "text-text-strong-950" : "text-text-soft-400"
-        }`}
-      >
+      <span className={`min-w-0 flex-1 truncate text-sm font-medium ${isRunning ? "text-text-strong-950" : "text-text-soft-400"}`}>
         {service.name}
       </span>
-      </div>
     </div>
   );
 }
@@ -97,9 +89,7 @@ export function ServiceCard({
   const state = stateConfig[service.state];
   const isRunning = service.state === "running";
 
-  // Modal/Popover 状态
-  const [tagModalOpen, setTagModalOpen] = useState(false);
-  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  // Popover 状态
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [favorited, setFavorited] = useState(false);
 
@@ -148,7 +138,7 @@ export function ServiceCard({
         <div
           {...attributes}
           {...listeners}
-          className="flex w-10 shrink-0 cursor-grab touch-none items-center justify-center text-text-soft-400 active:cursor-grabbing hover:text-text-sub-600"
+          className="flex w-6 shrink-0 cursor-grab touch-none items-center justify-center text-text-soft-400 active:cursor-grabbing hover:text-text-sub-600"
           aria-label="拖拽排序"
         >
           <RiDraggable className="size-4" />
@@ -159,7 +149,7 @@ export function ServiceCard({
         <div
           {...attributes}
           {...listeners}
-          className="flex w-10 shrink-0 cursor-grab touch-none items-center justify-center text-text-soft-400 active:cursor-grabbing hover:text-text-sub-600"
+          className="flex w-6 shrink-0 cursor-grab touch-none items-center justify-center text-text-soft-400 active:cursor-grabbing hover:text-text-sub-600"
           aria-label="拖拽排序"
         >
           <RiDraggable className="size-4" />
@@ -169,7 +159,7 @@ export function ServiceCard({
       <div
         className={
           compact
-            ? `flex min-w-0 flex-1 items-center gap-2 my-3 mr-3 sm:gap-3 sm:mr-4 ${isDraggable ? "" : "ml-3 sm:ml-4"}`
+            ? `flex min-w-0 flex-1 items-center gap-2.5 py-2 pr-3 sm:pr-4 ${isDraggable ? "" : "pl-3 sm:pl-4"}`
             : "contents"
         }
       >
@@ -189,28 +179,25 @@ export function ServiceCard({
         />
       </div>
 
-      {/* 状态指示器 */}
+      {/* 状态点：running 呼吸，hover 出状态文案 */}
       <Tooltip.Root>
         <Tooltip.Trigger asChild>
-          <span className="inline-flex shrink-0">
-            <ServiceStatusDot state={service.state} size={compact ? "sm" : "md"} />
+          <span className="flex shrink-0 items-center justify-center px-0.5">
+            <ServiceStatusDot state={service.state} size="sm" />
           </span>
         </Tooltip.Trigger>
         <Tooltip.Content>{state.label}</Tooltip.Content>
       </Tooltip.Root>
 
-      {/* 服务信息 */}
-      <Link
-        href={`/services/${service.id}`}
-        className="flex-1 min-w-0"
-      >
-        <div
-          className={`truncate text-sm font-medium ${
+      {/* 服务信息：仅名称单行 */}
+      <Link href={`/services/${service.id}`} className="min-w-0 flex-1">
+        <span
+          className={`block truncate text-sm font-medium ${
             isRunning ? "text-text-strong-950" : "text-text-soft-400"
           }`}
         >
           {service.name}
-        </div>
+        </span>
       </Link>
 
       {/* 标签 - 移动端只显示颜色圆点 */}
@@ -320,8 +307,8 @@ export function ServiceCard({
             )}
             {isAdmin && (
               <>
-                {/* 桌面端：标签和分组 Popover 放外面 */}
-                <div className="hidden sm:flex items-center gap-0.5">
+                {/* 标签和分组 Popover：所有断点常驻显示 */}
+                <div className="flex items-center gap-0.5">
                   <TagEditPopover
                     serviceId={service.id}
                     tags={service.tags || []}
@@ -352,21 +339,6 @@ export function ServiceCard({
                     </CompactButton.Root>
                   </Popover.Trigger>
                   <Popover.Content align="end" className="w-36 p-1" showArrow={false}>
-                    {/* 移动端显示标签和分组选项 */}
-                    <MenuItem
-                      icon={RiPriceTag3Line}
-                      className="sm:hidden"
-                      onClick={() => { setMoreMenuOpen(false); setTagModalOpen(true); }}
-                    >
-                      编辑标签
-                    </MenuItem>
-                    <MenuItem
-                      icon={RiFolderLine}
-                      className="sm:hidden"
-                      onClick={() => { setMoreMenuOpen(false); setGroupModalOpen(true); }}
-                    >
-                      编辑分组
-                    </MenuItem>
                     <MenuItem
                       icon={RiFileCopyLine}
                       onClick={() => { setMoreMenuOpen(false); onDuplicate(); }}
@@ -388,24 +360,6 @@ export function ServiceCard({
                     </MenuItem>
                   </Popover.Content>
                 </Popover.Root>
-
-                {/* 移动端 Modal */}
-                <TagEditModal
-                  open={tagModalOpen}
-                  onOpenChange={setTagModalOpen}
-                  serviceId={service.id}
-                  tags={service.tags || []}
-                  allTags={allTags}
-                  onUpdate={onRefresh}
-                />
-                <GroupSelectModal
-                  open={groupModalOpen}
-                  onOpenChange={setGroupModalOpen}
-                  serviceId={service.id}
-                  currentGroup={service.group || null}
-                  groups={allGroups}
-                  onUpdate={onRefresh}
-                />
               </>
             )}
           </>

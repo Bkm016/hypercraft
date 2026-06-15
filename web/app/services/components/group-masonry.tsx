@@ -67,10 +67,10 @@ export function GroupMasonry({ items }: { items: GroupMasonryItem[] }) {
 }
 
 export function estimateGroupCardHeight(serviceCount: number, collapsed: boolean): number {
-  const header = 44;
+  const header = 48;
   if (collapsed || serviceCount === 0) return header;
-  const row = 34;
+  const row = 40;
   const list = serviceCount * row;
-  const pad = 16;
+  const pad = 8;
   return header + list + pad;
 }

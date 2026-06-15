@@ -29,6 +29,13 @@ import { BatchCommandModal } from "./components/batch-command-modal";
 
 type StateFilter = "all" | "running" | "stopped";
 
+// 状态磁贴配置：兼作筛选器，点击切换状态过滤
+const STAT_TILES: { key: StateFilter; label: string; dot: string }[] = [
+  { key: "all", label: "全部", dot: "" },
+  { key: "running", label: "运行中", dot: "bg-success-base" },
+  { key: "stopped", label: "已停止", dot: "bg-text-soft-400" },
+];
+
 const TAG_FILTER_STORAGE_KEY = "hypercraft-tag-filter";
 
 function getStoredTags(): string[] {
@@ -237,31 +244,28 @@ export default function ServicesPage() {
         }
       >
         <PageToolbar>
-          {/* 筛选按钮 */}
+          {/* 状态筛选：下划线 Tab，与详情页 Tab 风格保持一致 */}
           <div className="w-full overflow-x-auto md:flex-1">
             <TabMenu.Root value={filter} onValueChange={(v) => setFilter(v as StateFilter)}>
               <TabMenu.List className="min-w-full">
-                <TabMenu.Trigger value="all">
-                  全部 <span className="ml-1 opacity-60">{stats.total}</span>
-                </TabMenu.Trigger>
-                <TabMenu.Trigger value="running">
-                  <span className="mr-1.5 size-1.5 rounded-full bg-success-base" />
-                  运行中 <span className="ml-1 opacity-60">{stats.running}</span>
-                </TabMenu.Trigger>
-                <TabMenu.Trigger value="stopped">
-                  <span className="mr-1.5 size-1.5 rounded-full bg-text-soft-400" />
-                  已停止 <span className="ml-1 opacity-60">{stats.stopped}</span>
-                </TabMenu.Trigger>
+                {STAT_TILES.map((tile) => (
+                  <TabMenu.Trigger key={tile.key} value={tile.key}>
+                    {tile.dot && <span className={`size-1.5 rounded-full ${tile.dot}`} />}
+                    {tile.label}
+                    <span className="tabular-nums text-text-soft-400 group-data-[state=active]/tab-item:text-text-sub-600">
+                      {stats[tile.key === "all" ? "total" : tile.key]}
+                    </span>
+                  </TabMenu.Trigger>
+                ))}
               </TabMenu.List>
             </TabMenu.Root>
           </div>
 
-          {/* 搜索 + 标签筛选 + 批量操作 */}
           <div className="flex w-full items-center gap-2 md:w-auto md:gap-3 md:shrink-0">
             <SearchField
               variant="toolbar"
               className="min-w-0 flex-1 sm:max-w-[14rem] md:w-56 md:flex-none"
-              placeholder="搜索服务…"
+              placeholder="搜索服务名称或 ID…"
               value={search}
               onValueChange={setSearch}
             />

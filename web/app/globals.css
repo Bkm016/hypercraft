@@ -49,6 +49,7 @@
   --ring-focus: #a3a3a3;
   --overlay-hover: rgba(10, 10, 10, 0.04);
   --overlay: rgba(10, 10, 10, 0.32);
+  --dot-grid: rgba(10, 10, 10, 0.04);
 
   --success-dark: #0b4627;
   --success-base: #16a34a;
@@ -107,6 +108,7 @@
   --ring-focus: #525252;
   --overlay-hover: rgba(255, 255, 255, 0.06);
   --overlay: rgba(0, 0, 0, 0.6);
+  --dot-grid: rgba(255, 255, 255, 0.035);
 
   --primary-darker: #e5e5e5;
   --primary-dark: #fafafa;
@@ -294,6 +296,10 @@
 
 body {
   background-color: var(--bg-page);
+  /* 极淡点阵纹理：仅在留白处隐约可见，增加纵深与"工具感" */
+  background-image: radial-gradient(var(--dot-grid) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: -11px -11px;
   color: var(--text-strong-950);
   font-family: var(--font-sans);
   margin: 0;

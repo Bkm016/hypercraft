@@ -4,12 +4,15 @@ import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import {
   DndContext,
   DragOverlay,
-  closestCenter,
+  pointerWithin,
+  rectIntersection,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragStartEvent,
+  type DragOverEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
@@ -55,6 +58,8 @@ export function GroupedServicesView({
   const [localServices, setLocalServices] = useState(() => applyServiceOrder(services, isAdmin));
   // 当前拖拽的服务
   const [activeService, setActiveService] = useState<ServiceSummary | null>(null);
+  // 跨组拖拽时的目标分组 key（"ungrouped" 或 group.id），用于整组高亮
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   // 正在保存中，忽略外部更新
   const [isSaving, setIsSaving] = useState(false);
   // shift 多选：记录上次选择的服务 ID
@@ -66,6 +71,14 @@ export function GroupedServicesView({
       setLocalServices(applyServiceOrder(services, isAdmin));
     }
   }, [services, isSaving, isAdmin]);
+
+  // 多容器碰撞检测：以指针落点为准，命中服务项时取该项（精确插入位置），否则取分组容器（含空白/标题区）
+  const collisionDetection = useCallback<CollisionDetection>((args) => {
+    const pointerCollisions = pointerWithin(args);
+    const collisions = pointerCollisions.length > 0 ? pointerCollisions : rectIntersection(args);
+    const serviceHit = collisions.find((c) => !String(c.id).startsWith("group-drop:"));
+    return serviceHit ? [serviceHit] : collisions;
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -149,80 +162,151 @@ export function GroupedServicesView({
     setActiveService(service || null);
   }, [localServices]);
 
+  // 拖拽过程中解析当前落点所属分组，仅管理员需要整组高亮
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    if (!isAdmin) return;
+    const { over } = event;
+    if (!over) {
+      setDropTargetKey((prev) => (prev === null ? prev : null));
+      return;
+    }
+    const overData = over.data.current as { type?: string; groupId?: string | null } | undefined;
+    let key: string | null = null;
+    if (overData?.type === "group") {
+      key = overData.groupId ?? "ungrouped";
+    } else {
+      const overId = over.id as string;
+      for (const [groupId, svcList] of groupedServices) {
+        if (svcList.some((s) => s.id === overId)) {
+          key = groupId ?? "ungrouped";
+          break;
+        }
+      }
+    }
+    setDropTargetKey((prev) => (prev === key ? prev : key));
+  }, [isAdmin, groupedServices]);
+
+  // 远程保存排序结果并刷新，失败时回滚到服务器状态
+  const persistReorder = useCallback(async (request: { id: string; group: string | null; order: number }[]) => {
+    setIsSaving(true);
+    try {
+      await api.reorderServices({ services: request });
+      await onRefresh();
+    } catch (error) {
+      console.error("Failed to reorder services:", error);
+      await onRefresh();
+    } finally {
+      setIsSaving(false);
+    }
+  }, [onRefresh]);
+
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     setActiveService(null);
-    
+    setDropTargetKey(null);
+
     const { active, over } = event;
-    
     if (!over || active.id === over.id) {
       return;
     }
 
     const activeId = active.id as string;
     const overId = over.id as string;
-    
-    let activeGroup: string | null = null;
-    let activeServices: ServiceSummary[] = [];
-    
+
+    // 定位源分组
+    let sourceGroup: string | null = null;
+    let foundSource = false;
     for (const [groupId, svcList] of groupedServices) {
-      const activeIndex = svcList.findIndex(s => s.id === activeId);
-      if (activeIndex !== -1) {
-        activeGroup = groupId;
-        activeServices = [...svcList];
+      if (svcList.some((s) => s.id === activeId)) {
+        sourceGroup = groupId;
+        foundSource = true;
         break;
       }
     }
-    
-    const overIndex = activeServices.findIndex(s => s.id === overId);
-    if (overIndex === -1) {
-      return;
-    }
-    
-    const activeIndex = activeServices.findIndex(s => s.id === activeId);
-    const newServices = arrayMove(activeServices, activeIndex, overIndex);
-    
-    // 乐观更新本地状态
-    setLocalServices(prev => {
-      const updated = [...prev];
-      for (let i = 0; i < newServices.length; i++) {
-        const idx = updated.findIndex(s => s.id === newServices[i].id);
+    if (!foundSource) return;
+
+    // 解析目标分组与插入位置：拖到分组容器落末尾，拖到服务上落其位置
+    const overData = over.data.current as { type?: string; groupId?: string | null } | undefined;
+    let targetGroup: string | null;
+    let targetIndex: number;
+    if (overData?.type === "group") {
+      targetGroup = overData.groupId ?? null;
+      targetIndex = (groupedServices.get(targetGroup) || []).length;
+    } else {
+      let resolved = false;
+      targetGroup = null;
+      targetIndex = 0;
+      for (const [groupId, svcList] of groupedServices) {
+        const idx = svcList.findIndex((s) => s.id === overId);
         if (idx !== -1) {
-          updated[idx] = { ...updated[idx], order: i };
+          targetGroup = groupId;
+          targetIndex = idx;
+          resolved = true;
+          break;
         }
       }
+      if (!resolved) return;
+    }
+
+    const sameGroup = sourceGroup === targetGroup;
+
+    // 跨组移动属于分组管理，仅管理员可执行
+    if (!sameGroup && !isAdmin) return;
+
+    if (sameGroup) {
+      const list = groupedServices.get(sourceGroup) || [];
+      const oldIndex = list.findIndex((s) => s.id === activeId);
+      if (oldIndex === -1 || oldIndex === targetIndex) return;
+
+      const newList = arrayMove(list, oldIndex, targetIndex);
+
+      setLocalServices((prev) => {
+        const updated = [...prev];
+        newList.forEach((svc, i) => {
+          const idx = updated.findIndex((s) => s.id === svc.id);
+          if (idx !== -1) updated[idx] = { ...updated[idx], order: i };
+        });
+        return updated;
+      });
+
+      if (isAdmin) {
+        await persistReorder(newList.map((svc, i) => ({ id: svc.id, group: sourceGroup, order: i })));
+      } else {
+        updateLocalServiceOrder(newList);
+      }
+      return;
+    }
+
+    // 跨组移动：从源组移除，按落点插入目标组，两组 order 重排
+    const moved = localServices.find((s) => s.id === activeId);
+    if (!moved) return;
+
+    const sourceList = (groupedServices.get(sourceGroup) || []).filter((s) => s.id !== activeId);
+    const targetList = [...(groupedServices.get(targetGroup) || [])];
+    const insertAt = Math.min(targetIndex, targetList.length);
+    targetList.splice(insertAt, 0, { ...moved, group: targetGroup });
+
+    setLocalServices((prev) => {
+      const updated = prev.map((s) => ({ ...s }));
+      const apply = (list: ServiceSummary[], groupId: string | null) => {
+        list.forEach((svc, i) => {
+          const idx = updated.findIndex((u) => u.id === svc.id);
+          if (idx !== -1) updated[idx] = { ...updated[idx], group: groupId, order: i };
+        });
+      };
+      apply(sourceList, sourceGroup);
+      apply(targetList, targetGroup);
       return updated;
     });
-    
-    if (isAdmin) {
-      // Admin 用户：保存到远程
-      const reorderRequest = newServices.map((service, index) => ({
-        id: service.id,
-        group: activeGroup,
-        order: index,
-      }));
-      
-      // 开始保存，阻止轮询覆盖
-      setIsSaving(true);
-      
-      try {
-        await api.reorderServices({ services: reorderRequest });
-        // 成功后刷新以同步服务器状态
-        await onRefresh();
-      } catch (error) {
-        console.error("Failed to reorder services:", error);
-        // 失败时也刷新以回滚
-        await onRefresh();
-      } finally {
-        setIsSaving(false);
-      }
-    } else {
-      // 普通用户：只保存到本地
-      updateLocalServiceOrder(newServices);
-    }
-  }, [groupedServices, onRefresh, isAdmin]);
+
+    await persistReorder([
+      ...sourceList.map((svc, i) => ({ id: svc.id, group: sourceGroup, order: i })),
+      ...targetList.map((svc, i) => ({ id: svc.id, group: targetGroup, order: i })),
+    ]);
+  }, [groupedServices, localServices, onRefresh, isAdmin, persistReorder]);
 
   const handleDragCancel = useCallback(() => {
     setActiveService(null);
+    setDropTargetKey(null);
   }, []);
 
   const handleToggleSelectAll = (ids: string[]) => {
@@ -263,7 +347,12 @@ export function GroupedServicesView({
         key: group.id,
         estimateHeight: estimateGroupCardHeight(groupServices.length, collapsedDefault),
         node: (
-          <GroupCard group={group} services={groupServices} {...cardProps} />
+          <GroupCard
+            group={group}
+            services={groupServices}
+            dropActive={dropTargetKey === group.id}
+            {...cardProps}
+          />
         ),
       });
     }
@@ -275,7 +364,14 @@ export function GroupedServicesView({
       list.push({
         key: "ungrouped",
         estimateHeight: estimateGroupCardHeight(ungrouped.length, collapsedDefault),
-        node: <GroupCard group={null} services={ungrouped} {...cardProps} />,
+        node: (
+          <GroupCard
+            group={null}
+            services={ungrouped}
+            dropActive={dropTargetKey === "ungrouped"}
+            {...cardProps}
+          />
+        ),
       });
     }
 
@@ -293,6 +389,7 @@ export function GroupedServicesView({
     operating,
     isAdmin,
     selected,
+    dropTargetKey,
     handleToggleSelectWithShift,
     handleToggleSelectAll,
   ]);
@@ -311,8 +408,9 @@ export function GroupedServicesView({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={collisionDetection}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
