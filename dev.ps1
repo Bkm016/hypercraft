@@ -1,13 +1,13 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-  一键启动 Hypercraft 前后端（本地开发）
+  Start Hypercraft API + Web for local dev
 
 .DESCRIPTION
-  - 后端: cargo run -p hypercraft-api（默认 0.0.0.0:8080）
-  - 前端: pnpm dev（默认 http://localhost:3000）
-  - 缺仓库根 .env 时从 .env.example 复制
-  - Ctrl+C 同时停止前后端
+  - API: cargo run -p hypercraft-api
+  - Web: pnpm dev
+  - Copy .env.example -> .env when missing
+  - Ctrl+C stops child processes
 
 .EXAMPLE
   .\dev.ps1
@@ -47,7 +47,7 @@ function Write-WarnMsg([string]$Message) {
 
 function Assert-Command([string]$Name) {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
-        throw "未找到命令: $Name"
+        throw "command not found: $Name"
     }
 }
 
@@ -58,14 +58,13 @@ function Ensure-RootEnv {
         return
     }
     if (-not (Test-Path -LiteralPath $example)) {
-        throw "缺少 .env.example，无法生成 .env"
+        throw "missing .env.example, cannot create .env"
     }
     Copy-Item -LiteralPath $example -Destination $envFile
-    Write-Ok "已生成 .env（来自 .env.example）"
+    Write-Ok "created .env from .env.example"
 }
 
 function Get-ApiBaseUrl {
-    # 优先读仓库根 .env 的 HC_BIND，再回退到参数
     $bind = $Bind
     $envFile = Join-Path $Root ".env"
     if (Test-Path -LiteralPath $envFile) {
@@ -93,13 +92,13 @@ function Get-ApiBaseUrl {
 
 function Wait-ApiHealthy([string]$BaseUrl, [int]$TimeoutSec = 300) {
     $health = "$BaseUrl/health"
-    Write-Step "等待 API 就绪: $health"
+    Write-Step "waiting API: $health"
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     while ((Get-Date) -lt $deadline) {
         try {
             $resp = Invoke-WebRequest -Uri $health -UseBasicParsing -TimeoutSec 2
             if ($resp.StatusCode -eq 200) {
-                Write-Ok "API 已就绪"
+                Write-Ok "API ready"
                 return
             }
         } catch {
@@ -107,15 +106,14 @@ function Wait-ApiHealthy([string]$BaseUrl, [int]$TimeoutSec = 300) {
         }
         Start-Sleep -Milliseconds 500
     }
-    throw "API 在 ${TimeoutSec}s 内未就绪: $health"
+    throw "API not ready within ${TimeoutSec}s: $health"
 }
 
 function Stop-Child([System.Diagnostics.Process]$Proc, [string]$Name) {
     if ($null -eq $Proc) { return }
     if ($Proc.HasExited) { return }
-    Write-Step "停止 $Name (PID $($Proc.Id))"
+    Write-Step "stop $Name (PID $($Proc.Id))"
     try {
-        # 杀掉进程树，避免 cargo/next 子进程残留
         & taskkill.exe /PID $Proc.Id /T /F 2>$null | Out-Null
     } catch {
         try { $Proc.Kill() } catch { }
@@ -127,7 +125,6 @@ function Cleanup {
     Stop-Child $script:WebProc "Web"
 }
 
-# ── 前置检查 ──────────────────────────────────────────────
 if (-not $WebOnly) {
     Assert-Command "cargo"
 }
@@ -137,10 +134,10 @@ if (-not $ApiOnly) {
 }
 
 if (-not (Test-Path -LiteralPath $BackendDir)) {
-    throw "找不到 backend 目录: $BackendDir"
+    throw "backend dir not found: $BackendDir"
 }
 if (-not (Test-Path -LiteralPath $WebDir)) {
-    throw "找不到 web 目录: $WebDir"
+    throw "web dir not found: $WebDir"
 }
 
 Ensure-RootEnv
@@ -148,23 +145,22 @@ $ApiBase = Get-ApiBaseUrl
 
 if (-not $ApiOnly -and -not $SkipInstall) {
     if (-not (Test-Path -LiteralPath (Join-Path $WebDir "node_modules"))) {
-        Write-Step "安装前端依赖 (pnpm install)..."
+        Write-Step "pnpm install..."
         Push-Location $WebDir
         try {
             & pnpm install
-            if ($LASTEXITCODE -ne 0) { throw "pnpm install 失败" }
+            if ($LASTEXITCODE -ne 0) { throw "pnpm install failed" }
         } finally {
             Pop-Location
         }
     }
 }
 
-# ── 启动 ─────────────────────────────────────────────────
 try {
     if (-not $WebOnly) {
-        Write-Step "启动后端: cargo run -p hypercraft-api"
-        Write-Step "  工作目录: $BackendDir"
-        Write-Step "  绑定: $Bind（可用 -Bind 覆盖；.env 中 HC_BIND 优先于默认）"
+        Write-Step "start API: cargo run -p hypercraft-api"
+        Write-Step "  cwd: $BackendDir"
+        Write-Step "  bind: $Bind (.env HC_BIND wins when present)"
 
         $apiArgs = @(
             "-NoProfile"
@@ -173,7 +169,6 @@ try {
             @"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Set-Location -LiteralPath '$BackendDir'
-# 本地测试默认绑定，.env 已存在时以 .env 为准（dotenv 优先读文件）
 if (-not `$env:HC_BIND) { `$env:HC_BIND = '$Bind' }
 if (-not `$env:HC_CORS_ORIGINS) { `$env:HC_CORS_ORIGINS = 'http://localhost:$WebPort,http://127.0.0.1:$WebPort' }
 Write-Host '[api] cargo run -p hypercraft-api' -ForegroundColor Cyan
@@ -186,7 +181,7 @@ exit `$LASTEXITCODE
     }
 
     if (-not $ApiOnly) {
-        Write-Step "启动前端: pnpm dev --port $WebPort"
+        Write-Step "start Web: pnpm dev --port $WebPort"
         $webArgs = @(
             "-NoProfile"
             "-ExecutionPolicy", "Bypass"
@@ -203,7 +198,7 @@ exit `$LASTEXITCODE
     }
 
     Write-Host ""
-    Write-Ok "本地环境已启动"
+    Write-Ok "local stack started"
     if (-not $WebOnly) {
         Write-Host "  API : $ApiBase"
         Write-Host "  Health: $ApiBase/health"
@@ -212,17 +207,16 @@ exit `$LASTEXITCODE
         Write-Host "  Web : http://localhost:$WebPort"
     }
     Write-Host ""
-    Write-WarnMsg "关闭本窗口或按 Ctrl+C 将停止已拉起的子进程窗口"
+    Write-WarnMsg "close this window or Ctrl+C to stop children"
     Write-Host ""
 
-    # 阻塞主脚本，便于 Ctrl+C 统一清理
     while ($true) {
         if ($ApiProc -and $ApiProc.HasExited -and -not $WebOnly) {
-            Write-WarnMsg "API 进程已退出 (code=$($ApiProc.ExitCode))"
+            Write-WarnMsg "API exited (code=$($ApiProc.ExitCode))"
             break
         }
         if ($WebProc -and $WebProc.HasExited -and -not $ApiOnly) {
-            Write-WarnMsg "Web 进程已退出 (code=$($WebProc.ExitCode))"
+            Write-WarnMsg "Web exited (code=$($WebProc.ExitCode))"
             break
         }
         Start-Sleep -Seconds 1
