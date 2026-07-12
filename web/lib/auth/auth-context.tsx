@@ -101,13 +101,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // 恢复登录状态
       const accessToken = api.getAccessToken();
-      if (accessToken) {
+      const refreshToken = api.getRefreshToken();
+      if (accessToken || refreshToken) {
         // JWT：解析 claims
-        const claims = parseJwt(accessToken);
+        let claims = accessToken ? parseJwt(accessToken) : null;
+        if (!claims || isTokenExpired(claims)) {
+          if (refreshToken) {
+            try {
+              // 页面重开时优先续期会话，只有 refresh token 失效才要求重新登录。
+              const tokens = await api.authRefresh({ refresh_token: refreshToken });
+              api.setTokens(tokens);
+              claims = parseJwt(tokens.access_token);
+            } catch {
+              claims = null;
+            }
+          }
+        }
+
         if (claims && !isTokenExpired(claims)) {
           setUser(claims);
         } else {
-          // token 过期，清除
           api.clearTokens();
         }
       }

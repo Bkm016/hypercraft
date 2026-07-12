@@ -100,14 +100,16 @@ class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
+    const accessToken = this.getAccessToken();
+    const refreshToken = this.getRefreshToken();
     const url = `${getApiBaseUrl()}${endpoint}`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...(options.headers as Record<string, string>),
     };
 
-    if (this.accessToken) {
-      headers.Authorization = `Bearer ${this.accessToken}`;
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
     }
 
     const response = await fetch(url, {
@@ -116,23 +118,24 @@ class ApiClient {
     });
 
     // 401 且有 refresh token 时尝试刷新
-    if (response.status === 401 && this.refreshToken) {
+    if (response.status === 401 && refreshToken) {
       try {
         await this.refreshAccessToken();
-        // 重试请求
-        headers.Authorization = `Bearer ${this.accessToken}`;
-        const retryResponse = await fetch(url, { ...options, headers });
-        if (!retryResponse.ok) {
-          throw await this.parseError(retryResponse);
-        }
-        if (retryResponse.status === 204) {
-          return undefined as T;
-        }
-        return retryResponse.json();
       } catch {
         this.clearTokens();
         throw new Error("会话已过期，请重新登录");
       }
+
+      // 刷新成功后的业务错误应原样返回，不能误判为刷新失败并清除登录态。
+      headers.Authorization = `Bearer ${this.accessToken}`;
+      const retryResponse = await fetch(url, { ...options, headers });
+      if (!retryResponse.ok) {
+        throw await this.parseError(retryResponse);
+      }
+      if (retryResponse.status === 204) {
+        return undefined as T;
+      }
+      return retryResponse.json();
     }
 
     if (!response.ok) {
