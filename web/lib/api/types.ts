@@ -130,6 +130,7 @@ export interface UserSummary {
   id: string;
   username: string;
   service_ids: string[];
+  is_admin: boolean;
   totp_enabled: boolean;
   created_at?: string;
 }
@@ -143,6 +144,7 @@ export interface CreateUserRequest {
 export interface UpdateUserRequest {
   password?: string;
   service_ids?: string[];
+  is_admin?: boolean;
 }
 
 export interface ChangePasswordRequest {
@@ -160,6 +162,7 @@ export interface TokenClaims {
   token_type: TokenType;
   service_ids?: string[];
   service_id?: string;
+  is_admin?: boolean;
   exp: number;
   iat: number;
 }

@@ -144,7 +144,6 @@ export default function ProfilePage() {
 						{activeSection === "account" && (
 							<AccountPanel
 								user={user}
-								isAdmin={isAdmin}
 								services={services}
 								groups={groups}
 								refreshing={refreshing}

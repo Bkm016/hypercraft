@@ -19,8 +19,8 @@ pub async fn list_services(
 ) -> Result<Json<Vec<ServiceSummary>>, ApiError> {
     let services = state.manager.list_services().await?;
 
-    // 管理员可以看到所有服务，普通用户只能看到有权限的服务
-    let filtered: Vec<ServiceSummary> = if auth.is_admin() {
+    // 仅超管看全量；系统管理员与普通用户均按 can_access_service 过滤
+    let filtered: Vec<ServiceSummary> = if auth.is_super_admin() {
         services
     } else {
         services
@@ -35,10 +35,18 @@ pub async fn list_services(
 #[instrument(skip_all)]
 pub async fn create_service(
     State(state): State<AppState>,
-    RequireAdmin(_): RequireAdmin,
+    RequireAdmin(auth): RequireAdmin,
     Json(payload): Json<ServiceManifest>,
 ) -> Result<Json<ServiceManifest>, ApiError> {
     let svc = state.manager.create_service(payload).await?;
+
+    // 非超管创建后自动获得该服务权限
+    if !auth.is_super_admin() {
+        state
+            .user_manager
+            .add_service_permission(&auth.claims.sub, &svc.id)
+            .await?;
+    }
 
     // 同步调度任务
     if let Some(schedule) = &svc.schedule {
@@ -66,9 +74,14 @@ pub async fn get_service(
 #[instrument(skip_all)]
 pub async fn delete_service(
     State(state): State<AppState>,
-    RequireAdmin(_): RequireAdmin,
+    RequireAdmin(auth): RequireAdmin,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
+    // 非超管只能删除自己有权限的服务
+    if !auth.is_super_admin() && !auth.can_access_service(&id) {
+        return Err(ApiError::forbidden(format!("没有权限访问服务: {}", id)));
+    }
+
     // 移除调度任务
     let _ = state.scheduler.remove_schedule(&id).await;
 
@@ -79,10 +92,15 @@ pub async fn delete_service(
 #[instrument(skip_all)]
 pub async fn update_service(
     State(state): State<AppState>,
-    RequireAdmin(_): RequireAdmin,
+    RequireAdmin(auth): RequireAdmin,
     Path(id): Path<String>,
     Json(payload): Json<ServiceManifest>,
 ) -> Result<StatusCode, ApiError> {
+    // 非超管只能更新自己有权限的服务
+    if !auth.is_super_admin() && !auth.can_access_service(&id) {
+        return Err(ApiError::forbidden(format!("没有权限访问服务: {}", id)));
+    }
+
     state.manager.update_service(&id, payload.clone()).await?;
 
     // 同步调度任务
@@ -189,10 +207,15 @@ pub async fn get_schedule(
 #[instrument(skip_all)]
 pub async fn update_schedule(
     State(state): State<AppState>,
-    RequireAdmin(_): RequireAdmin,
+    RequireAdmin(auth): RequireAdmin,
     Path(id): Path<String>,
     Json(payload): Json<UpdateScheduleRequest>,
 ) -> Result<Json<ScheduleResponse>, ApiError> {
+    // 非超管只能改自己有权限的服务
+    if !auth.is_super_admin() && !auth.can_access_service(&id) {
+        return Err(ApiError::forbidden(format!("没有权限访问服务: {}", id)));
+    }
+
     // 验证 cron 表达式
     if let Some(schedule) = &payload.schedule {
         if schedule.enabled && !schedule.cron.is_empty() {

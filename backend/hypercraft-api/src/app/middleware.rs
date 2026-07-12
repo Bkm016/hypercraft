@@ -21,25 +21,30 @@ pub struct AuthInfo {
 }
 
 impl AuthInfo {
-	/// 检查是否是管理员
-	pub fn is_admin(&self) -> bool {
+	/// 检查是否是超级管理员（仅 __devtoken__）
+	pub fn is_super_admin(&self) -> bool {
 		self.claims.sub == "__devtoken__"
 	}
 
-	/// 检查是否有权限访问指定服务
+	/// 检查是否是管理员（超管或系统管理员）
+	pub fn is_admin(&self) -> bool {
+		self.is_super_admin() || self.claims.is_admin
+	}
+
+	/// 检查是否有权限访问指定服务（仅超管全量旁路）
 	pub fn can_access_service(&self, service_id: &str) -> bool {
-        if self.is_admin() {
-            return true;
-        }
-        match self.claims.token_type {
-            TokenType::User => self.claims.service_ids.contains(&service_id.to_string()),
-            TokenType::Web => self.claims.service_id.as_deref() == Some(service_id),
-            _ => false,
-        }
-    }
+		if self.is_super_admin() {
+			return true;
+		}
+		match self.claims.token_type {
+			TokenType::User => self.claims.service_ids.contains(&service_id.to_string()),
+			TokenType::Web => self.claims.service_id.as_deref() == Some(service_id),
+			_ => false,
+		}
+	}
 }
 
-/// 要求管理员权限的 Extractor
+/// 要求管理员权限的 Extractor（超管或系统管理员）
 #[derive(Debug, Clone)]
 pub struct RequireAdmin(#[allow(dead_code)] pub AuthInfo);
 
@@ -65,6 +70,36 @@ impl<S: Send + Sync> FromRequestParts<S> for RequireAdmin {
 				return Err(ApiError::forbidden("admin access required"));
 			}
 			Ok(RequireAdmin(auth))
+		})
+	}
+}
+
+/// 要求超级管理员权限的 Extractor（仅 __devtoken__）
+#[derive(Debug, Clone)]
+pub struct RequireSuperAdmin(#[allow(dead_code)] pub AuthInfo);
+
+impl<S: Send + Sync> FromRequestParts<S> for RequireSuperAdmin {
+	type Rejection = ApiError;
+
+	fn from_request_parts<'a, 'b, 'c>(
+		parts: &'a mut Parts,
+		_state: &'b S,
+	) -> Pin<Box<dyn Future<Output = Result<Self, Self::Rejection>> + Send + 'c>>
+	where
+		'a: 'c,
+		'b: 'c,
+	{
+		Box::pin(async move {
+			let auth = parts
+				.extensions
+				.get::<AuthInfo>()
+				.cloned()
+				.ok_or_else(ApiError::unauthorized)?;
+
+			if !auth.is_super_admin() {
+				return Err(ApiError::forbidden("super admin access required"));
+			}
+			Ok(RequireSuperAdmin(auth))
 		})
 	}
 }

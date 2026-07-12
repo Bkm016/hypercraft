@@ -20,6 +20,7 @@ interface AuthContextValue {
   user: TokenClaims | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isSuperAdmin: boolean;
   isAdmin: boolean;
   connectionStatus: ConnectionStatus;
 
@@ -161,11 +162,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user]
   );
 
+  const isSuperAdmin = user?.sub === "__devtoken__";
+  const isAdmin = isSuperAdmin || !!user?.is_admin;
+
   const value: AuthContextValue = {
     user,
     isLoading,
     isAuthenticated: !!user,
-    isAdmin: user?.sub === "__devtoken__",
+    isSuperAdmin,
+    isAdmin,
     connectionStatus,
     login,
     loginWithDevToken,

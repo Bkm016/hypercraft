@@ -4,6 +4,7 @@ import { useState } from "react";
 import { RiEditLine } from "@remixicon/react";
 import * as FormDialog from "@/components/ui/form-dialog";
 import { api, type UserSummary, type ServiceSummary, type ServiceGroup } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { notification } from "@/hooks/use-notification";
 import { ServicePermissionPicker } from "./service-permission-picker";
 
@@ -22,9 +23,11 @@ export function EditUserModal({
   onClose,
   onSuccess,
 }: EditUserModalProps) {
+  const { isSuperAdmin } = useAuth();
   const [selectedServices, setSelectedServices] = useState<Set<string>>(
     new Set(user.service_ids.filter((id) => id !== "*"))
   );
+  const [isAdminUser, setIsAdminUser] = useState(user.is_admin);
   const [newPassword, setNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +46,7 @@ export function EditUserModal({
       await api.updateUser(user.id, {
         password: newPassword || undefined,
         service_ids: Array.from(selectedServices),
+        ...(isSuperAdmin ? { is_admin: isAdminUser } : {}),
       });
       notification({ status: "success", title: "用户已更新" });
       onSuccess();
@@ -77,6 +81,16 @@ export function EditUserModal({
                 />
               </FormDialog.Field>
             </div>
+
+            {/* 仅超级管理员可设置系统管理员 */}
+            {isSuperAdmin && (
+              <FormDialog.Switch
+                checked={isAdminUser}
+                onCheckedChange={setIsAdminUser}
+                label="设为系统管理员"
+                description="系统管理员可管理用户，但仍受服务权限约束"
+              />
+            )}
 
             {/* 分隔线 */}
             <div className="border-t border-stroke-soft-200" />

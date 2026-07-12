@@ -17,6 +17,9 @@ pub struct User {
     /// 用户可访问的服务 ID 列表
     #[serde(default)]
     pub service_ids: Vec<String>,
+    /// 是否为系统管理员（管理用户，不旁路服务访问）
+    #[serde(default)]
+    pub is_admin: bool,
     /// Token 版本号（用于撤销旧 token）
     #[serde(default)]
     pub token_version: u64,
@@ -63,6 +66,8 @@ pub struct UpdateUserRequest {
     pub password: Option<String>,
     /// 新的服务 ID 列表（可选）
     pub service_ids: Option<Vec<String>>,
+    /// 是否设为系统管理员（可选）
+    pub is_admin: Option<bool>,
 }
 
 /// Token 类型
@@ -97,6 +102,9 @@ pub struct TokenClaims {
     /// 用户可访问的服务 ID 列表（仅 User token）
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub service_ids: Vec<String>,
+    /// 是否为系统管理员（管理用户，不旁路服务访问）
+    #[serde(default)]
+    pub is_admin: bool,
     /// Token 版本号，用于撤销旧 token（用户字段缺省时默认为 0）
     #[serde(default)]
     pub token_version: u64,
@@ -154,6 +162,8 @@ pub struct UserSummary {
     pub id: String,
     pub username: String,
     pub service_ids: Vec<String>,
+    /// 是否为系统管理员
+    pub is_admin: bool,
     /// 是否启用了双因素认证
     pub totp_enabled: bool,
     pub created_at: Option<DateTime<Utc>>,
@@ -165,6 +175,7 @@ impl From<User> for UserSummary {
             id: user.id,
             username: user.username,
             service_ids: user.service_ids,
+            is_admin: user.is_admin,
             totp_enabled: user
                 .totp_config
                 .as_ref()

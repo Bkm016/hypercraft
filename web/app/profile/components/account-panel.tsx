@@ -12,7 +12,6 @@ import type { TokenClaims, ServiceGroup, ServiceSummary } from "@/lib/api";
 
 interface AccountPanelProps {
 	user: TokenClaims;
-	isAdmin: boolean;
 	services: ServiceSummary[];
 	groups: ServiceGroup[];
 	refreshing: boolean;
@@ -21,7 +20,6 @@ interface AccountPanelProps {
 
 export function AccountPanel({
 	user,
-	isAdmin,
 	services,
 	groups,
 	refreshing,
@@ -75,7 +73,11 @@ export function AccountPanel({
 							{user.username}
 						</p>
 						<p className="mt-0.5 text-xs text-text-sub-600">
-							{isAdmin ? "管理员" : "普通用户"}
+							{user.sub === "__devtoken__"
+								? "超级管理员"
+								: user.is_admin
+									? "系统管理员"
+									: "普通用户"}
 							<span className="text-text-soft-400"> · </span>
 							<span className="font-mono text-[11px] text-text-soft-400">
 								{user.sub}
@@ -87,7 +89,7 @@ export function AccountPanel({
 					</div>
 				</div>
 
-				{!isAdmin && (
+				{user.sub !== "__devtoken__" && (
 					<div className="mt-4">
 						<p className="mb-2 text-xs font-medium text-text-soft-400">
 							服务权限

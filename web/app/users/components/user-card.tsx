@@ -52,8 +52,15 @@ export function UserCard({
 			</div>
 
 			<div className="min-w-0 flex-1">
-				<div className="truncate text-sm font-medium text-text-strong-950">
-					{user.username}
+				<div className="flex min-w-0 items-center gap-2">
+					<div className="truncate text-sm font-medium text-text-strong-950">
+						{user.username}
+					</div>
+					{user.is_admin && (
+						<span className="shrink-0 rounded-md bg-primary-alpha-10 px-1.5 py-0.5 text-[11px] font-medium text-primary-base">
+							系统管理员
+						</span>
+					)}
 				</div>
 				<div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
 					<ServicePermissionSummary

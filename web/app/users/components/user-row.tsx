@@ -48,7 +48,14 @@ export function UserRow({
 					<div className="flex size-8 items-center justify-center rounded-full bg-bg-weak-50">
 						<RiUserLine className="size-4 text-text-sub-600" />
 					</div>
-					<span className="font-medium text-text-strong-950">{user.username}</span>
+					<div className="flex min-w-0 items-center gap-2">
+						<span className="font-medium text-text-strong-950">{user.username}</span>
+						{user.is_admin && (
+							<span className="shrink-0 rounded-md bg-primary-alpha-10 px-1.5 py-0.5 text-[11px] font-medium text-primary-base">
+								系统管理员
+							</span>
+						)}
+					</div>
 				</div>
 			</td>
 			<td className="max-w-[12rem] px-4 py-2.5">

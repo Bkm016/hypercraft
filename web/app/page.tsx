@@ -120,7 +120,7 @@ function FavoriteItemOverlay({ service }: { service: ServiceSummary }) {
 }
 
 export default function HomePage() {
-  const { isAdmin, isAuthenticated, user } = useAuth();
+  const { isAdmin, isSuperAdmin, isAuthenticated, user } = useAuth();
   const [services, setServices] = useState<ServiceSummary[]>([]);
   const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -203,7 +203,7 @@ export default function HomePage() {
     <PageLayout>
       <PageHeader
         title="仪表盘"
-        description={`欢迎回来，${user?.username == "__devtoken__" ? "管理员" :  user?.username ?? "用户"}`}
+        description={`欢迎回来，${isSuperAdmin ? "超级管理员" : isAdmin ? "系统管理员" : user?.username ?? "用户"}`}
       />
 
       <PageContent>

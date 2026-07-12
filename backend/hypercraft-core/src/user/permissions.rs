@@ -34,9 +34,13 @@ impl UserManager {
     }
 
     /// 检查用户是否有权限访问服务
+    /// 仅 `__devtoken__` 可全量旁路；系统管理员不旁路服务访问。
     pub fn has_service_permission(&self, claims: &TokenClaims, service_id: &str) -> bool {
+        if claims.sub == "__devtoken__" {
+            return true;
+        }
         match claims.token_type {
-            TokenType::Dev => true, // 管理员可访问所有服务
+            TokenType::Dev => false,
             TokenType::User => claims.service_ids.contains(&service_id.to_string()),
             TokenType::Web => claims.service_id.as_deref() == Some(service_id),
             TokenType::Refresh => false, // refresh token 不能用于访问服务

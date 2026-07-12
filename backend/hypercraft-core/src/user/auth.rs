@@ -87,6 +87,7 @@ impl UserManager {
             self.persist_user(&user)?;
         }
 
+        let is_admin = user.is_admin || user.id == "__devtoken__";
         // Access token claims
         let access_claims = TokenClaims {
             sub: user.id.clone(),
@@ -95,6 +96,7 @@ impl UserManager {
             aud: Some(self.jwt_audience.clone()),
             token_type: TokenType::User,
             service_ids: user.service_ids.clone(),
+            is_admin,
             token_version: user.token_version,
             refresh_nonce: None,
             service_id: None,
@@ -110,6 +112,7 @@ impl UserManager {
             aud: Some(self.jwt_audience.clone()),
             token_type: TokenType::Refresh,
             service_ids: vec![],
+            is_admin,
             token_version: user.token_version,
             refresh_nonce: Some(user.refresh_nonce.clone()),
             service_id: None,
@@ -155,6 +158,7 @@ impl UserManager {
             aud: Some(self.jwt_audience.clone()),
             token_type: TokenType::Web,
             service_ids: vec![],
+            is_admin: claims.is_admin || claims.sub == "__devtoken__",
             token_version: claims.token_version,
             refresh_nonce: None,
             service_id: Some(service_id.to_string()),

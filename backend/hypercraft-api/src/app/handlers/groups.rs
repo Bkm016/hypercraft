@@ -97,10 +97,14 @@ pub struct UpdateServiceTagsRequest {
 #[instrument(skip_all)]
 pub async fn update_service_tags(
     State(state): State<AppState>,
-    RequireAdmin(_): RequireAdmin,
+    RequireAdmin(auth): RequireAdmin,
     Path(id): Path<String>,
     Json(payload): Json<UpdateServiceTagsRequest>,
 ) -> Result<StatusCode, ApiError> {
+    // 非超管只能改自己有权限的服务
+    if !auth.is_super_admin() && !auth.can_access_service(&id) {
+        return Err(ApiError::forbidden(format!("没有权限访问服务: {}", id)));
+    }
     state.manager.update_service_tags(&id, payload.tags).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -114,10 +118,14 @@ pub struct UpdateServiceGroupRequest {
 #[instrument(skip_all)]
 pub async fn update_service_group(
     State(state): State<AppState>,
-    RequireAdmin(_): RequireAdmin,
+    RequireAdmin(auth): RequireAdmin,
     Path(id): Path<String>,
     Json(payload): Json<UpdateServiceGroupRequest>,
 ) -> Result<StatusCode, ApiError> {
+    // 非超管只能改自己有权限的服务
+    if !auth.is_super_admin() && !auth.can_access_service(&id) {
+        return Err(ApiError::forbidden(format!("没有权限访问服务: {}", id)));
+    }
     state
         .manager
         .update_service_group(&id, payload.group)

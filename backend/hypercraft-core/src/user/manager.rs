@@ -169,6 +169,7 @@ impl UserManager {
             username: req.username,
             password_hash,
             service_ids: req.service_ids,
+            is_admin: false,
             token_version: 0,
             refresh_nonce: String::new(),
             totp_config: None,
@@ -201,6 +202,7 @@ impl UserManager {
             username: "__devtoken__".to_string(),
             password_hash,
             service_ids: vec![],
+            is_admin: true,
             token_version: 0,
             refresh_nonce: String::new(),
             totp_config: None,
@@ -350,6 +352,14 @@ impl UserManager {
         if let Some(service_ids) = req.service_ids {
             user.service_ids = service_ids;
             bumped = true;
+        }
+
+        // 更新系统管理员标记（变更时撤销旧 token）
+        if let Some(is_admin) = req.is_admin {
+            if user.is_admin != is_admin {
+                user.is_admin = is_admin;
+                bumped = true;
+            }
         }
 
         if bumped {

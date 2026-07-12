@@ -130,6 +130,7 @@ pub async fn get_me(
                 username: "DevToken".to_string(),
                 password_hash: String::new(),
                 service_ids: vec![],
+                is_admin: true,
                 token_version: 0,
                 refresh_nonce: String::new(),
                 totp_config: None,
