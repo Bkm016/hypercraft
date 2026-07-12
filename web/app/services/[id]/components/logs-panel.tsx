@@ -99,9 +99,9 @@ export function LogsPanel({ serviceId, serviceState, logPath }: LogsPanelProps) 
           `${api.getBaseUrl()}/services/${serviceId}/logs?follow=true`,
           {
             headers: {
-              Authorization: `Bearer ${api.getAccessToken()}`,
               Accept: "text/event-stream",
             },
+            credentials: "include",
             signal: controller.signal,
           }
         );

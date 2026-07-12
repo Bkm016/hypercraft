@@ -20,6 +20,13 @@ pub async fn create_web_session(
     headers: HeaderMap,
     ServicePermission { service_id, auth }: ServicePermission,
 ) -> Result<Json<WebSessionResponse>, ApiError> {
+    // API Key 不代表可登录用户，禁止将自动化凭据升级为浏览器会话。
+    if auth.is_api_key() {
+        return Err(ApiError::forbidden(
+            "API Key 不能创建 Web Gateway 会话",
+        ));
+    }
+
     let manifest = state.manager.load_manifest(&service_id).await?;
     let web = manifest
         .web

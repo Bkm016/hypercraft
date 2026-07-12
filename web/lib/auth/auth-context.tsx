@@ -10,7 +10,7 @@ import {
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import * as Button from "@/components/ui/button";
-import { api, type TokenClaims } from "@/lib/api";
+import { api, type TokenClaims, type UserSummary } from "@/lib/api";
 
 // 后端连接状态
 type ConnectionStatus = "checking" | "connected" | "disconnected";
@@ -36,26 +36,21 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// 解析 JWT payload（不验证签名，验证由后端完成）
-function parseJwt(token: string): TokenClaims | null {
-  try {
-    const base64Url = token.split(".")[1];
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
-}
-
-// 检查 token 是否过期
-function isTokenExpired(claims: TokenClaims): boolean {
-  return claims.exp * 1000 < Date.now();
+/** 将 /auth/me 用户摘要映射为前端会话 claims（token 本身在 HttpOnly cookie 中） */
+function userSummaryToClaims(user: UserSummary, expiresIn?: number): TokenClaims {
+  const now = Math.floor(Date.now() / 1000);
+  const exp =
+    api.getSessionExpiresAt() ??
+    (expiresIn != null ? now + expiresIn : now + 6 * 60 * 60);
+  return {
+    sub: user.id,
+    username: user.username,
+    token_type: "user",
+    service_ids: user.service_ids,
+    is_admin: user.is_admin,
+    exp,
+    iat: now,
+  };
 }
 
 // 公开路由（不需要认证）
@@ -74,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await fetch(`${api.getBaseUrl()}/health`, {
         method: "GET",
         signal: AbortSignal.timeout(5000),
+        credentials: "include",
       });
       return response.ok;
     } catch {
@@ -87,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setConnectionStatus(connected ? "connected" : "disconnected");
   }, [checkConnection]);
 
-  // 初始化：先检查后端连接，再恢复登录状态
+  // 初始化：先检查后端连接，再通过 cookie 会话恢复登录状态
   useEffect(() => {
     const init = async () => {
       // 先检查后端连接
@@ -99,30 +95,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // 恢复登录状态
-      const accessToken = api.getAccessToken();
-      const refreshToken = api.getRefreshToken();
-      if (accessToken || refreshToken) {
-        // JWT：解析 claims
-        let claims = accessToken ? parseJwt(accessToken) : null;
-        if (!claims || isTokenExpired(claims)) {
-          if (refreshToken) {
-            try {
-              // 页面重开时优先续期会话，只有 refresh token 失效才要求重新登录。
-              const tokens = await api.authRefresh({ refresh_token: refreshToken });
-              api.setTokens(tokens);
-              claims = parseJwt(tokens.access_token);
-            } catch {
-              claims = null;
-            }
-          }
-        }
+      // 清理旧版 localStorage 中的明文 token，会话改由 HttpOnly cookie 承载
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+      }
 
-        if (claims && !isTokenExpired(claims)) {
-          setUser(claims);
-        } else {
-          api.clearTokens();
-        }
+      try {
+        // request() 在 access 失效时会自动用 refresh cookie 续期
+        const me = await api.getMe();
+        api.markSessionHint(true);
+        setUser(userSummaryToClaims(me));
+      } catch {
+        api.clearSession();
+        setUser(null);
       }
       setIsLoading(false);
     };
@@ -145,23 +131,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (username: string, password: string, totpCode?: string) => {
     const tokens = await api.login({ username, password, totp_code: totpCode });
-    const claims = parseJwt(tokens.access_token);
-    if (claims) {
-      setUser(claims);
-    }
+    const me = await api.getMe();
+    setUser(userSummaryToClaims(me, tokens.expires_in));
   }, []);
 
   // DevToken 登录：调用 /auth/devtoken 接口，验证 2FA 后签发 JWT
   const loginWithDevToken = useCallback(async (token: string, totpCode?: string) => {
     const tokens = await api.devtokenLogin({ dev_token: token, totp_code: totpCode });
-    const claims = parseJwt(tokens.access_token);
-    if (claims) {
-      setUser(claims);
-    }
+    const me = await api.getMe();
+    setUser(userSummaryToClaims(me, tokens.expires_in));
   }, []);
 
   const logout = useCallback(() => {
-    api.logout();
+    void api.logout();
     setUser(null);
     router.push("/login");
   }, [router]);

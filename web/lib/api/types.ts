@@ -152,9 +152,51 @@ export interface ChangePasswordRequest {
   current_password?: string;
 }
 
+// ==================== API Key（Agent）====================
+
+export type ApiKeyScope = "read" | "control" | "logs" | "attach";
+
+export interface ApiKeySummary {
+  id: string;
+  name: string;
+  key_prefix: string;
+  service_ids: string[];
+  scopes: string[];
+  created_by: string;
+  created_at: string;
+  last_used_at?: string | null;
+  revoked_at?: string | null;
+  expires_at?: string | null;
+}
+
+export interface CreateApiKeyRequest {
+  name: string;
+  service_ids?: string[];
+  scopes: string[];
+  expires_at?: string | null;
+}
+
+export interface UpdateApiKeyRequest {
+  name?: string;
+  service_ids?: string[];
+  scopes?: string[];
+  expires_at?: string | null;
+}
+
+export interface CreateApiKeyResponse {
+  key: ApiKeySummary;
+  secret: string;
+}
+
+export interface ApiKeySecretResponse {
+  id: string;
+  name: string;
+  secret: string;
+}
+
 // ==================== 认证相关 ====================
 
-export type TokenType = "dev" | "user" | "web" | "refresh";
+export type TokenType = "dev" | "user" | "web" | "refresh" | "apikey";
 
 export interface TokenClaims {
   sub: string;
@@ -186,7 +228,8 @@ export interface DevTokenLoginRequest {
 }
 
 export interface RefreshRequest {
-  refresh_token: string;
+  /** 可选：浏览器依赖 HttpOnly cookie；CLI 仍应显式传值 */
+  refresh_token?: string;
 }
 
 // ==================== 2FA 相关 ====================

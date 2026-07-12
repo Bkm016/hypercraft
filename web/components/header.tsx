@@ -16,20 +16,29 @@ const DynamicThemeSwitch = dynamic(() => import("./theme-switch"), {
 
 export default function Header() {
   const pathname = usePathname();
-  const { user, isAdmin, logout, isAuthenticated } = useAuth();
+  const { user, isAdmin, isSuperAdmin, logout, isAuthenticated } = useAuth();
   const { resolvedTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // 根据用户权限动态生成导航项
-  const navItems: { href: "/services" | "/users"; label: string; adminOnly?: boolean }[] = [
+  const navItems: {
+    href: "/services" | "/users" | "/api-keys" | "/api-test";
+    label: string;
+    adminOnly?: boolean;
+    superAdminOnly?: boolean;
+  }[] = [
     { href: "/services", label: "服务" },
     { href: "/users", label: "用户", adminOnly: true },
+    { href: "/api-keys", label: "API", superAdminOnly: true },
+    { href: "/api-test", label: "测试", superAdminOnly: true },
   ];
 
   // 过滤出当前用户可见的导航项
-  const visibleNavItems = navItems.filter(
-    (item) => !item.adminOnly || isAdmin
-  );
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.superAdminOnly) return isSuperAdmin;
+    if (item.adminOnly) return isAdmin;
+    return true;
+  });
 
   return (
     <div className="sticky top-0 z-40 border-b border-stroke-soft-200 bg-bg-white-0/80 backdrop-blur-md supports-[backdrop-filter]:bg-bg-white-0/70">

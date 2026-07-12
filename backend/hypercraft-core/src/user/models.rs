@@ -82,6 +82,139 @@ pub enum TokenType {
     Web,
     /// 刷新 token
     Refresh,
+    /// 长期 API Key（Agent / 自动化）
+    ApiKey,
+}
+
+/// API Key 允许的 scope 名称
+pub mod api_key_scopes {
+    /// 列表 / 详情 / 状态
+    pub const READ: &str = "read";
+    /// 启停 / 重启 / 强杀
+    pub const CONTROL: &str = "control";
+    /// 日志读取与跟随
+    pub const LOGS: &str = "logs";
+    /// WebSocket 终端 attach
+    pub const ATTACH: &str = "attach";
+
+    /// 全部合法 scope
+    pub const ALL: &[&str] = &[READ, CONTROL, LOGS, ATTACH];
+
+    /// 校验 scope 列表是否全部合法
+    pub fn validate(scopes: &[String]) -> Result<(), String> {
+        for s in scopes {
+            if !ALL.contains(&s.as_str()) {
+                return Err(format!("invalid scope: {}", s));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// API Key 明文前缀
+pub const API_KEY_RAW_PREFIX: &str = "hc_ak_";
+
+/// 持久化的 API Key（哈希用于校验；加密明文可随时解密查看）
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKey {
+    /// Key 唯一 ID
+    pub id: String,
+    /// 展示名称
+    pub name: String,
+    /// 明文前缀（列表展示用，如 hc_ak_a1b2c3d4）
+    pub key_prefix: String,
+    /// 完整明文的 SHA-256 十六进制哈希
+    pub key_hash: String,
+    /// 加密后的完整明文（AES-GCM，可随时解密给管理员）
+    #[serde(default)]
+    pub encrypted_secret: Option<String>,
+    /// 可访问的服务 ID 列表（空 = 无服务）
+    #[serde(default)]
+    pub service_ids: Vec<String>,
+    /// 能力范围：read / control / logs / attach
+    #[serde(default)]
+    pub scopes: Vec<String>,
+    /// 创建者用户 ID
+    pub created_by: String,
+    /// 创建时间
+    pub created_at: DateTime<Utc>,
+    /// 最近使用时间
+    pub last_used_at: Option<DateTime<Utc>>,
+    /// 撤销时间（有值即失效）
+    pub revoked_at: Option<DateTime<Utc>>,
+    /// 过期时间（可选）
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+/// 查看 API Key 明文响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeySecretResponse {
+    pub id: String,
+    pub name: String,
+    pub secret: String,
+}
+
+/// 创建 API Key 请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateApiKeyRequest {
+    pub name: String,
+    #[serde(default)]
+    pub service_ids: Vec<String>,
+    #[serde(default)]
+    pub scopes: Vec<String>,
+    #[serde(default)]
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+/// 更新 API Key 请求（不能改明文；改权限立即对后续请求生效）
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateApiKeyRequest {
+    pub name: Option<String>,
+    pub service_ids: Option<Vec<String>>,
+    pub scopes: Option<Vec<String>>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+/// API Key 对外摘要（无哈希）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeySummary {
+    pub id: String,
+    pub name: String,
+    pub key_prefix: String,
+    pub service_ids: Vec<String>,
+    pub scopes: Vec<String>,
+    pub created_by: String,
+    pub created_at: DateTime<Utc>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub revoked_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+impl From<ApiKey> for ApiKeySummary {
+    fn from(key: ApiKey) -> Self {
+        Self {
+            id: key.id,
+            name: key.name,
+            key_prefix: key.key_prefix,
+            service_ids: key.service_ids,
+            scopes: key.scopes,
+            created_by: key.created_by,
+            created_at: key.created_at,
+            last_used_at: key.last_used_at,
+            revoked_at: key.revoked_at,
+            expires_at: key.expires_at,
+        }
+    }
+}
+
+/// 创建 API Key 响应（明文仅返回一次）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateApiKeyResponse {
+    pub key: ApiKeySummary,
+    /// 完整明文，仅创建时返回
+    pub secret: String,
 }
 
 /// JWT Claims 结构
@@ -151,9 +284,12 @@ pub struct DevTokenLoginRequest {
 }
 
 /// 刷新请求
+///
+/// `refresh_token` 可省略：浏览器可依赖 HttpOnly cookie 续期；CLI 仍应在 JSON 中显式传值。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefreshRequest {
-    pub refresh_token: String,
+    #[serde(default)]
+    pub refresh_token: Option<String>,
 }
 
 /// 用户列表项（不含敏感信息）

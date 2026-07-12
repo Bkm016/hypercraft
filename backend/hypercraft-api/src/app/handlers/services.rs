@@ -11,12 +11,14 @@ use tracing::instrument;
 
 use crate::app::middleware::{AuthInfo, RequireAdmin, ServicePermission};
 use crate::app::{ApiError, AppState};
+use hypercraft_core::api_key_scopes;
 
 #[instrument(skip_all)]
 pub async fn list_services(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthInfo>,
 ) -> Result<Json<Vec<ServiceSummary>>, ApiError> {
+    auth.require_scope(api_key_scopes::READ)?;
     let services = state.manager.list_services().await?;
 
     // 仅超管看全量；系统管理员与普通用户均按 can_access_service 过滤
@@ -61,8 +63,9 @@ pub async fn create_service(
 #[instrument(skip_all)]
 pub async fn get_service(
     State(state): State<AppState>,
-    ServicePermission { service_id, .. }: ServicePermission,
+    ServicePermission { auth, service_id }: ServicePermission,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    auth.require_scope(api_key_scopes::READ)?;
     let manifest = state.manager.load_manifest(&service_id).await?;
     let status = state.manager.status(&service_id).await?;
     Ok(Json(json!({
@@ -119,8 +122,9 @@ pub async fn update_service(
 #[instrument(skip_all)]
 pub async fn start_service(
     State(state): State<AppState>,
-    ServicePermission { service_id, .. }: ServicePermission,
+    ServicePermission { auth, service_id }: ServicePermission,
 ) -> Result<Json<ServiceStatus>, ApiError> {
+    auth.require_scope(api_key_scopes::CONTROL)?;
     let status = state.manager.start(&service_id).await?;
     Ok(Json(status))
 }
@@ -128,8 +132,9 @@ pub async fn start_service(
 #[instrument(skip_all)]
 pub async fn stop_service(
     State(state): State<AppState>,
-    ServicePermission { service_id, .. }: ServicePermission,
+    ServicePermission { auth, service_id }: ServicePermission,
 ) -> Result<Json<ServiceStatus>, ApiError> {
+    auth.require_scope(api_key_scopes::CONTROL)?;
     let status = state.manager.stop(&service_id).await?;
     Ok(Json(status))
 }
@@ -137,8 +142,9 @@ pub async fn stop_service(
 #[instrument(skip_all)]
 pub async fn shutdown_service(
     State(state): State<AppState>,
-    ServicePermission { service_id, .. }: ServicePermission,
+    ServicePermission { auth, service_id }: ServicePermission,
 ) -> Result<Json<ServiceStatus>, ApiError> {
+    auth.require_scope(api_key_scopes::CONTROL)?;
     let status = state.manager.shutdown(&service_id).await?;
     Ok(Json(status))
 }
@@ -146,8 +152,9 @@ pub async fn shutdown_service(
 #[instrument(skip_all)]
 pub async fn kill_service(
     State(state): State<AppState>,
-    ServicePermission { service_id, .. }: ServicePermission,
+    ServicePermission { auth, service_id }: ServicePermission,
 ) -> Result<Json<ServiceStatus>, ApiError> {
+    auth.require_scope(api_key_scopes::CONTROL)?;
     let status = state.manager.kill(&service_id).await?;
     Ok(Json(status))
 }
@@ -155,8 +162,9 @@ pub async fn kill_service(
 #[instrument(skip_all)]
 pub async fn restart_service(
     State(state): State<AppState>,
-    ServicePermission { service_id, .. }: ServicePermission,
+    ServicePermission { auth, service_id }: ServicePermission,
 ) -> Result<Json<ServiceStatus>, ApiError> {
+    auth.require_scope(api_key_scopes::CONTROL)?;
     let status = state.manager.restart(&service_id).await?;
     Ok(Json(status))
 }
@@ -164,8 +172,9 @@ pub async fn restart_service(
 #[instrument(skip_all)]
 pub async fn get_status(
     State(state): State<AppState>,
-    ServicePermission { service_id, .. }: ServicePermission,
+    ServicePermission { auth, service_id }: ServicePermission,
 ) -> Result<Json<ServiceStatus>, ApiError> {
+    auth.require_scope(api_key_scopes::READ)?;
     let status = state.manager.status(&service_id).await?;
     Ok(Json(status))
 }
@@ -187,8 +196,9 @@ pub struct UpdateScheduleRequest {
 #[instrument(skip_all)]
 pub async fn get_schedule(
     State(state): State<AppState>,
-    ServicePermission { service_id, .. }: ServicePermission,
+    ServicePermission { auth, service_id }: ServicePermission,
 ) -> Result<Json<ScheduleResponse>, ApiError> {
+    auth.require_scope(api_key_scopes::READ)?;
     let manifest = state.manager.load_manifest(&service_id).await?;
     let next_run = manifest
         .schedule

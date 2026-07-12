@@ -2,7 +2,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Extension;
 use axum::Json;
-use hypercraft_core::ServiceGroup;
+use hypercraft_core::{api_key_scopes, ServiceGroup};
 use serde::Deserialize;
 use tracing::instrument;
 
@@ -13,9 +13,20 @@ use crate::app::{ApiError, AppState};
 #[instrument(skip_all)]
 pub async fn list_groups(
     State(state): State<AppState>,
-    Extension(_auth): Extension<AuthInfo>,
+    Extension(auth): Extension<AuthInfo>,
 ) -> Result<Json<Vec<ServiceGroup>>, ApiError> {
-    let groups = state.manager.list_groups().await?;
+    auth.require_scope(api_key_scopes::READ)?;
+    let mut groups = state.manager.list_groups().await?;
+    if auth.is_api_key() {
+        let services = state.manager.list_services().await?;
+        // 自动化凭据只看其服务实际关联的分组，避免泄露其他权限域的组织信息。
+        groups.retain(|group| {
+            services.iter().any(|service| {
+                auth.can_access_service(&service.id)
+                    && service.group.as_deref() == Some(group.id.as_str())
+            })
+        });
+    }
     Ok(Json(groups))
 }
 

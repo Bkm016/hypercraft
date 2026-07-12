@@ -1,6 +1,6 @@
 mod app;
 
-use app::{app_router, AppState, RateLimiter};
+use app::{app_router, AppState, RateLimiter, StreamConcurrencyLimiter};
 use dotenvy::dotenv;
 use hypercraft_core::{init_tracing, ServiceManager, ServiceScheduler, UserManager};
 use rand::Rng;
@@ -26,7 +26,7 @@ struct ApiConfig {
     jwt_audience: String,
     allowed_commands: Option<HashSet<String>>,
     allowed_cwd_roots: Vec<PathBuf>,
-    /// CORS 允许的来源列表（空则允许所有）
+    /// 前端面板 Origin 列表（空则使用本地开发地址）
     cors_origins: Vec<String>,
     /// Web 网关的子域名基础域
     web_gateway_base_domain: Option<String>,
@@ -124,7 +124,7 @@ impl ApiConfig {
             })
             .unwrap_or_default();
 
-        // CORS 允许的来源，逗号分隔；空或 "*" 表示允许所有
+        // 前端面板 Origin，逗号分隔；空或 "*" 均回退到本地开发地址
         let cors_origins = env::var("HC_CORS_ORIGINS")
             .ok()
             .map(|s| {
@@ -210,6 +210,8 @@ async fn main() -> anyhow::Result<()> {
     let refresh_limiter = Arc::new(RateLimiter::new(10, Duration::from_secs(60)));
     let auth_limiter = Arc::new(RateLimiter::new(10, Duration::from_secs(60)));
     let password_limiter = Arc::new(RateLimiter::new(10, Duration::from_secs(60)));
+    // 每身份+服务的 SSE / attach 并发上限（key 带类型前缀，互不影响）
+    let stream_limiter = StreamConcurrencyLimiter::new(3);
     let http_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(5))
@@ -225,6 +227,7 @@ async fn main() -> anyhow::Result<()> {
         refresh_limiter,
         auth_limiter,
         password_limiter,
+        stream_limiter,
         web_gateway_base_domain: config.web_gateway_base_domain.clone(),
         web_proxy_session_ttl: config.web_proxy_session_ttl,
         http_client,

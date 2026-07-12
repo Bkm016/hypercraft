@@ -32,10 +32,8 @@ async function sendCommandToService(
   return new Promise((resolve, reject) => {
     const baseUrl = api.getBaseUrl();
     const wsBase = baseUrl.replace("https://", "wss://").replace("http://", "ws://");
-    const token = api.getAccessToken();
-    const wsUrl = token
-      ? `${wsBase}/services/${serviceId}/attach?token=${encodeURIComponent(token)}`
-      : `${wsBase}/services/${serviceId}/attach`;
+    // 依赖 API 域 HttpOnly 会话 cookie，不再把 token 塞进 URL
+    const wsUrl = `${wsBase}/services/${serviceId}/attach`;
 
     const ws = new WebSocket(wsUrl);
     ws.binaryType = "arraybuffer";

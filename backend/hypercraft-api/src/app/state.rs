@@ -19,6 +19,8 @@ pub struct AppState {
     pub auth_limiter: Arc<crate::app::RateLimiter>,
     /// 密码修改限流（按用户 ID，防止暴力破解当前密码）
     pub password_limiter: Arc<crate::app::RateLimiter>,
+    /// SSE / WebSocket 等长连接按身份+服务的并发限制
+    pub stream_limiter: Arc<crate::app::StreamConcurrencyLimiter>,
     /// Web 网关对外使用的子域名基础域
     pub web_gateway_base_domain: Option<String>,
     /// Web 代理会话有效期（秒）

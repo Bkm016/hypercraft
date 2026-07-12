@@ -198,6 +198,12 @@ async fn proxy_request(
             "method not allowed for web proxy",
         );
     }
+    // 有副作用的请求必须通过 Origin/Referer 同源校验，防止 Cookie 会话 CSRF。
+    if requires_origin_check(request.method()) {
+        if let Err(message) = validate_gateway_origin(&request_headers) {
+            return plain_response(StatusCode::FORBIDDEN, message);
+        }
+    }
     let method = match reqwest::Method::from_bytes(request.method().as_str().as_bytes()) {
         Ok(method) => method,
         Err(_) => return plain_response(StatusCode::BAD_REQUEST, "invalid request method"),
@@ -509,6 +515,93 @@ fn is_allowed_proxy_method(method: &Method) -> bool {
     )
 }
 
+/// 可能改变上游状态的方法需要 CSRF/Origin 防护。
+fn requires_origin_check(method: &Method) -> bool {
+    matches!(
+        method,
+        &Method::POST | &Method::PUT | &Method::PATCH | &Method::DELETE
+    )
+}
+
+/// 校验请求是否来自网关自身同源页面。
+/// 优先 Origin，其次 Referer；Sec-Fetch-Site=cross-site 直接拒绝。
+fn validate_gateway_origin(headers: &HeaderMap) -> Result<(), &'static str> {
+    if let Some(site) = headers
+        .get("sec-fetch-site")
+        .and_then(|value| value.to_str().ok())
+    {
+        if site.eq_ignore_ascii_case("cross-site") {
+            return Err("cross-site request blocked");
+        }
+    }
+
+    let host = request_host(headers).ok_or("missing host")?;
+    let (host_name, host_port) = split_host_port(&host);
+
+    if let Some(origin) = headers
+        .get(header::ORIGIN)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        if origin.eq_ignore_ascii_case("null") {
+            return Err("null origin blocked");
+        }
+        return if origin_matches_request_host(origin, &host_name, host_port) {
+            Ok(())
+        } else {
+            Err("origin mismatch")
+        };
+    }
+
+    if let Some(referer) = headers
+        .get(header::REFERER)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return if referer_matches_request_host(referer, &host_name, host_port) {
+            Ok(())
+        } else {
+            Err("referer mismatch")
+        };
+    }
+
+    Err("missing origin")
+}
+
+fn origin_matches_request_host(origin: &str, host_name: &str, host_port: Option<u16>) -> bool {
+    let Ok(url) = reqwest::Url::parse(origin) else {
+        return false;
+    };
+    url_matches_request_host(&url, host_name, host_port)
+}
+
+fn referer_matches_request_host(referer: &str, host_name: &str, host_port: Option<u16>) -> bool {
+    let Ok(url) = reqwest::Url::parse(referer) else {
+        return false;
+    };
+    url_matches_request_host(&url, host_name, host_port)
+}
+
+fn url_matches_request_host(url: &reqwest::Url, host_name: &str, host_port: Option<u16>) -> bool {
+    let Some(origin_host) = url.host_str() else {
+        return false;
+    };
+    if !origin_host.eq_ignore_ascii_case(host_name) {
+        return false;
+    }
+
+    let origin_port = url.port_or_known_default();
+    match (host_port, origin_port) {
+        (Some(expected), Some(actual)) => expected == actual,
+        // Host 未带端口时，允许 Origin 使用协议默认端口。
+        (None, Some(actual)) => matches!(actual, 80 | 443) || url.port().is_none(),
+        (Some(_), None) => false,
+        (None, None) => true,
+    }
+}
+
 fn normalize_http_scheme(value: &str) -> Option<&'static str> {
     let scheme = value.split(',').next().unwrap_or_default().trim();
     if scheme.eq_ignore_ascii_case("https") {
@@ -657,5 +750,102 @@ mod tests {
         let value = HeaderValue::from_static("default-src 'self'; Frame-Ancestors 'none'");
         let rewritten = rewrite_content_security_policy(&value).unwrap();
         assert_eq!(rewritten.to_str().unwrap(), "default-src 'self'");
+    }
+
+    #[test]
+    fn origin_check_only_applies_to_state_changing_methods() {
+        assert!(!requires_origin_check(&Method::GET));
+        assert!(!requires_origin_check(&Method::HEAD));
+        assert!(!requires_origin_check(&Method::OPTIONS));
+        assert!(requires_origin_check(&Method::POST));
+        assert!(requires_origin_check(&Method::PUT));
+        assert!(requires_origin_check(&Method::PATCH));
+        assert!(requires_origin_check(&Method::DELETE));
+    }
+
+    #[test]
+    fn same_origin_post_is_allowed() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::HOST, HeaderValue::from_static("svc-abc.localhost:8080"));
+        headers.insert(
+            header::ORIGIN,
+            HeaderValue::from_static("http://svc-abc.localhost:8080"),
+        );
+        assert!(validate_gateway_origin(&headers).is_ok());
+    }
+
+    #[test]
+    fn cross_origin_post_is_blocked() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::HOST, HeaderValue::from_static("svc-abc.localhost:8080"));
+        headers.insert(
+            header::ORIGIN,
+            HeaderValue::from_static("https://evil.example"),
+        );
+        assert_eq!(
+            validate_gateway_origin(&headers).unwrap_err(),
+            "origin mismatch"
+        );
+    }
+
+    #[test]
+    fn null_origin_is_blocked() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::HOST, HeaderValue::from_static("svc-abc.localhost:8080"));
+        headers.insert(header::ORIGIN, HeaderValue::from_static("null"));
+        assert_eq!(
+            validate_gateway_origin(&headers).unwrap_err(),
+            "null origin blocked"
+        );
+    }
+
+    #[test]
+    fn missing_origin_is_blocked() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::HOST, HeaderValue::from_static("svc-abc.localhost:8080"));
+        assert_eq!(
+            validate_gateway_origin(&headers).unwrap_err(),
+            "missing origin"
+        );
+    }
+
+    #[test]
+    fn referer_fallback_allows_same_host() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::HOST, HeaderValue::from_static("svc-abc.localhost:8080"));
+        headers.insert(
+            header::REFERER,
+            HeaderValue::from_static("http://svc-abc.localhost:8080/admin"),
+        );
+        assert!(validate_gateway_origin(&headers).is_ok());
+    }
+
+    #[test]
+    fn sec_fetch_site_cross_site_is_blocked() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::HOST, HeaderValue::from_static("svc-abc.localhost:8080"));
+        headers.insert(
+            header::ORIGIN,
+            HeaderValue::from_static("http://svc-abc.localhost:8080"),
+        );
+        headers.insert("sec-fetch-site", HeaderValue::from_static("cross-site"));
+        assert_eq!(
+            validate_gateway_origin(&headers).unwrap_err(),
+            "cross-site request blocked"
+        );
+    }
+
+    #[test]
+    fn origin_port_must_match_host_port() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::HOST, HeaderValue::from_static("svc-abc.localhost:8080"));
+        headers.insert(
+            header::ORIGIN,
+            HeaderValue::from_static("http://svc-abc.localhost:9090"),
+        );
+        assert_eq!(
+            validate_gateway_origin(&headers).unwrap_err(),
+            "origin mismatch"
+        );
     }
 }

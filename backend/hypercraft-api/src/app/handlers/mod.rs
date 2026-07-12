@@ -1,3 +1,5 @@
+mod agent;
+mod api_keys;
 mod attach;
 mod auth;
 mod groups;
@@ -9,8 +11,16 @@ mod two_factor;
 mod users;
 mod web;
 
+pub use agent::{
+    agent_attach, agent_get_service, agent_get_status, agent_help, agent_kill, agent_list_services,
+    agent_logs, agent_me, agent_restart, agent_shutdown, agent_start, agent_stop,
+};
+pub use api_keys::{
+    create_api_key, get_api_key, list_api_keys, reveal_api_key_secret, revoke_api_key,
+    rotate_api_key, update_api_key,
+};
 pub use attach::attach_service;
-pub use auth::{devtoken_login, get_me, login, refresh};
+pub use auth::{devtoken_login, get_me, login, logout, refresh};
 pub use groups::{
     create_group, delete_group, list_groups, reorder_groups, reorder_services, update_group,
     update_service_group, update_service_tags,

@@ -8,17 +8,28 @@ use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use tracing::{info, instrument, warn};
 
+/// 虚拟 bcrypt 哈希（cost=12），用户不存在时仍执行同等耗时校验，降低时序枚举面。
+/// 对应口令：timing-equalization-dummy
+const DUMMY_PASSWORD_HASH: &str =
+    "$2b$12$.0qaGygGfQ1yWmvKWsFk7eaz3QNaO82sKAmiSUcLLtTGMUaqIODsm";
+
 impl UserManager {
     /// 用户登录
     #[instrument(skip(self, password, totp_code))]
     pub async fn login(&self, username: &str, password: &str, totp_code: Option<&str>) -> Result<AuthToken> {
-        let user = self
-            .find_by_username(username)
-            .await?
-            .ok_or_else(|| ServiceError::Unauthorized("用户名或密码错误".into()))?;
+        let user = self.find_by_username(username).await?;
 
-        // 验证密码
-        let valid = verify_password(password, &user.password_hash).await?;
+        // 无论用户是否存在都走 bcrypt，避免通过响应耗时枚举用户名
+        let password_hash = user
+            .as_ref()
+            .map(|u| u.password_hash.as_str())
+            .unwrap_or(DUMMY_PASSWORD_HASH);
+        let valid = verify_password(password, password_hash).await?;
+
+        let Some(user) = user else {
+            warn!(username = %username, "登录失败：用户不存在");
+            return Err(ServiceError::Unauthorized("用户名或密码错误".into()));
+        };
 
         if !valid {
             warn!(username = %username, "登录失败：密码错误");

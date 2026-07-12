@@ -119,13 +119,25 @@ impl ServiceManager {
         self.logs_dir(id).join("latest.log")
     }
 
-    /// 校验 id，仅允许字母数字/`-`/`_`/`.`
+    /// 校验服务 id：字母数字开头，仅允许 `[A-Za-z0-9_-]`，长度 1..=64。
+    /// 明确拒绝 `.` / `..` 以及任何含路径分隔或点号的 ID，防止目录穿越。
     fn validate_id(&self, id: &str) -> Result<()> {
-        let valid = !id.is_empty()
-            && id
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
-        if valid {
+        const MAX_ID_LEN: usize = 64;
+        if id.is_empty() || id.len() > MAX_ID_LEN {
+            return Err(ServiceError::InvalidId);
+        }
+        // 目录穿越载荷与纯点号 ID 一律拒绝
+        if id == "." || id == ".." {
+            return Err(ServiceError::InvalidId);
+        }
+        let mut chars = id.chars();
+        let Some(first) = chars.next() else {
+            return Err(ServiceError::InvalidId);
+        };
+        if !first.is_ascii_alphanumeric() {
+            return Err(ServiceError::InvalidId);
+        }
+        if chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_')) {
             Ok(())
         } else {
             Err(ServiceError::InvalidId)
@@ -225,6 +237,102 @@ mod tests {
         m.command = "blocked.exe".into();
         let err = manager.create_service(m).await.unwrap_err();
         matches!(err, ServiceError::PolicyViolation(_));
+    }
+
+    #[tokio::test]
+    async fn validate_id_rejects_dot_traversal_payloads() {
+        let dir = TempDir::new().unwrap();
+        let manager = ServiceManager::new(dir.path());
+
+        for bad in [".", "..", "...", "a/b", "a\\b", "-bad", "_bad", "has.dot", ""] {
+            let err = manager.create_service(manifest(bad)).await.unwrap_err();
+            assert!(
+                matches!(err, ServiceError::InvalidId),
+                "id `{bad}` should be InvalidId, got {err:?}"
+            );
+        }
+
+        // 超长 ID
+        let too_long = "a".repeat(65);
+        let err = manager
+            .create_service(manifest(&too_long))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ServiceError::InvalidId));
+
+        // 合法 ID
+        manager
+            .create_service(manifest("svc_1-ok"))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn policy_rejects_same_basename_path_bypass() {
+        let dir = TempDir::new().unwrap();
+        let mut allowed = HashSet::new();
+        allowed.insert("java".to_string());
+        let manager = ServiceManager::with_policy(dir.path(), Some(allowed), vec![]);
+
+        // 同名不同路径：不得仅靠 basename 放行
+        for evil in [
+            "/tmp/java",
+            "./java",
+            "../java",
+            "bin/java",
+            r"C:\tmp\java",
+            r".\java",
+            r"..\java",
+            r"bin\java",
+        ] {
+            let mut m = manifest("svc1");
+            m.command = evil.into();
+            let err = manager.create_service(m).await.unwrap_err();
+            assert!(
+                matches!(err, ServiceError::PolicyViolation(_)),
+                "command `{evil}` should be PolicyViolation, got {err:?}"
+            );
+        }
+
+        // 裸名仍允许（兼容 HC_ALLOWED_COMMANDS=java）
+        let mut ok = manifest("svc_ok");
+        ok.command = "java".into();
+        manager.create_service(ok).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn policy_allows_exact_absolute_path_whitelist_entry() {
+        let dir = TempDir::new().unwrap();
+        let bin_dir = dir.path().join("bin");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+        let bin_path = bin_dir.join(if cfg!(windows) {
+            "allowed.exe"
+        } else {
+            "allowed"
+        });
+        std::fs::write(&bin_path, b"").unwrap();
+        let canonical = bin_path.canonicalize().unwrap();
+        let allowed_path = canonical.to_string_lossy().to_string();
+
+        let mut allowed = HashSet::new();
+        allowed.insert(allowed_path.clone());
+        let manager = ServiceManager::with_policy(dir.path(), Some(allowed), vec![]);
+
+        let mut ok = manifest("svc_path_ok");
+        ok.command = allowed_path;
+        manager.create_service(ok).await.unwrap();
+
+        // 同 basename 的其它绝对路径仍拒绝
+        let other = dir.path().join(if cfg!(windows) {
+            "other_allowed.exe"
+        } else {
+            "other_allowed"
+        });
+        std::fs::write(&other, b"").unwrap();
+        let mut evil = manifest("svc_path_evil");
+        evil.command = other.canonicalize().unwrap().to_string_lossy().into();
+        let err = manager.create_service(evil).await.unwrap_err();
+        assert!(matches!(err, ServiceError::PolicyViolation(_)));
     }
 
     #[tokio::test]

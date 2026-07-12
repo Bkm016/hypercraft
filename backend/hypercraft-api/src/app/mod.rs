@@ -7,6 +7,6 @@ mod state;
 mod web_gateway;
 
 pub use error::ApiError;
-pub use rate_limit::RateLimiter;
+pub use rate_limit::{RateLimiter, StreamConcurrencyLimiter};
 pub use router::app_router;
 pub use state::AppState;

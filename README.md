@@ -14,6 +14,7 @@
 - **定时调度** - 基于 Cron 表达式的定时启动/停止/重启
 - **用户认证** - JWT 认证，支持 Token 刷新与撤销
 - **权限控制** - 超级管理员 / 系统管理员 / 普通用户三层角色，用户级服务访问权限
+- **Agent API** - 长期 API Key + `/agent/*` 运维面，便于脚本与 LLM Agent 控服/看日志/挂终端
 - **安全策略** - 可配置命令白名单和工作目录限制
 - **Web 管理界面** - 服务分组、标签筛选、拖拽排序
 
@@ -120,6 +121,68 @@ hypercraft-cli user grant <user-id> <service-id>
 hypercraft-cli user revoke <user-id> <service-id>
 ```
 
+## Agent API
+
+面向自动化与 LLM Agent 的长期凭证 + 薄封装接口。Key **不是**超管，不能管理用户；权限 = `service_ids` ∩ `scopes`。
+
+### 创建 API Key（管理员 JWT）
+
+```bash
+# 先用 DevToken / 用户登录拿到 access_token
+curl -X POST http://127.0.0.1:8080/api-keys \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "ops-bot",
+    "service_ids": ["mc-survival"],
+    "scopes": ["read", "control", "logs", "attach"]
+  }'
+# 响应中 secret（hc_ak_...）仅返回一次
+```
+
+| scope | 能力 |
+|-------|------|
+| `read` | 列表 / 详情 / 状态 |
+| `control` | start / stop / restart / shutdown / kill |
+| `logs` | 日志 tail / follow |
+| `attach` | WebSocket 终端 |
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api-keys` | 列出 Key |
+| POST | `/api-keys` | 创建（明文仅一次） |
+| GET | `/api-keys/:id` | 摘要 |
+| DELETE | `/api-keys/:id` | 撤销 |
+
+### 调用示例
+
+```bash
+export HC_API=http://127.0.0.1:8080
+export HC_API_KEY=hc_ak_...
+
+curl -H "Authorization: Bearer $HC_API_KEY" $HC_API/agent/me
+curl -H "Authorization: Bearer $HC_API_KEY" $HC_API/agent/help
+curl -H "Authorization: Bearer $HC_API_KEY" $HC_API/agent/services
+
+curl -X POST -H "Authorization: Bearer $HC_API_KEY" \
+  $HC_API/agent/services/mc-survival/restart
+
+# 默认 text/plain，tail 为行数
+curl -H "Authorization: Bearer $HC_API_KEY" \
+  "$HC_API/agent/services/mc-survival/logs?tail=100"
+
+# 实时日志 SSE（纯文本）
+curl -N -H "Authorization: Bearer $HC_API_KEY" \
+  "$HC_API/agent/services/mc-survival/logs?follow=true"
+
+# 终端 WebSocket（也可用 ?token=$HC_API_KEY）
+# ws://127.0.0.1:8080/agent/services/mc-survival/attach
+```
+
+同一 Key 也可直接调用现有 `/services/:id/*` 路径；`/services/:id/logs?format=text` 可拿纯文本日志。
+
+Web 超管可在 **测试** 页（`/api-test`）选择已有 API Key，对 `/agent/*` 端点做真实请求调试（含 curl 复制与 control 二次确认）。
+
 ## 项目结构
 
 ```
@@ -149,8 +212,8 @@ hypercraft/
 | `HC_JWT_AUDIENCE` | JWT 受众 | `hypercraft-clients` |
 | `HC_ALLOWED_COMMANDS` | 命令白名单（逗号分隔） | `*` |
 | `HC_ALLOWED_CWD_PREFIXES` | 工作目录白名单（分号分隔） | `*` |
-| `HC_CORS_ORIGINS` | CORS 允许的来源（逗号分隔） | `*` |
-| `HC_WEB_GATEWAY_BASE_DOMAIN` | 服务 Web 反代根域名（按服务 id 子域） | - |
+| `HC_CORS_ORIGINS` | 前端面板的 Origin（逗号分隔，不支持 `*`） | 本地 `localhost:3000` / `127.0.0.1:3000` |
+| `HC_WEB_GATEWAY_BASE_DOMAIN` | 服务 Web 反代根域名（按服务 ID 生成子域，不含协议和路径） | - |
 
 ## 使用 systemd 托管
 
@@ -290,11 +353,28 @@ journalctl -u hypercraft-web -f
 
 当前端和后端部署在不同域名时：
 
+`HC_CORS_ORIGINS` 必须填写用户浏览器实际访问的前端面板 Origin（协议 + 域名 + 非默认端口），不能填写 `*`、API 地址、Web Gateway 地址或带路径的 URL。浏览器会话使用 HttpOnly Cookie，带凭据的 CORS 请求不支持通配来源。
+
 **后端配置**
 ```bash
 # backend/.env
 HC_CORS_ORIGINS=https://panel.example.com
 ```
+
+多个前端入口使用逗号分隔：
+
+```bash
+HC_CORS_ORIGINS=https://panel.example.com,https://admin.example.com
+```
+
+内嵌浏览器通过 Web Gateway iframe 导航，不依赖 API CORS。可以让面板与 Web Gateway 共用根域名，例如：
+
+```bash
+HC_CORS_ORIGINS=https://hyper.sacredcraft.cn
+HC_WEB_GATEWAY_BASE_DOMAIN=hyper.sacredcraft.cn
+```
+
+此时服务页面使用 `https://<服务编码>.hyper.sacredcraft.cn`，需要为 `*.hyper.sacredcraft.cn` 配置 DNS、TLS 证书和到 Hypercraft API 的反向代理。
 
 **前端配置**
 ```bash

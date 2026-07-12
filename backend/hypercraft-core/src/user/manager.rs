@@ -76,6 +76,16 @@ impl UserManager {
         self.refresh_token_ttl = refresh_ttl;
         self
     }
+
+    /// Access token 有效期（秒）
+    pub fn access_token_ttl(&self) -> i64 {
+        self.access_token_ttl
+    }
+
+    /// Refresh token 有效期（秒）
+    pub fn refresh_token_ttl(&self) -> i64 {
+        self.refresh_token_ttl
+    }
 }
 
 // ============================================================================
@@ -125,9 +135,10 @@ impl UserManager {
         Ok(())
     }
 
-    /// 确保用户目录存在
+    /// 确保用户目录与 API Key 目录存在
     pub fn ensure_dirs(&self) -> Result<()> {
         std::fs::create_dir_all(self.users_dir())?;
+        self.ensure_api_key_dirs()?;
         Ok(())
     }
 

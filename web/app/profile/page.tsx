@@ -66,12 +66,9 @@ export default function ProfilePage() {
 	const handleRefreshToken = async () => {
 		setRefreshing(true);
 		try {
-			const refreshToken = api.getRefreshToken();
-			if (refreshToken) {
-				await api.authRefresh({ refresh_token: refreshToken });
-				// 刷新页面以更新状态
-				window.location.reload();
-			}
+			// 浏览器依赖 HttpOnly refresh cookie 续期
+			await api.authRefresh({});
+			window.location.reload();
 		} catch {
 			// 刷新失败，可能需要重新登录
 		} finally {

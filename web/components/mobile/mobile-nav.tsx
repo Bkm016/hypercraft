@@ -10,9 +10,10 @@ import { useAuth } from "@/lib/auth";
 import { usePathname } from "next/navigation";
 
 interface NavItem {
-  href: "/services" | "/users" | "/profile";
+  href: "/services" | "/users" | "/api-keys" | "/api-test" | "/profile";
   label: string;
   adminOnly?: boolean;
+  superAdminOnly?: boolean;
 }
 
 interface MobileNavProps {
@@ -22,16 +23,20 @@ interface MobileNavProps {
 
 export function MobileNav({ open, onOpenChange }: MobileNavProps) {
   const pathname = usePathname();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isSuperAdmin } = useAuth();
 
   const navItems: NavItem[] = [
     { href: "/services", label: "服务" },
     { href: "/users", label: "用户", adminOnly: true },
+    { href: "/api-keys", label: "API", superAdminOnly: true },
+    { href: "/api-test", label: "测试", superAdminOnly: true },
   ];
 
-  const visibleNavItems = navItems.filter(
-    (item) => !item.adminOnly || isAdmin
-  );
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.superAdminOnly) return isSuperAdmin;
+    if (item.adminOnly) return isAdmin;
+    return true;
+  });
 
   const handleLinkClick = () => {
     onOpenChange(false);

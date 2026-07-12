@@ -226,7 +226,9 @@ function FormDialogFooter({
   return (
     <div
       className={cn(
-        "flex items-center justify-end gap-3 border-t border-stroke-soft-200 bg-bg-weak-50/50 px-6 py-4",
+        // 强制横向单行，避免被 Content 的 * :flex-col 误伤
+        "flex shrink-0 flex-row flex-nowrap items-center justify-end gap-3",
+        "border-t border-stroke-soft-200 bg-bg-weak-50/50 px-6 py-4",
         className
       )}
       {...props}

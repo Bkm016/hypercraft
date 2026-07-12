@@ -8,7 +8,7 @@ use axum::http::request::Parts;
 use axum::http::Request;
 use axum::middleware::Next;
 use axum::response::Response;
-use hypercraft_core::{TokenClaims, TokenType};
+use hypercraft_core::{API_KEY_RAW_PREFIX, TokenClaims, TokenType};
 
 use super::error::ApiError;
 use super::state::AppState;
@@ -18,9 +18,27 @@ use super::web_gateway::{extract_gateway_service_id, handle_web_gateway_request,
 #[derive(Debug, Clone)]
 pub struct AuthInfo {
 	pub claims: TokenClaims,
+	/// JWT 为 None（沿用角色能力）；API Key 为 Some(scopes)
+	pub scopes: Option<Vec<String>>,
 }
 
 impl AuthInfo {
+	/// 从 JWT claims 构造（无 scope 裁剪）
+	pub fn from_claims(claims: TokenClaims) -> Self {
+		Self {
+			claims,
+			scopes: None,
+		}
+	}
+
+	/// 从 API Key 合成 claims + scopes
+	pub fn from_api_key(claims: TokenClaims, scopes: Vec<String>) -> Self {
+		Self {
+			claims,
+			scopes: Some(scopes),
+		}
+	}
+
 	/// 检查是否是超级管理员（仅 __devtoken__）
 	pub fn is_super_admin(&self) -> bool {
 		self.claims.sub == "__devtoken__"
@@ -31,13 +49,37 @@ impl AuthInfo {
 		self.is_super_admin() || self.claims.is_admin
 	}
 
+	/// 是否为 API Key 身份
+	pub fn is_api_key(&self) -> bool {
+		matches!(self.claims.token_type, TokenType::ApiKey)
+	}
+
+	/// 检查 scope：JWT 无 scopes 限制；API Key 必须显式拥有
+	pub fn has_scope(&self, scope: &str) -> bool {
+		match &self.scopes {
+			None => true,
+			Some(list) => list.iter().any(|s| s == scope),
+		}
+	}
+
+	/// 缺少 scope 时返回 Forbidden
+	pub fn require_scope(&self, scope: &str) -> Result<(), ApiError> {
+		if self.has_scope(scope) {
+			Ok(())
+		} else {
+			Err(ApiError::forbidden(format!("缺少权限 scope: {}", scope)))
+		}
+	}
+
 	/// 检查是否有权限访问指定服务（仅超管全量旁路）
 	pub fn can_access_service(&self, service_id: &str) -> bool {
 		if self.is_super_admin() {
 			return true;
 		}
 		match self.claims.token_type {
-			TokenType::User => self.claims.service_ids.contains(&service_id.to_string()),
+			TokenType::User | TokenType::ApiKey => {
+				self.claims.service_ids.contains(&service_id.to_string())
+			}
 			TokenType::Web => self.claims.service_id.as_deref() == Some(service_id),
 			_ => false,
 		}
@@ -66,7 +108,8 @@ impl<S: Send + Sync> FromRequestParts<S> for RequireAdmin {
 				.cloned()
 				.ok_or_else(ApiError::unauthorized)?;
 
-			if !auth.is_admin() {
+			// API Key 永远不能走管理员接口
+			if auth.is_api_key() || !auth.is_admin() {
 				return Err(ApiError::forbidden("admin access required"));
 			}
 			Ok(RequireAdmin(auth))
@@ -107,7 +150,6 @@ impl<S: Send + Sync> FromRequestParts<S> for RequireSuperAdmin {
 /// 服务权限检查 Extractor - 从路径参数 :id 提取服务 ID 并验证权限
 #[derive(Debug, Clone)]
 pub struct ServicePermission {
-	#[allow(dead_code)]
 	pub auth: AuthInfo,
 	pub service_id: String,
 }
@@ -146,22 +188,52 @@ impl<S: Send + Sync> FromRequestParts<S> for ServicePermission {
 }
 
 /// 不需要认证的路径
-const PUBLIC_PATHS: &[&str] = &["/health", "/auth/login", "/auth/devtoken", "/auth/refresh"];
+const PUBLIC_PATHS: &[&str] = &[
+	"/health",
+	"/auth/login",
+	"/auth/devtoken",
+	"/auth/refresh",
+	"/auth/logout",
+];
 
-/// 从请求中提取 token（优先 header，fallback 到 query param）
-fn extract_token(request: &Request<Body>) -> Option<String> {
-	// 优先从 Authorization header 获取
+/// 浏览器会话 access cookie（HttpOnly，由登录/刷新接口下发）
+pub const ACCESS_TOKEN_COOKIE: &str = "hc_access_token";
+
+/// 浏览器会话 refresh cookie（HttpOnly，由登录/刷新接口下发）
+pub const REFRESH_TOKEN_COOKIE: &str = "hc_refresh_token";
+
+/// Cookie 会话执行状态变更请求时必须携带的 CSRF 防护头
+pub const CSRF_HEADER: &str = "x-hypercraft-csrf";
+
+/// 从 Cookie 头解析指定名称的值
+pub fn extract_cookie_value(headers: &axum::http::HeaderMap, name: &str) -> Option<String> {
+	let cookie = headers
+		.get(axum::http::header::COOKIE)
+		.and_then(|v| v.to_str().ok())?;
+	cookie.split(';').find_map(|part| {
+		let (key, value) = part.trim().split_once('=')?;
+		if key == name {
+			Some(value.to_string())
+		} else {
+			None
+		}
+	})
+}
+
+/// 从请求中提取 token（Bearer > query token > access cookie）
+fn extract_token(request: &Request<Body>) -> Option<(String, bool)> {
+	// 优先从 Authorization header 获取（CLI / API Key / 兼容旧前端）
 	if let Some(token) = request
 		.headers()
 		.get(axum::http::header::AUTHORIZATION)
 		.and_then(|v| v.to_str().ok())
 		.and_then(|v| v.strip_prefix("Bearer "))
 	{
-		return Some(token.to_string());
+		return Some((token.to_string(), false));
 	}
 
-	// fallback 到 query param（WebSocket 场景）
-	request.uri().query().and_then(|query| {
+	// fallback 到 query param（旧 WebSocket 场景；新前端依赖 cookie）
+	if let Some(token) = request.uri().query().and_then(|query| {
 		query.split('&').find_map(|pair| {
 			let (key, value) = pair.split_once('=')?;
 			if key == "token" {
@@ -170,40 +242,44 @@ fn extract_token(request: &Request<Body>) -> Option<String> {
 				None
 			}
 		})
-	})
+	}) {
+		return Some((token, false));
+	}
+
+	// 浏览器会话：HttpOnly cookie（WebSocket 握手会自动带上）
+	extract_cookie_value(request.headers(), ACCESS_TOKEN_COOKIE).map(|token| (token, true))
+}
+
+/// Cookie 是浏览器自动携带的环境凭据，状态变更必须要求脚本主动添加自定义头。
+fn requires_csrf_header(request: &Request<Body>) -> bool {
+	!matches!(
+		*request.method(),
+		axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS
+	)
 }
 
 /// 从请求中提取客户端 IP
-/// 优先级：X-Real-IP > X-Forwarded-For（第一个） > Socket Address
+/// 仅使用直连 socket 地址，不信任客户端可控的代理头，避免限流被伪造绕过。
 fn extract_client_ip(request: &Request<Body>) -> String {
-	// 1. 优先从 X-Real-IP header 获取（Nginx 常用）
-	if let Some(real_ip) = request
-		.headers()
-		.get("X-Real-IP")
-		.and_then(|v| v.to_str().ok())
-	{
-		return real_ip.to_string();
-	}
-
-	// 2. 从 X-Forwarded-For 获取第一个 IP（最左边是真实客户端）
-	if let Some(forwarded) = request
-		.headers()
-		.get("X-Forwarded-For")
-		.and_then(|v| v.to_str().ok())
-	{
-		if let Some(first_ip) = forwarded.split(',').next().map(|s| s.trim()) {
-			if !first_ip.is_empty() {
-				return first_ip.to_string();
-			}
-		}
-	}
-
-	// 3. fallback 到直连 socket 地址
 	request
 		.extensions()
 		.get::<ConnectInfo<SocketAddr>>()
 		.map(|ci| ci.0.ip().to_string())
 		.unwrap_or_else(|| "unknown".to_string())
+}
+
+/// 认证失败时记入限流并返回 Unauthorized
+async fn reject_auth(state: &AppState, client_ip: &str, path: &str, reason: &str) -> ApiError {
+	if !state.auth_limiter.allow(client_ip).await {
+		tracing::warn!(
+			"认证限流触发: IP={}, 路径={} ({})",
+			client_ip,
+			path,
+			reason
+		);
+		return ApiError::too_many_requests("请求过于频繁，请稍后再试");
+	}
+	ApiError::unauthorized()
 }
 
 pub async fn auth_middleware(
@@ -219,60 +295,66 @@ pub async fn auth_middleware(
 	}
 
 	let client_ip = extract_client_ip(&request);
-	let token = match extract_token(&request) {
-		Some(t) => t,
+	let (token, cookie_auth) = match extract_token(&request) {
+		Some(value) => value,
 		None => {
-			// 无 token，检查并记录认证失败（使用 allow 原子化操作）
-			if !state.auth_limiter.allow(&client_ip).await {
-				tracing::warn!("认证限流触发: IP={}, 路径={} (无token)", client_ip, path);
-				return Err(ApiError::too_many_requests(
-					"请求过于频繁，请稍后再试",
-				));
-			}
-			return Err(ApiError::unauthorized());
+			return Err(reject_auth(&state, &client_ip, &path, "无token").await);
 		}
 	};
+	if cookie_auth
+		&& requires_csrf_header(&request)
+		&& request.headers().get(CSRF_HEADER).is_none()
+	{
+		return Err(ApiError::forbidden("missing CSRF protection header"));
+	}
 
-	// 尝试验证为 JWT UserToken
+	// 长期 API Key 优先识别
+	if token.starts_with(API_KEY_RAW_PREFIX) {
+		let (claims, scopes) = match state.user_manager.verify_api_key(&token).await {
+			Ok(v) => v,
+			Err(_) => {
+				return Err(reject_auth(&state, &client_ip, &path, "api key无效").await);
+			}
+		};
+		request
+			.extensions_mut()
+			.insert(AuthInfo::from_api_key(claims, scopes));
+		return Ok(next.run(request).await);
+	}
+
+	// JWT 校验
 	let claims = match state.user_manager.verify_token(&token).await {
-		Ok(c) => c, // ✅ 验证成功，直接返回 claims，后续会放行（不受 auth_limiter 影响）
+		Ok(c) => c,
 		Err(_) => {
-			// Token 验证失败，检查并记录认证失败（使用 allow 原子化操作）
-			if !state.auth_limiter.allow(&client_ip).await {
-				tracing::warn!("认证限流触发: IP={}, 路径={} (token无效)", client_ip, path);
-				return Err(ApiError::too_many_requests(
-					"请求过于频繁，请稍后再试",
-				));
-			}
-			return Err(ApiError::unauthorized());
+			return Err(reject_auth(&state, &client_ip, &path, "token无效").await);
 		}
 	};
 
-    if matches!(claims.token_type, TokenType::Refresh | TokenType::Web) {
-        return Err(ApiError::unauthorized_with_message(
-            "this token cannot be used for API access",
-        ));
-    }
+	if matches!(claims.token_type, TokenType::Refresh | TokenType::Web) {
+		return Err(ApiError::unauthorized_with_message(
+			"this token cannot be used for API access",
+		));
+	}
 
-	// JWT 验证成功，已认证用户不受限流限制，直接放行
-    let auth_info = AuthInfo { claims };
-    request.extensions_mut().insert(auth_info);
-    Ok(next.run(request).await)
+	request
+		.extensions_mut()
+		.insert(AuthInfo::from_claims(claims));
+	Ok(next.run(request).await)
 }
 
 pub async fn web_gateway_middleware(
-    State(state): State<AppState>,
-    request: Request<Body>,
-    next: Next,
+	State(state): State<AppState>,
+	request: Request<Body>,
+	next: Next,
 ) -> Response {
-    let Some(base_domain) = state.web_gateway_base_domain.as_deref() else {
-        return next.run(request).await;
-    };
-    let Some(host) = request_host(request.headers()) else {
-        return next.run(request).await;
-    };
-    let Some(service_id) = extract_gateway_service_id(&host, base_domain) else {
-        return next.run(request).await;
-    };
-    handle_web_gateway_request(&state, request, service_id).await
+	let Some(base_domain) = state.web_gateway_base_domain.as_deref() else {
+		return next.run(request).await;
+	};
+	let Some(host) = request_host(request.headers()) else {
+		return next.run(request).await;
+	};
+	let Some(service_id) = extract_gateway_service_id(&host, base_domain) else {
+		return next.run(request).await;
+	};
+	handle_web_gateway_request(&state, request, service_id).await
 }

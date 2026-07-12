@@ -7,6 +7,11 @@ import type {
   CreateUserRequest,
   UpdateUserRequest,
   ChangePasswordRequest,
+  ApiKeySummary,
+  ApiKeySecretResponse,
+  CreateApiKeyRequest,
+  CreateApiKeyResponse,
+  UpdateApiKeyRequest,
   ServiceSummary,
   ServiceManifest,
   ServiceDetail,
@@ -38,97 +43,109 @@ function getApiBaseUrl(): string {
 }
 
 class ApiClient {
-  private accessToken: string | null = null;
-  private refreshToken: string | null = null;
+  /** 最近一次登录/刷新返回的 access 过期时间（unix 秒），仅用于 UI 展示 */
+  private sessionExpiresAt: number | null = null;
   private refreshPromise: Promise<AuthToken> | null = null;
-
-  constructor() {
-    // 从 localStorage 恢复 token（仅客户端）
-    if (typeof window !== "undefined") {
-      this.accessToken = localStorage.getItem("access_token");
-      this.refreshToken = localStorage.getItem("refresh_token");
-    }
-  }
+  /** 是否已有浏览器会话（cookie），避免在未登录时对 /auth/me 无意义重试 */
+  private hasSessionHint = false;
 
   getBaseUrl(): string {
     return getApiBaseUrl();
   }
 
-  // ==================== Token 管理 ====================
+  // ==================== Token / 会话管理 ====================
 
-  setTokens(tokens: AuthToken) {
-    this.accessToken = tokens.access_token;
-    this.refreshToken = tokens.refresh_token;
-    if (typeof window !== "undefined") {
-      localStorage.setItem("access_token", tokens.access_token);
-      localStorage.setItem("refresh_token", tokens.refresh_token);
-    }
+  /**
+   * 登录/刷新成功后记录会话元数据。
+   * access/refresh token 由后端 HttpOnly cookie 持有，不再写入 localStorage。
+   */
+  setSession(tokens: AuthToken) {
+    this.hasSessionHint = true;
+    this.sessionExpiresAt =
+      Math.floor(Date.now() / 1000) + (tokens.expires_in || 0);
   }
 
-  clearTokens() {
-    this.accessToken = null;
-    this.refreshToken = null;
+  clearSession() {
+    this.hasSessionHint = false;
+    this.sessionExpiresAt = null;
     if (typeof window !== "undefined") {
+      // 清理历史 localStorage 残留，防止旧版本 token 继续暴露
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
     }
   }
 
+  /** @deprecated 浏览器会话不再向 JS 暴露 access token */
+  setTokens(tokens: AuthToken) {
+    this.setSession(tokens);
+  }
+
+  /** @deprecated 使用 clearSession / logout */
+  clearTokens() {
+    this.clearSession();
+  }
+
   isAuthenticated(): boolean {
-    return !!this.getAccessToken();
+    return this.hasSessionHint;
   }
 
+  markSessionHint(active: boolean) {
+    this.hasSessionHint = active;
+  }
+
+  getSessionExpiresAt(): number | null {
+    return this.sessionExpiresAt;
+  }
+
+  /**
+   * 浏览器会话走 HttpOnly cookie，JS 无法读取 access token。
+   * 保留方法签名以兼容旧调用；始终返回 null。
+   */
   getAccessToken(): string | null {
-    // 客户端时从 localStorage 懒加载（解决 SSR hydration 问题）
-    if (typeof window !== "undefined" && !this.accessToken) {
-      this.accessToken = localStorage.getItem("access_token");
-    }
-    return this.accessToken;
+    return null;
   }
 
+  /**
+   * 浏览器会话走 HttpOnly cookie，JS 无法读取 refresh token。
+   */
   getRefreshToken(): string | null {
-    // 客户端时从 localStorage 懒加载
-    if (typeof window !== "undefined" && !this.refreshToken) {
-      this.refreshToken = localStorage.getItem("refresh_token");
-    }
-    return this.refreshToken;
+    return null;
   }
 
   // ==================== 请求方法 ====================
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    allowRefresh = true
   ): Promise<T> {
-    const accessToken = this.getAccessToken();
-    const refreshToken = this.getRefreshToken();
     const url = `${getApiBaseUrl()}${endpoint}`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
+      "X-Hypercraft-CSRF": "1",
       ...(options.headers as Record<string, string>),
     };
-
-    if (accessToken) {
-      headers.Authorization = `Bearer ${accessToken}`;
-    }
 
     const response = await fetch(url, {
       ...options,
       headers,
+      credentials: "include",
     });
 
-    // 401 且有 refresh token 时尝试刷新
-    if (response.status === 401 && refreshToken) {
+    // 401 时尝试用 refresh cookie 续期后重试
+    if (response.status === 401 && allowRefresh) {
       try {
         await this.refreshAccessToken();
       } catch {
-        this.clearTokens();
+        this.clearSession();
         throw new Error("会话已过期，请重新登录");
       }
 
-      // 刷新成功后的业务错误应原样返回，不能误判为刷新失败并清除登录态。
-      headers.Authorization = `Bearer ${this.accessToken}`;
-      const retryResponse = await fetch(url, { ...options, headers });
+      const retryResponse = await fetch(url, {
+        ...options,
+        headers,
+        credentials: "include",
+      });
       if (!retryResponse.ok) {
         throw await this.parseError(retryResponse);
       }
@@ -173,9 +190,9 @@ class ApiClient {
       return this.refreshPromise;
     }
 
-    this.refreshPromise = this.authRefresh({ refresh_token: this.refreshToken! })
+    this.refreshPromise = this.authRefresh({})
       .then((tokens) => {
-        this.setTokens(tokens);
+        this.setSession(tokens);
         return tokens;
       })
       .finally(() => {
@@ -188,38 +205,65 @@ class ApiClient {
   // ==================== 认证 API ====================
 
   async login(req: LoginRequest): Promise<AuthToken> {
-    const tokens = await this.request<AuthToken>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify(req),
-    });
-    this.setTokens(tokens);
+    const tokens = await this.request<AuthToken>(
+      "/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify(req),
+      },
+      false
+    );
+    this.setSession(tokens);
     return tokens;
   }
 
   async devtokenLogin(req: DevTokenLoginRequest): Promise<AuthToken> {
-    const tokens = await this.request<AuthToken>("/auth/devtoken", {
-      method: "POST",
-      body: JSON.stringify(req),
-    });
-    this.setTokens(tokens);
+    const tokens = await this.request<AuthToken>(
+      "/auth/devtoken",
+      {
+        method: "POST",
+        body: JSON.stringify(req),
+      },
+      false
+    );
+    this.setSession(tokens);
     return tokens;
   }
 
-  async authRefresh(req: RefreshRequest): Promise<AuthToken> {
-    // 刷新 token 时不使用 Authorization header
+  async authRefresh(req: RefreshRequest = {}): Promise<AuthToken> {
+    // 刷新 token 时不使用 Authorization header；浏览器依赖 HttpOnly cookie
+    const body: Record<string, string> = {};
+    if (req.refresh_token) {
+      body.refresh_token = req.refresh_token;
+    }
     const response = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Hypercraft-CSRF": "1",
+      },
+      body: JSON.stringify(body),
+      credentials: "include",
     });
     if (!response.ok) {
       throw await this.parseError(response);
     }
-    return response.json();
+    const tokens: AuthToken = await response.json();
+    this.setSession(tokens);
+    return tokens;
   }
 
-  logout() {
-    this.clearTokens();
+  async logout(): Promise<void> {
+    try {
+      await fetch(`${getApiBaseUrl()}/auth/logout`, {
+        method: "POST",
+        headers: { "X-Hypercraft-CSRF": "1" },
+        credentials: "include",
+      });
+    } catch {
+      // 忽略网络错误，本地仍清除会话提示
+    }
+    this.clearSession();
   }
 
   async getMe(): Promise<UserSummary> {
@@ -302,6 +346,46 @@ class ApiClient {
     return this.request<UserSummary>(`/users/${id}/password`, {
       method: "POST",
       body: JSON.stringify(req),
+    });
+  }
+
+  // ==================== API Key ====================
+
+  async listApiKeys(): Promise<ApiKeySummary[]> {
+    return this.request<ApiKeySummary[]>("/api-keys");
+  }
+
+  async getApiKey(id: string): Promise<ApiKeySummary> {
+    return this.request<ApiKeySummary>(`/api-keys/${id}`);
+  }
+
+  async revealApiKeySecret(id: string): Promise<ApiKeySecretResponse> {
+    return this.request<ApiKeySecretResponse>(`/api-keys/${id}/secret`);
+  }
+
+  async createApiKey(req: CreateApiKeyRequest): Promise<CreateApiKeyResponse> {
+    return this.request<CreateApiKeyResponse>("/api-keys", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async updateApiKey(id: string, req: UpdateApiKeyRequest): Promise<ApiKeySummary> {
+    return this.request<ApiKeySummary>(`/api-keys/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async rotateApiKey(id: string): Promise<CreateApiKeyResponse> {
+    return this.request<CreateApiKeyResponse>(`/api-keys/${id}/rotate`, {
+      method: "POST",
+    });
+  }
+
+  async revokeApiKey(id: string): Promise<ApiKeySummary> {
+    return this.request<ApiKeySummary>(`/api-keys/${id}`, {
+      method: "DELETE",
     });
   }
 
@@ -462,9 +546,7 @@ class ApiClient {
   async downloadServiceLogFile(id: string): Promise<void> {
     const url = `${getApiBaseUrl()}/services/${id}/log-file`;
     const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${this.accessToken}`,
-      },
+      credentials: "include",
     });
 
     if (!response.ok) {
@@ -497,7 +579,7 @@ class ApiClient {
   // ==================== 健康检查 ====================
 
   async health(): Promise<{ status: string }> {
-    return this.request<{ status: string }>("/health");
+    return this.request<{ status: string }>("/health", {}, false);
   }
 
   // ==================== 资源统计 ====================

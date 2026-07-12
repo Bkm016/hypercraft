@@ -78,16 +78,11 @@ export function useTerminal({
     setError(null);
     updateStatus("connecting");
 
+    // 浏览器 WebSocket 会自动携带 API 域的 HttpOnly 会话 cookie
     const wsUrl = buildWsUrl();
-    const token = api.getAccessToken();
 
-    // 创建 WebSocket 连接
-    // 注意：浏览器 WebSocket 不支持自定义 headers，需要通过 URL 参数传递 token
-    // 或者后端支持从 cookie 读取认证信息
-    const urlWithAuth = token ? `${wsUrl}?token=${encodeURIComponent(token)}` : wsUrl;
-    
     try {
-      const ws = new WebSocket(urlWithAuth);
+      const ws = new WebSocket(wsUrl);
       ws.binaryType = "arraybuffer";
 
       ws.onopen = () => {

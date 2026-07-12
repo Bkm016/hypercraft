@@ -14,7 +14,20 @@ use std::time::Duration;
 use tracing::instrument;
 
 use crate::app::middleware::{AuthInfo, ServicePermission};
+use crate::app::rate_limit::StreamConcurrencyLimiter;
 use crate::app::{ApiError, AppState};
+use hypercraft_core::api_key_scopes;
+
+/// 文本 tail 默认行数
+const DEFAULT_TAIL_LINES: usize = 200;
+/// 文本 tail 最大行数
+const MAX_TAIL_LINES: usize = 5_000;
+/// 原始字节 tail 默认大小
+const DEFAULT_TAIL_BYTES: usize = 64 * 1024;
+/// 原始字节 tail 上限（1 MiB）
+const MAX_TAIL_BYTES: usize = 1024 * 1024;
+/// 单条 SSE 日志流最长存活时间
+const SSE_MAX_DURATION: Duration = Duration::from_secs(30 * 60);
 
 #[derive(Debug, Deserialize)]
 pub struct LogQuery {
@@ -22,6 +35,8 @@ pub struct LogQuery {
     pub tail: Option<usize>,
     /// 是否实时跟随
     pub follow: Option<bool>,
+    /// 输出格式：base64（默认，兼容 Web）或 text
+    pub format: Option<String>,
 }
 
 #[instrument(skip_all)]
@@ -31,6 +46,7 @@ pub async fn get_logs(
     Path(id): Path<String>,
     Query(query): Query<LogQuery>,
 ) -> Result<Response, ApiError> {
+    auth.require_scope(api_key_scopes::LOGS)?;
     // 权限检查（需要同时访问 Path 和 Query，无法使用 ServicePermission extractor）
     if !auth.can_access_service(&id) {
         return Err(ApiError::forbidden(format!(
@@ -39,10 +55,18 @@ pub async fn get_logs(
         )));
     }
 
+    let format = query.format.as_deref().unwrap_or("base64");
+    let want_text = format.eq_ignore_ascii_case("text");
+
     let follow = query.follow.unwrap_or(false);
     if follow {
-        // 实时跟随：返回 base64 编码的原始数据流
+        let stream_key = format!("sse:{}:{}", auth.claims.sub, id);
+        let permit = state.stream_limiter.try_acquire(stream_key).ok_or_else(|| {
+            ApiError::too_many_requests("too many concurrent log streams for this service")
+        })?;
+
         let service_id = id.clone();
+        let as_text = want_text;
         let stream = state
             .manager
             .follow_logs_raw(&id, Duration::from_millis(100))
@@ -51,26 +75,50 @@ pub async fn get_logs(
             .map(move |data_res| -> Result<Event, Infallible> {
                 match data_res {
                     Ok(data) => {
-                        // 用 base64 编码原始字节，避免 SSE 格式问题
-                        let encoded = BASE64.encode(&data);
-                        Ok(Event::default().data(encoded))
+                        if as_text {
+                            // Agent 友好：SSE 直接推纯文本
+                            let text = String::from_utf8_lossy(&data).into_owned();
+                            Ok(Event::default().data(text))
+                        } else {
+                            // Web 兼容：base64 编码原始字节
+                            let encoded = BASE64.encode(&data);
+                            Ok(Event::default().data(encoded))
+                        }
                     }
                     Err(err) => {
                         tracing::error!(service_id = %service_id, error = %err, "Error in log stream");
-                        // 错误信息也用 base64 编码
                         let msg = format!("error: {}", err);
-                        let encoded = BASE64.encode(msg.as_bytes());
-                        Ok(Event::default().data(encoded))
+                        if as_text {
+                            Ok(Event::default().data(msg))
+                        } else {
+                            let encoded = BASE64.encode(msg.as_bytes());
+                            Ok(Event::default().data(encoded))
+                        }
                     }
                 }
-            });
-        return Ok(Sse::new(stream)
+            })
+            // 最长存活时间到后结束流，释放连接与 permit
+            .take_until(tokio::time::sleep(SSE_MAX_DURATION));
+
+        let guarded = StreamConcurrencyLimiter::guard_stream(stream, permit);
+        return Ok(Sse::new(guarded)
             .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
             .into_response());
     }
 
+    if want_text {
+        // Agent 友好：按行 tail，纯文本
+        let lines = clamp_tail_lines(query.tail);
+        let text_lines = state.manager.tail_logs(&id, lines)?;
+        let body = text_lines.join("\n");
+        return Ok(Response::builder()
+            .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
+            .body(Body::from(body))
+            .unwrap());
+    }
+
     // 非实时：返回原始字节（base64 编码）
-    let bytes = query.tail.unwrap_or(64 * 1024); // 默认 64KB
+    let bytes = clamp_tail_bytes(query.tail);
     let data = state.manager.tail_logs_raw(&id, bytes)?;
     let encoded = BASE64.encode(&data);
     Ok(Json(json!({ "id": id, "data": encoded })).into_response())
@@ -80,8 +128,9 @@ pub async fn get_logs(
 #[instrument(skip_all)]
 pub async fn download_log_file(
     State(state): State<AppState>,
-    ServicePermission { service_id, .. }: ServicePermission,
+    ServicePermission { auth, service_id }: ServicePermission,
 ) -> Result<Response, ApiError> {
+    auth.require_scope(api_key_scopes::LOGS)?;
     tracing::info!(service_id = %service_id, "download_log_file called");
 
     // 获取服务 manifest
@@ -129,4 +178,40 @@ pub async fn download_log_file(
         )
         .body(Body::from(content))
         .unwrap())
+}
+
+fn clamp_tail_lines(tail: Option<usize>) -> usize {
+    tail.unwrap_or(DEFAULT_TAIL_LINES).min(MAX_TAIL_LINES)
+}
+
+fn clamp_tail_bytes(tail: Option<usize>) -> usize {
+    tail.unwrap_or(DEFAULT_TAIL_BYTES).min(MAX_TAIL_BYTES)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tail_lines_are_clamped() {
+        assert_eq!(clamp_tail_lines(None), DEFAULT_TAIL_LINES);
+        assert_eq!(clamp_tail_lines(Some(10)), 10);
+        assert_eq!(clamp_tail_lines(Some(MAX_TAIL_LINES + 100)), MAX_TAIL_LINES);
+        assert_eq!(clamp_tail_lines(Some(0)), 0);
+    }
+
+    #[test]
+    fn tail_bytes_are_clamped() {
+        assert_eq!(clamp_tail_bytes(None), DEFAULT_TAIL_BYTES);
+        assert_eq!(clamp_tail_bytes(Some(1024)), 1024);
+        assert_eq!(
+            clamp_tail_bytes(Some(MAX_TAIL_BYTES * 8)),
+            MAX_TAIL_BYTES
+        );
+        // 攻击面：超大 tail 不能穿透上限
+        assert_eq!(
+            clamp_tail_bytes(Some(usize::MAX)),
+            MAX_TAIL_BYTES
+        );
+    }
 }
