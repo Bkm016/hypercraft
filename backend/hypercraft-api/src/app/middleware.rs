@@ -8,7 +8,7 @@ use axum::http::request::Parts;
 use axum::http::Request;
 use axum::middleware::Next;
 use axum::response::Response;
-use hypercraft_core::{API_KEY_RAW_PREFIX, TokenClaims, TokenType};
+use hypercraft_core::{api_key_scopes, API_KEY_RAW_PREFIX, TokenClaims, TokenType};
 
 use super::error::ApiError;
 use super::state::AppState;
@@ -83,6 +83,36 @@ impl AuthInfo {
 			TokenType::Web => self.claims.service_id.as_deref() == Some(service_id),
 			_ => false,
 		}
+	}
+
+	/// 是否可改服务定义：JWT 管理员，或 API Key 持 manage
+	pub fn can_manage_service_defs(&self) -> bool {
+		if self.is_api_key() {
+			self.has_scope(api_key_scopes::MANAGE)
+		} else {
+			self.is_admin()
+		}
+	}
+
+	/// 创建服务：管理员 JWT 或带 manage 的 API Key
+	pub fn require_manage_create(&self) -> Result<(), ApiError> {
+		if self.can_manage_service_defs() {
+			Ok(())
+		} else {
+			Err(ApiError::forbidden("缺少权限：需要管理员或 scope manage"))
+		}
+	}
+
+	/// 修改/删除已有服务：manage 能力 + 服务访问权（超管旁路）
+	pub fn require_manage_service(&self, service_id: &str) -> Result<(), ApiError> {
+		self.require_manage_create()?;
+		if !self.is_super_admin() && !self.can_access_service(service_id) {
+			return Err(ApiError::forbidden(format!(
+				"没有权限访问服务: {}",
+				service_id
+			)));
+		}
+		Ok(())
 	}
 }
 

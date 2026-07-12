@@ -16,6 +16,7 @@ import { ServicePermissionPicker } from "@/app/users/components/service-permissi
 const SCOPE_OPTIONS: { id: ApiKeyScope; label: string; description: string }[] = [
   { id: "read", label: "read", description: "列表 / 详情 / 状态" },
   { id: "control", label: "control", description: "启停 / 重启 / 强杀" },
+  { id: "manage", label: "manage", description: "创建 / 修改 / 删除服务" },
   { id: "logs", label: "logs", description: "查看与跟随日志" },
   { id: "attach", label: "attach", description: "WebSocket 终端" },
 ];

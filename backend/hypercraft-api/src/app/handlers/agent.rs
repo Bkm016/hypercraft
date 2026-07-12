@@ -1,10 +1,11 @@
 //! Agent 薄封装：复用 service 运维能力，默认文本日志
 
 use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
 use axum::response::Response;
 use axum::Extension;
 use axum::Json;
-use hypercraft_core::{ServiceStatus, ServiceSummary};
+use hypercraft_core::{ServiceManifest, ServiceStatus, ServiceSummary};
 use serde::Serialize;
 use serde_json::json;
 use tracing::instrument;
@@ -12,8 +13,8 @@ use tracing::instrument;
 use super::attach::attach_service;
 use super::logs::{get_logs, LogQuery};
 use super::services::{
-    get_service, get_status, kill_service, list_services, restart_service, shutdown_service,
-    start_service, stop_service,
+    create_service, delete_service, get_service, get_status, kill_service, list_services,
+    restart_service, shutdown_service, start_service, stop_service, update_service,
 };
 use super::super::error::ApiError;
 use super::super::middleware::{AuthInfo, ServicePermission};
@@ -41,6 +42,7 @@ pub async fn agent_help() -> Json<AgentHelp> {
         scopes: vec![
             "read — list/get/status".into(),
             "control — start/stop/restart/shutdown/kill".into(),
+            "manage — create/update/delete service".into(),
             "logs — logs tail/follow".into(),
             "attach — WebSocket PTY".into(),
         ],
@@ -53,15 +55,39 @@ pub async fn agent_help() -> Json<AgentHelp> {
             },
             AgentEndpoint {
                 method: "GET",
+                path: "/agent/help",
+                scope: None,
+                note: "能力说明",
+            },
+            AgentEndpoint {
+                method: "GET",
                 path: "/agent/services",
                 scope: Some("read"),
                 note: "可见服务列表",
+            },
+            AgentEndpoint {
+                method: "POST",
+                path: "/agent/services",
+                scope: Some("manage"),
+                note: "创建服务（body=ServiceManifest；创建后自动写入 Key.service_ids）",
             },
             AgentEndpoint {
                 method: "GET",
                 path: "/agent/services/:id",
                 scope: Some("read"),
                 note: "manifest + status",
+            },
+            AgentEndpoint {
+                method: "PUT",
+                path: "/agent/services/:id",
+                scope: Some("manage"),
+                note: "更新服务定义（body=ServiceManifest）",
+            },
+            AgentEndpoint {
+                method: "DELETE",
+                path: "/agent/services/:id",
+                scope: Some("manage"),
+                note: "删除服务",
             },
             AgentEndpoint {
                 method: "GET",
@@ -138,12 +164,40 @@ pub async fn agent_list_services(
     list_services(state, auth).await
 }
 
+/// POST /agent/services — 创建服务
+pub async fn agent_create_service(
+    state: State<AppState>,
+    auth: Extension<AuthInfo>,
+    body: Json<ServiceManifest>,
+) -> Result<Json<ServiceManifest>, ApiError> {
+    create_service(state, auth, body).await
+}
+
 /// GET /agent/services/:id
 pub async fn agent_get_service(
     state: State<AppState>,
     perm: ServicePermission,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     get_service(state, perm).await
+}
+
+/// PUT /agent/services/:id — 更新服务定义
+pub async fn agent_update_service(
+    state: State<AppState>,
+    auth: Extension<AuthInfo>,
+    Path(id): Path<String>,
+    body: Json<ServiceManifest>,
+) -> Result<StatusCode, ApiError> {
+    update_service(state, auth, Path(id), body).await
+}
+
+/// DELETE /agent/services/:id — 删除服务
+pub async fn agent_delete_service(
+    state: State<AppState>,
+    auth: Extension<AuthInfo>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    delete_service(state, auth, Path(id)).await
 }
 
 /// GET /agent/services/:id/status

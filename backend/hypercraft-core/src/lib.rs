@@ -21,6 +21,27 @@ pub use user::{
 };
 pub use web::validate_web_upstream_url;
 
+/// 从当前目录向上查找并加载最近的 `.env`（仓库根一份即可）
+///
+/// 近路径优先：已存在的环境变量不会被覆盖。
+pub fn load_dotenv() {
+    use std::path::PathBuf;
+
+    let mut dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    for _ in 0..6 {
+        let candidate = dir.join(".env");
+        if candidate.is_file() {
+            let _ = dotenvy::from_path(&candidate);
+            return;
+        }
+        match dir.parent() {
+            Some(parent) => dir = parent.to_path_buf(),
+            None => break,
+        }
+    }
+    let _ = dotenvy::dotenv();
+}
+
 /// 初始化 tracing 日志系统
 ///
 /// 使用环境变量 `RUST_LOG` 设置日志级别，默认为 `info`。

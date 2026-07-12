@@ -19,6 +19,7 @@ import { copyText } from "./copy-text";
 const SCOPE_OPTIONS: { id: ApiKeyScope; label: string; description: string }[] = [
   { id: "read", label: "read", description: "列表 / 详情 / 状态" },
   { id: "control", label: "control", description: "启停 / 重启 / 强杀" },
+  { id: "manage", label: "manage", description: "创建 / 修改 / 删除服务" },
   { id: "logs", label: "logs", description: "查看与跟随日志" },
   { id: "attach", label: "attach", description: "WebSocket 终端" },
 ];
@@ -47,7 +48,7 @@ export function EditApiKeyModal({
   const [scopes, setScopes] = useState<Set<ApiKeyScope>>(
     new Set(
       apiKey.scopes.filter((s): s is ApiKeyScope =>
-        ["read", "control", "logs", "attach"].includes(s)
+        ["read", "control", "manage", "logs", "attach"].includes(s)
       )
     )
   );

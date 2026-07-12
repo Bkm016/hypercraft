@@ -30,6 +30,7 @@ import { notification } from "@/hooks/use-notification";
 import { copyText } from "@/app/api-keys/components/copy-text";
 import {
   AGENT_ENDPOINTS,
+  SAMPLE_MANIFEST_BODY,
   buildAgentUrl,
   buildCurl,
   maskSecret,
@@ -57,6 +58,7 @@ export default function ApiTestPage() {
   const [serviceId, setServiceId] = useState("");
   const [tail, setTail] = useState(100);
   const [follow, setFollow] = useState(false);
+  const [requestBody, setRequestBody] = useState(SAMPLE_MANIFEST_BODY);
 
   const [sending, setSending] = useState(false);
   const [streaming, setStreaming] = useState(false);
@@ -181,6 +183,18 @@ export default function ApiTestPage() {
       });
       return;
     }
+    if (endpoint.needsBody && !requestBody.trim()) {
+      notification({ status: "error", title: "请填写 JSON body" });
+      return;
+    }
+    if (endpoint.needsBody) {
+      try {
+        JSON.parse(requestBody);
+      } catch {
+        notification({ status: "error", title: "JSON body 格式无效" });
+        return;
+      }
+    }
 
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -198,6 +212,7 @@ export default function ApiTestPage() {
       method: endpoint.method,
       url: requestUrl,
       secret,
+      body: endpoint.needsBody ? requestBody : undefined,
       signal: controller.signal,
       timeoutMs: isFollow ? 0 : 30_000,
       onChunk: isFollow
@@ -209,7 +224,7 @@ export default function ApiTestPage() {
     setStreaming(false);
     setSending(false);
     abortRef.current = null;
-  }, [secret, selectedKey, endpoint, serviceId, follow, requestUrl]);
+  }, [secret, selectedKey, endpoint, serviceId, follow, requestUrl, requestBody]);
 
   const handleSendClick = () => {
     if (endpoint.dangerous) {
@@ -236,7 +251,8 @@ export default function ApiTestPage() {
       endpoint.method,
       requestUrl,
       secret,
-      endpoint.id === "logs" && follow
+      endpoint.id === "logs" && follow,
+      endpoint.needsBody ? requestBody : undefined
     );
     const ok = await copyText(curl);
     notification({
@@ -401,7 +417,11 @@ export default function ApiTestPage() {
                       className={`shrink-0 rounded-md px-2 py-1 font-mono text-xs font-semibold ${
                         endpoint.method === "GET"
                           ? "bg-success-lighter text-success-base"
-                          : "bg-away-lighter text-away-base"
+                          : endpoint.method === "DELETE"
+                            ? "bg-error-lighter text-error-base"
+                            : endpoint.method === "PUT"
+                              ? "bg-information-lighter text-information-base"
+                              : "bg-away-lighter text-away-base"
                       }`}
                     >
                       {endpoint.method}
@@ -415,6 +435,21 @@ export default function ApiTestPage() {
                         : requestUrl}
                     </code>
                   </div>
+
+                  {endpoint.needsBody && (
+                    <div className="mt-3 space-y-1.5">
+                      <span className="text-xs font-medium text-text-sub-600">
+                        JSON body（ServiceManifest）
+                      </span>
+                      <textarea
+                        value={requestBody}
+                        onChange={(e) => setRequestBody(e.target.value)}
+                        rows={10}
+                        spellCheck={false}
+                        className="w-full resize-y rounded-lg border border-stroke-soft-200 bg-bg-weak-50 p-3 font-mono text-xs leading-relaxed text-text-strong-950 outline-none focus:ring-2 focus:ring-text-strong-950"
+                      />
+                    </div>
+                  )}
 
                   {endpoint.id === "logs" && (
                     <div className="mt-3 flex flex-wrap items-center gap-4">

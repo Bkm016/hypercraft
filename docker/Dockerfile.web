@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1
+# Hypercraft Web：Next.js standalone
+
+FROM node:20-bookworm-slim AS builder
+WORKDIR /app
+
+RUN corepack enable
+
+COPY web/package.json web/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY web/ ./
+ENV NEXT_OUTPUT=standalone \
+    NEXT_TELEMETRY_DISABLED=1 \
+    NEXT_PUBLIC_API_URL=http://localhost:8080
+RUN pnpm build
+
+FROM node:20-bookworm-slim AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0 \
+    NEXT_PUBLIC_API_URL=http://localhost:8080
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl ca-certificates tini \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --system --gid 1001 nodejs \
+  && useradd --system --uid 1001 --gid nodejs nextjs
+
+# standalone 产物
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY docker/entrypoint-web.sh /entrypoint-web.sh
+
+RUN chmod +x /entrypoint-web.sh \
+  && chown -R nextjs:nodejs /app
+
+USER nextjs
+EXPOSE 3000
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
+  CMD curl -fsS "http://127.0.0.1:3000" >/dev/null || exit 1
+
+ENTRYPOINT ["tini", "--", "/entrypoint-web.sh"]

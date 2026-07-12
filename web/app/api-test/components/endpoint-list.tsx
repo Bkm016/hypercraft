@@ -21,6 +21,8 @@ function hasScope(keyScopes: string[] | null, scope: ApiKeyScope | null): boolea
 const METHOD_COLOR: Record<string, string> = {
   GET: "text-success-base",
   POST: "text-away-base",
+  PUT: "text-information-base",
+  DELETE: "text-error-base",
 };
 
 export function EndpointList({

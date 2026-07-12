@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
   一键启动 Hypercraft 前后端（本地开发）
@@ -6,7 +6,7 @@
 .DESCRIPTION
   - 后端: cargo run -p hypercraft-api（默认 0.0.0.0:8080）
   - 前端: pnpm dev（默认 http://localhost:3000）
-  - 缺 backend/.env 时从 .env.example 复制
+  - 缺仓库根 .env 时从 .env.example 复制
   - Ctrl+C 同时停止前后端
 
 .EXAMPLE
@@ -51,23 +51,23 @@ function Assert-Command([string]$Name) {
     }
 }
 
-function Ensure-BackendEnv {
-    $envFile = Join-Path $BackendDir ".env"
-    $example = Join-Path $BackendDir ".env.example"
+function Ensure-RootEnv {
+    $envFile = Join-Path $Root ".env"
+    $example = Join-Path $Root ".env.example"
     if (Test-Path -LiteralPath $envFile) {
         return
     }
     if (-not (Test-Path -LiteralPath $example)) {
-        throw "缺少 backend/.env.example，无法生成 .env"
+        throw "缺少 .env.example，无法生成 .env"
     }
     Copy-Item -LiteralPath $example -Destination $envFile
-    Write-Ok "已生成 backend/.env（来自 .env.example）"
+    Write-Ok "已生成 .env（来自 .env.example）"
 }
 
 function Get-ApiBaseUrl {
-    # 优先读 backend/.env 的 HC_BIND，再回退到参数
+    # 优先读仓库根 .env 的 HC_BIND，再回退到参数
     $bind = $Bind
-    $envFile = Join-Path $BackendDir ".env"
+    $envFile = Join-Path $Root ".env"
     if (Test-Path -LiteralPath $envFile) {
         $line = Get-Content -LiteralPath $envFile -Encoding UTF8 |
             Where-Object { $_ -match '^\s*HC_BIND\s*=' } |
@@ -143,7 +143,7 @@ if (-not (Test-Path -LiteralPath $WebDir)) {
     throw "找不到 web 目录: $WebDir"
 }
 
-Ensure-BackendEnv
+Ensure-RootEnv
 $ApiBase = Get-ApiBaseUrl
 
 if (-not $ApiOnly -and -not $SkipInstall) {

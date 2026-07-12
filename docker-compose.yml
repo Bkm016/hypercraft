@@ -1,0 +1,60 @@
+# Hypercraft 一键部署：API + Web
+# 用法：
+#   ./install.sh
+#   docker compose up -d --build
+#
+# 浏览器访问 http://localhost:3000
+# 超管口令见 .env 的 HC_DEV_TOKEN（首次生成会打印在 install 输出与 api 日志）
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    image: hypercraft-api:local
+    container_name: hypercraft-api
+    restart: unless-stopped
+    ports:
+      - "${HC_API_PORT:-8080}:8080"
+    env_file:
+      - .env
+    environment:
+      HC_DATA_DIR: /data
+      HC_BIND: 0.0.0.0:8080
+      HC_ALLOWED_COMMANDS: ${HC_ALLOWED_COMMANDS:-java,java.exe,node,node.exe}
+      HC_ALLOWED_CWD_PREFIXES: /services
+      HC_CORS_ORIGINS: ${HC_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      - ./data:/data
+      - ./services:/services
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    image: hypercraft-web:local
+    container_name: hypercraft-web
+    restart: unless-stopped
+    ports:
+      - "${HC_WEB_PORT:-3000}:3000"
+    environment:
+      # 浏览器访问的 API 地址（宿主机映射端口）
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s

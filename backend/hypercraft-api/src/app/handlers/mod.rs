@@ -12,8 +12,9 @@ mod users;
 mod web;
 
 pub use agent::{
-    agent_attach, agent_get_service, agent_get_status, agent_help, agent_kill, agent_list_services,
-    agent_logs, agent_me, agent_restart, agent_shutdown, agent_start, agent_stop,
+    agent_attach, agent_create_service, agent_delete_service, agent_get_service, agent_get_status,
+    agent_help, agent_kill, agent_list_services, agent_logs, agent_me, agent_restart,
+    agent_shutdown, agent_start, agent_stop, agent_update_service,
 };
 pub use api_keys::{
     create_api_key, get_api_key, list_api_keys, reveal_api_key_secret, revoke_api_key,

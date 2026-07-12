@@ -4,14 +4,16 @@ export type AgentEndpointKind = "json" | "text" | "sse" | "info";
 
 export interface AgentEndpointDef {
   id: string;
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PUT" | "DELETE";
   /** 含 :id 占位 */
   path: string;
   scope: ApiKeyScope | null;
   note: string;
   needsServiceId: boolean;
   kind: AgentEndpointKind;
-  /** control 类需二次确认 */
+  /** 需要 JSON body（create/update） */
+  needsBody?: boolean;
+  /** control / manage 写操作需二次确认 */
   dangerous?: boolean;
 }
 
@@ -44,6 +46,17 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     kind: "json",
   },
   {
+    id: "create",
+    method: "POST",
+    path: "/agent/services",
+    scope: "manage",
+    note: "创建服务",
+    needsServiceId: false,
+    kind: "json",
+    needsBody: true,
+    dangerous: true,
+  },
+  {
     id: "get",
     method: "GET",
     path: "/agent/services/:id",
@@ -51,6 +64,27 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     note: "manifest + status",
     needsServiceId: true,
     kind: "json",
+  },
+  {
+    id: "update",
+    method: "PUT",
+    path: "/agent/services/:id",
+    scope: "manage",
+    note: "更新服务定义",
+    needsServiceId: true,
+    kind: "json",
+    needsBody: true,
+    dangerous: true,
+  },
+  {
+    id: "delete",
+    method: "DELETE",
+    path: "/agent/services/:id",
+    scope: "manage",
+    note: "删除服务",
+    needsServiceId: true,
+    kind: "json",
+    dangerous: true,
   },
   {
     id: "status",
@@ -171,12 +205,27 @@ export function buildCurl(
   method: string,
   url: string,
   secret: string,
-  follow: boolean
+  follow: boolean,
+  body?: string
 ): string {
   const parts = [`curl`];
   if (follow) parts.push("-N");
   if (method !== "GET") parts.push(`-X ${method}`);
   parts.push(`-H "Authorization: Bearer ${secret}"`);
+  if (body && body.trim()) {
+    parts.push(`-H "Content-Type: application/json"`);
+    parts.push(`-d ${JSON.stringify(body)}`);
+  }
   parts.push(`"${url}"`);
   return parts.join(" ");
 }
+
+/** create/update 示例 body */
+export const SAMPLE_MANIFEST_BODY = `{
+  "id": "demo-svc",
+  "name": "Demo Service",
+  "command": "echo",
+  "args": ["hello"],
+  "auto_start": false,
+  "auto_restart": false
+}`;

@@ -1,0 +1,436 @@
+﻿#Requires -Version 5.1
+<#
+.SYNOPSIS
+  Hypercraft 一键安装 / 启动（默认下载预编译，无需本机编译）
+
+.DESCRIPTION
+  优先级：
+  1) -Docker / 检测到 Docker → docker compose
+  2) 默认 → 从 GitHub Releases 下载二进制 + Web standalone
+  3) -Build → 本机 cargo/pnpm 编译（可选）
+
+.EXAMPLE
+  .\install.ps1
+  .\install.ps1 -Docker
+  .\install.ps1 -Build
+  .\install.ps1 -EnvOnly
+  .\install.ps1 -Down
+  .\install.ps1 -Logs
+#>
+[CmdletBinding()]
+param(
+    [switch]$Docker,
+    [switch]$Build,
+    [switch]$EnvOnly,
+    [switch]$Down,
+    [switch]$Logs,
+    [switch]$NoDownload,
+    [string]$ReleaseTag = "main",
+    [string]$Repo = "Bkm016/hypercraft"
+)
+
+$ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+$Root = $PSScriptRoot
+Set-Location -LiteralPath $Root
+$RunDir = Join-Path $Root "data\run"
+$LogDir = Join-Path $Root "data\logs"
+$CacheDir = Join-Path $Root "data\cache"
+$DistBackend = Join-Path $Root "dist\backend"
+$DistWeb = Join-Path $Root "dist\web"
+$ReleaseBase = "https://github.com/$Repo/releases/download/$ReleaseTag"
+
+function Write-Step([string]$Message) { Write-Host "[install] $Message" -ForegroundColor Cyan }
+function Write-Ok([string]$Message) { Write-Host "[install] $Message" -ForegroundColor Green }
+function Write-WarnMsg([string]$Message) { Write-Host "[install] $Message" -ForegroundColor Yellow }
+function Die([string]$Message) {
+    Write-Host "[install] $Message" -ForegroundColor Red
+    exit 1
+}
+
+function Assert-Command([string]$Name) {
+    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+        Die "缺少命令: $Name"
+    }
+}
+
+function New-Secret {
+    $bytes = New-Object byte[] 36
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    return [Convert]::ToBase64String($bytes).Replace("+", "A").Replace("/", "a").Substring(0, 48)
+}
+
+function Get-EnvValue([string]$Path, [string]$Key) {
+    if (-not (Test-Path -LiteralPath $Path)) { return "" }
+    $line = Get-Content -LiteralPath $Path -Encoding UTF8 |
+        Where-Object { $_ -match "^\s*$([regex]::Escape($Key))\s*=" } |
+        Select-Object -First 1
+    if (-not $line) { return "" }
+    if ($line -match "=\s*(.*)$") {
+        return $Matches[1].Trim().Trim('"').Trim("'")
+    }
+    return ""
+}
+
+function Set-EnvValue([string]$Path, [string]$Key, [string]$Value) {
+    $lines = @()
+    if (Test-Path -LiteralPath $Path) {
+        $lines = @(Get-Content -LiteralPath $Path -Encoding UTF8)
+    }
+    $found = $false
+    $out = foreach ($line in $lines) {
+        if ($line -match "^\s*$([regex]::Escape($Key))\s*=") {
+            $found = $true
+            "${Key}=${Value}"
+        } else {
+            $line
+        }
+    }
+    if (-not $found) { $out = @($out) + "${Key}=${Value}" }
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllLines($Path, $out, $utf8NoBom)
+}
+
+function Ensure-Dirs {
+    foreach ($d in @(
+        (Join-Path $Root "data"),
+        (Join-Path $Root "services"),
+        $RunDir,
+        $LogDir,
+        $CacheDir,
+        $DistBackend,
+        $DistWeb
+    )) {
+        New-Item -ItemType Directory -Force -Path $d | Out-Null
+    }
+}
+
+function Ensure-Env {
+    $envFile = Join-Path $Root ".env"
+    $example = Join-Path $Root ".env.example"
+    if (-not (Test-Path -LiteralPath $example)) { Die "缺少 .env.example" }
+    if (-not (Test-Path -LiteralPath $envFile)) {
+        Copy-Item -LiteralPath $example -Destination $envFile
+        Write-Ok "已创建 .env（来自 .env.example）"
+    }
+
+    if ([string]::IsNullOrWhiteSpace((Get-EnvValue $envFile "HC_DEV_TOKEN"))) {
+        Set-EnvValue $envFile "HC_DEV_TOKEN" (New-Secret)
+        Write-Ok "已生成 HC_DEV_TOKEN"
+    }
+    if ([string]::IsNullOrWhiteSpace((Get-EnvValue $envFile "HC_JWT_SECRET"))) {
+        Set-EnvValue $envFile "HC_JWT_SECRET" (New-Secret)
+        Write-Ok "已生成 HC_JWT_SECRET"
+    }
+    if ([string]::IsNullOrWhiteSpace((Get-EnvValue $envFile "HC_ALLOWED_CWD_PREFIXES"))) {
+        $servicesAbs = ((Join-Path $Root "services") -replace "\\", "/")
+        Set-EnvValue $envFile "HC_ALLOWED_CWD_PREFIXES" $servicesAbs
+        Write-Ok "已设置 HC_ALLOWED_CWD_PREFIXES=$servicesAbs"
+    }
+
+    $apiUrl = Get-EnvValue $envFile "NEXT_PUBLIC_API_URL"
+    if ([string]::IsNullOrWhiteSpace($apiUrl)) { $apiUrl = "http://localhost:8080" }
+    $webEnv = Join-Path $Root "web\.env.local"
+    if (Test-Path -LiteralPath (Join-Path $Root "web")) {
+        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText($webEnv, "NEXT_PUBLIC_API_URL=$apiUrl`n", $utf8NoBom)
+    }
+}
+
+function Write-WebConfig([string]$WebDir) {
+    $envFile = Join-Path $Root ".env"
+    $apiUrl = Get-EnvValue $envFile "NEXT_PUBLIC_API_URL"
+    if ([string]::IsNullOrWhiteSpace($apiUrl)) { $apiUrl = "http://localhost:8080" }
+    $publicDir = Join-Path $WebDir "public"
+    New-Item -ItemType Directory -Force -Path $publicDir | Out-Null
+    $js = @"
+// Generated by install.ps1
+window.__RUNTIME_CONFIG__ = {
+  apiUrl: "$apiUrl",
+};
+"@
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText((Join-Path $publicDir "config.js"), $js, $utf8NoBom)
+}
+
+function Show-Creds {
+    $envFile = Join-Path $Root ".env"
+    $token = Get-EnvValue $envFile "HC_DEV_TOKEN"
+    $webPort = Get-EnvValue $envFile "HC_WEB_PORT"
+    if ([string]::IsNullOrWhiteSpace($webPort)) { $webPort = "3000" }
+    $apiPort = Get-EnvValue $envFile "HC_API_PORT"
+    if ([string]::IsNullOrWhiteSpace($apiPort)) { $apiPort = "8080" }
+    Write-Host ""
+    Write-Ok "安装配置就绪"
+    Write-Step "面板:    http://localhost:$webPort"
+    Write-Step "API:     http://localhost:$apiPort"
+    Write-Step "超管口令(HC_DEV_TOKEN): $token"
+    Write-WarnMsg "请妥善保存超管口令；勿把 .env 提交到 Git"
+    Write-Host ""
+}
+
+function Test-DockerReady {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return $false }
+    try {
+        docker info 1>$null 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } catch { return $false }
+}
+
+function Invoke-Compose {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$ComposeArgs)
+    $null = docker compose version 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        & docker compose @ComposeArgs
+        if ($LASTEXITCODE -ne 0) { Die "docker compose 失败 ($LASTEXITCODE)" }
+        return
+    }
+    if (Get-Command docker-compose -ErrorAction SilentlyContinue) {
+        & docker-compose @ComposeArgs
+        if ($LASTEXITCODE -ne 0) { Die "docker-compose 失败 ($LASTEXITCODE)" }
+        return
+    }
+    Die "需要 Docker Compose"
+}
+
+function Stop-Local {
+    foreach ($name in @("api", "web")) {
+        $pidFile = Join-Path $RunDir "$name.pid"
+        if (-not (Test-Path -LiteralPath $pidFile)) { continue }
+        $procId = (Get-Content -LiteralPath $pidFile -ErrorAction SilentlyContinue | Select-Object -First 1)
+        if ($procId -match '^\d+$') {
+            Write-Step "停止本地 $name (PID $procId)"
+            & taskkill.exe /PID $procId /T /F 2>$null | Out-Null
+        }
+        Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Expand-ArchiveFlat([string]$ZipPath, [string]$DestDir) {
+    if (Test-Path -LiteralPath $DestDir) {
+        Remove-Item -LiteralPath $DestDir -Recurse -Force
+    }
+    $tmp = Join-Path $CacheDir ("extract-" + [guid]::NewGuid().ToString("n"))
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    try {
+        Expand-Archive -LiteralPath $ZipPath -DestinationPath $tmp -Force
+        $children = @(Get-ChildItem -LiteralPath $tmp -Force)
+        if ($children.Count -eq 1 -and $children[0].PSIsContainer) {
+            Move-Item -LiteralPath $children[0].FullName -Destination $DestDir
+        } else {
+            New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
+            Get-ChildItem -LiteralPath $tmp -Force | ForEach-Object {
+                Move-Item -LiteralPath $_.FullName -Destination $DestDir -Force
+            }
+        }
+    } finally {
+        Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-ReleaseFile([string]$Name) {
+    $url = "$ReleaseBase/$Name"
+    $out = Join-Path $CacheDir $Name
+    if ($NoDownload -and (Test-Path -LiteralPath $out)) {
+        Write-Step "使用缓存: $out"
+        return $out
+    }
+    Write-Step "下载 $Name …"
+    try {
+        Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing
+    } catch {
+        Die "下载失败: $url`n$($_.Exception.Message)`n请检查 https://github.com/$Repo/releases/tag/$ReleaseTag"
+    }
+    if (-not (Test-Path -LiteralPath $out)) { Die "下载后文件不存在: $out" }
+    return $out
+}
+
+function Get-ApiExe {
+    foreach ($p in @(
+        (Join-Path $DistBackend "hypercraft-api.exe"),
+        (Join-Path $Root "backend\target\release\hypercraft-api.exe"),
+        (Join-Path $DistBackend "hypercraft-api")
+    )) {
+        if (Test-Path -LiteralPath $p) { return $p }
+    }
+    return $null
+}
+
+function Get-WebStart {
+    $nodeExe = Join-Path $DistWeb "node.exe"
+    $server = Join-Path $DistWeb "server.js"
+    if ((Test-Path -LiteralPath $nodeExe) -and (Test-Path -LiteralPath $server)) {
+        return @{ Node = $nodeExe; Server = $server; WorkDir = $DistWeb }
+    }
+    # 源码构建回退
+    $webDir = Join-Path $Root "web"
+    $nextBin = Join-Path $webDir "node_modules\next\dist\bin\next"
+    if (Test-Path -LiteralPath $nextBin) {
+        return @{ Node = (Get-Command node).Source; Server = $null; Next = $nextBin; WorkDir = $webDir }
+    }
+    return $null
+}
+
+function Start-LocalProcesses {
+    Stop-Local
+    $apiExe = Get-ApiExe
+    if (-not $apiExe) { Die "未找到 hypercraft-api，请重新运行安装" }
+
+    $web = Get-WebStart
+    if (-not $web) { Die "未找到 Web 运行文件，请重新运行安装" }
+
+    $envFile = Join-Path $Root ".env"
+    $webPort = Get-EnvValue $envFile "HC_WEB_PORT"
+    if ([string]::IsNullOrWhiteSpace($webPort)) { $webPort = "3000" }
+
+    if (Test-Path -LiteralPath $DistWeb) {
+        Write-WebConfig $DistWeb
+    }
+
+    $apiLog = Join-Path $LogDir "api.log"
+    $apiErr = Join-Path $LogDir "api.err.log"
+    $webLog = Join-Path $LogDir "web.log"
+    $webErr = Join-Path $LogDir "web.err.log"
+
+    Write-Step "启动 API…"
+    $apiProc = Start-Process -FilePath $apiExe `
+        -WorkingDirectory $Root `
+        -RedirectStandardOutput $apiLog `
+        -RedirectStandardError $apiErr `
+        -PassThru -WindowStyle Hidden
+    Set-Content -LiteralPath (Join-Path $RunDir "api.pid") -Value $apiProc.Id -Encoding ASCII
+
+    Write-Step "启动 Web (port $webPort)…"
+    # 用 cmd 设置 PORT，兼容 Windows PowerShell 5.1
+    if ($web.Server) {
+        $inner = "set PORT=$webPort&& set HOSTNAME=0.0.0.0&& `"$($web.Node)`" `"$($web.Server)`""
+    } else {
+        $inner = "`"$($web.Node)`" `"$($web.Next)`" start -p $webPort -H 0.0.0.0"
+    }
+    $webProc = Start-Process -FilePath "cmd.exe" `
+        -ArgumentList @("/c", $inner) `
+        -WorkingDirectory $web.WorkDir `
+        -RedirectStandardOutput $webLog `
+        -RedirectStandardError $webErr `
+        -PassThru -WindowStyle Hidden
+
+    Set-Content -LiteralPath (Join-Path $RunDir "web.pid") -Value $webProc.Id -Encoding ASCII
+    Write-Ok "本地进程已启动"
+    Write-Step "日志: $LogDir"
+    Write-Step "停止: .\install.ps1 -Down"
+}
+
+function Install-Binary {
+    if (-not $NoDownload) {
+        $backendZip = Get-ReleaseFile "hypercraft-backend-windows.zip"
+        $webZip = Get-ReleaseFile "web-standalone-windows.zip"
+        Write-Step "解压后端…"
+        Expand-ArchiveFlat $backendZip $DistBackend
+        Write-Step "解压 Web…"
+        Expand-ArchiveFlat $webZip $DistWeb
+    } else {
+        Write-Step "跳过下载，使用 dist/ 已有文件"
+    }
+
+    if (-not (Get-ApiExe)) {
+        Die "dist/backend 中没有 hypercraft-api.exe"
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $DistWeb "server.js"))) {
+        Die "dist/web 中没有 server.js（standalone 不完整）"
+    }
+
+    Start-LocalProcesses
+}
+
+function Install-FromSource {
+    Assert-Command cargo
+    Assert-Command node
+    if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
+        Write-Step "启用 corepack pnpm…"
+        Assert-Command corepack
+        & corepack enable
+        & corepack prepare pnpm@10.15.1 --activate
+    }
+    Assert-Command pnpm
+
+    Write-Step "编译 API (release)…"
+    Push-Location (Join-Path $Root "backend")
+    try {
+        & cargo build --release -p hypercraft-api -p hypercraft-cli
+        if ($LASTEXITCODE -ne 0) { Die "cargo build 失败" }
+    } finally { Pop-Location }
+
+    Write-Step "安装并构建 Web…"
+    Push-Location (Join-Path $Root "web")
+    try {
+        & pnpm install
+        if ($LASTEXITCODE -ne 0) { Die "pnpm install 失败" }
+        $env:NEXT_TELEMETRY_DISABLED = "1"
+        & pnpm build
+        if ($LASTEXITCODE -ne 0) { Die "pnpm build 失败" }
+    } finally { Pop-Location }
+
+    # 拷到 dist 便于统一启动
+    New-Item -ItemType Directory -Force -Path $DistBackend | Out-Null
+    Copy-Item (Join-Path $Root "backend\target\release\hypercraft-api.exe") $DistBackend -Force
+    Copy-Item (Join-Path $Root "backend\target\release\hypercraft-cli.exe") $DistBackend -Force -ErrorAction SilentlyContinue
+
+    Start-LocalProcesses
+}
+
+# --- main ---
+if ($Docker -and $Build) { Die "不能同时指定 -Docker 与 -Build" }
+
+Ensure-Dirs
+Ensure-Env
+
+if ($EnvOnly) {
+    Show-Creds
+    Write-Step "默认安装(下载预编译): .\install.ps1"
+    Write-Step "Docker:               .\install.ps1 -Docker"
+    Write-Step "本机编译:             .\install.ps1 -Build"
+    exit 0
+}
+
+if ($Down) {
+    if (Test-DockerReady) { try { Invoke-Compose down } catch { } }
+    Stop-Local
+    Write-Ok "已停止"
+    exit 0
+}
+
+if ($Logs) {
+    if (Test-DockerReady) {
+        try { Invoke-Compose logs -f; exit 0 } catch { }
+    }
+    Write-Step "跟踪 data/logs（Ctrl+C 退出）"
+    Get-Content -LiteralPath (Join-Path $LogDir "api.log"), (Join-Path $LogDir "web.log") -Wait -ErrorAction SilentlyContinue
+    exit 0
+}
+
+$mode = "binary"
+if ($Docker) {
+    $mode = "docker"
+} elseif ($Build) {
+    $mode = "build"
+} else {
+    Write-Step "使用 GitHub Release 预编译包（无需本机编译 / Docker）"
+}
+
+if ($mode -eq "docker") {
+    Assert-Command docker
+    if (-not (Test-DockerReady)) { Die "Docker 未运行。可改用: .\install.ps1（下载预编译）" }
+    Write-Step "构建并启动 Docker…"
+    Invoke-Compose up -d --build
+} elseif ($mode -eq "build") {
+    Write-Step "本机源码编译安装…"
+    Install-FromSource
+} else {
+    Install-Binary
+}
+
+Show-Creds
+Write-Step "业务服务目录: $(Join-Path $Root 'services')"
+Write-Step "数据目录:     $(Join-Path $Root 'data')"
+Write-Step "预编译目录:   $(Join-Path $Root 'dist')"

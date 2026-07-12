@@ -9,7 +9,7 @@ use serde_json::json;
 use std::str::FromStr;
 use tracing::instrument;
 
-use crate::app::middleware::{AuthInfo, RequireAdmin, ServicePermission};
+use crate::app::middleware::{AuthInfo, ServicePermission};
 use crate::app::{ApiError, AppState};
 use hypercraft_core::api_key_scopes;
 
@@ -37,17 +37,26 @@ pub async fn list_services(
 #[instrument(skip_all)]
 pub async fn create_service(
     State(state): State<AppState>,
-    RequireAdmin(auth): RequireAdmin,
+    Extension(auth): Extension<AuthInfo>,
     Json(payload): Json<ServiceManifest>,
 ) -> Result<Json<ServiceManifest>, ApiError> {
+    // 管理员 JWT 或带 manage 的 API Key
+    auth.require_manage_create()?;
     let svc = state.manager.create_service(payload).await?;
 
-    // 非超管创建后自动获得该服务权限
+    // 非超管创建后自动获得该服务权限（用户写 User；API Key 写 Key.service_ids）
     if !auth.is_super_admin() {
-        state
-            .user_manager
-            .add_service_permission(&auth.claims.sub, &svc.id)
-            .await?;
+        if auth.is_api_key() {
+            state
+                .user_manager
+                .add_api_key_service(&auth.claims.sub, &svc.id)
+                .await?;
+        } else {
+            state
+                .user_manager
+                .add_service_permission(&auth.claims.sub, &svc.id)
+                .await?;
+        }
     }
 
     // 同步调度任务
@@ -77,13 +86,11 @@ pub async fn get_service(
 #[instrument(skip_all)]
 pub async fn delete_service(
     State(state): State<AppState>,
-    RequireAdmin(auth): RequireAdmin,
+    Extension(auth): Extension<AuthInfo>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    // 非超管只能删除自己有权限的服务
-    if !auth.is_super_admin() && !auth.can_access_service(&id) {
-        return Err(ApiError::forbidden(format!("没有权限访问服务: {}", id)));
-    }
+    // 管理员 JWT 或 manage scope；非超管仅限自己有权限的服务
+    auth.require_manage_service(&id)?;
 
     // 移除调度任务
     let _ = state.scheduler.remove_schedule(&id).await;
@@ -95,14 +102,12 @@ pub async fn delete_service(
 #[instrument(skip_all)]
 pub async fn update_service(
     State(state): State<AppState>,
-    RequireAdmin(auth): RequireAdmin,
+    Extension(auth): Extension<AuthInfo>,
     Path(id): Path<String>,
     Json(payload): Json<ServiceManifest>,
 ) -> Result<StatusCode, ApiError> {
-    // 非超管只能更新自己有权限的服务
-    if !auth.is_super_admin() && !auth.can_access_service(&id) {
-        return Err(ApiError::forbidden(format!("没有权限访问服务: {}", id)));
-    }
+    // 管理员 JWT 或 manage scope；非超管仅限自己有权限的服务
+    auth.require_manage_service(&id)?;
 
     state.manager.update_service(&id, payload.clone()).await?;
 
@@ -217,14 +222,12 @@ pub async fn get_schedule(
 #[instrument(skip_all)]
 pub async fn update_schedule(
     State(state): State<AppState>,
-    RequireAdmin(auth): RequireAdmin,
+    Extension(auth): Extension<AuthInfo>,
     Path(id): Path<String>,
     Json(payload): Json<UpdateScheduleRequest>,
 ) -> Result<Json<ScheduleResponse>, ApiError> {
-    // 非超管只能改自己有权限的服务
-    if !auth.is_super_admin() && !auth.can_access_service(&id) {
-        return Err(ApiError::forbidden(format!("没有权限访问服务: {}", id)));
-    }
+    // 管理员 JWT 或 manage scope
+    auth.require_manage_service(&id)?;
 
     // 验证 cron 表达式
     if let Some(schedule) = &payload.schedule {

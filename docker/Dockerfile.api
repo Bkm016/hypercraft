@@ -1,0 +1,57 @@
+# syntax=docker/dockerfile:1
+# Hypercraft API 多阶段构建：编译后以带 JRE 的精简镜像运行，便于托管 Java 服务端
+
+FROM rust:1-bookworm AS builder
+WORKDIR /src
+
+# 先拷依赖清单以利用缓存
+COPY backend/Cargo.toml backend/Cargo.lock ./backend/
+COPY backend/hypercraft-core/Cargo.toml ./backend/hypercraft-core/
+COPY backend/hypercraft-api/Cargo.toml ./backend/hypercraft-api/
+COPY backend/hypercraft-cli/Cargo.toml ./backend/hypercraft-cli/
+
+# 占位源码，预热依赖
+RUN mkdir -p backend/hypercraft-core/src \
+      backend/hypercraft-api/src \
+      backend/hypercraft-cli/src \
+  && echo "fn main(){}" > backend/hypercraft-api/src/main.rs \
+  && echo "fn main(){}" > backend/hypercraft-cli/src/main.rs \
+  && echo "pub fn _placeholder(){}" > backend/hypercraft-core/src/lib.rs \
+  && cd backend && cargo build --release -p hypercraft-api -p hypercraft-cli \
+  && rm -rf hypercraft-api/src hypercraft-cli/src hypercraft-core/src
+
+COPY backend/ ./backend/
+# 确保时间戳刷新，强制重链
+RUN touch backend/hypercraft-core/src/lib.rs \
+      backend/hypercraft-api/src/main.rs \
+      backend/hypercraft-cli/src/main.rs \
+  && cd backend && cargo build --release -p hypercraft-api -p hypercraft-cli
+
+# 运行时：JRE 21，便于直接拉起 Minecraft 等 Java 进程
+FROM eclipse-temurin:21-jre-jammy
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl tini \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=builder /src/backend/target/release/hypercraft-api /usr/local/bin/hypercraft-api
+COPY --from=builder /src/backend/target/release/hypercraft-cli /usr/local/bin/hypercraft-cli
+
+RUN mkdir -p /data /services \
+  && useradd --system --home /app --shell /usr/sbin/nologin hypercraft \
+  && chown -R hypercraft:hypercraft /app /data /services
+
+USER hypercraft
+ENV HC_DATA_DIR=/data \
+    HC_BIND=0.0.0.0:8080 \
+    HC_ALLOWED_COMMANDS=java,java.exe,node,node.exe \
+    HC_ALLOWED_CWD_PREFIXES=/services \
+    RUST_LOG=info
+
+EXPOSE 8080
+VOLUME ["/data", "/services"]
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
+  CMD curl -fsS "http://127.0.0.1:8080/health" || exit 1
+
+ENTRYPOINT ["tini", "--"]
+CMD ["hypercraft-api"]

@@ -9,9 +9,11 @@ export interface AgentFetchResult {
 }
 
 export interface AgentFetchOptions {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PUT" | "DELETE";
   url: string;
   secret: string;
+  /** JSON 请求体（create/update） */
+  body?: string;
   signal?: AbortSignal;
   /** SSE：每读到一块追加文本 */
   onChunk?: (chunk: string) => void;
@@ -48,12 +50,17 @@ export async function agentFetch(
       : null;
 
   try {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${opts.secret}`,
+      Accept: "*/*",
+    };
+    if (opts.body && opts.body.trim()) {
+      headers["Content-Type"] = "application/json";
+    }
     const res = await fetch(opts.url, {
       method: opts.method,
-      headers: {
-        Authorization: `Bearer ${opts.secret}`,
-        Accept: "*/*",
-      },
+      headers,
+      body: opts.body && opts.body.trim() ? opts.body : undefined,
       signal: controller.signal,
     });
 

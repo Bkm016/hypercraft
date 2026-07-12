@@ -208,8 +208,8 @@ enum UserCommands {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // 加载 .env 文件（如果存在），忽略错误
-    let _ = dotenvy::dotenv();
+    // 读取仓库根或当前目录的 .env
+    hypercraft_core::load_dotenv();
     init_tracing();
     let cli = Cli::parse();
     let client = client::build_client(&cli.token)?;

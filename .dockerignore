@@ -1,0 +1,17 @@
+.git
+.github
+**/.env
+**/.env.*
+!**/.env.example
+**/target
+**/node_modules
+**/.next
+**/data
+**/services
+**/*.md
+!README.md
+images
+dev.ps1
+dev.cmd
+**/.DS_Store
+**/Thumbs.db

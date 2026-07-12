@@ -1,2 +1,26 @@
 web-home
 AGENTS.md
+
+# secrets & local runtime
+.env
+.env.local
+web/.env
+web/.env.local
+data/
+services/
+dist/
+
+# build
+backend/target/
+web/node_modules/
+web/.next/
+web/out/
+**/*.exe
+**/*.pdb
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

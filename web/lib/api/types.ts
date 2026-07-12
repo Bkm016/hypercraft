@@ -154,7 +154,7 @@ export interface ChangePasswordRequest {
 
 // ==================== API Key（Agent）====================
 
-export type ApiKeyScope = "read" | "control" | "logs" | "attach";
+export type ApiKeyScope = "read" | "control" | "manage" | "logs" | "attach";
 
 export interface ApiKeySummary {
   id: string;

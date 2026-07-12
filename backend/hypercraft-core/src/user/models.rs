@@ -92,13 +92,15 @@ pub mod api_key_scopes {
     pub const READ: &str = "read";
     /// 启停 / 重启 / 强杀
     pub const CONTROL: &str = "control";
+    /// 创建 / 修改 / 删除服务定义
+    pub const MANAGE: &str = "manage";
     /// 日志读取与跟随
     pub const LOGS: &str = "logs";
     /// WebSocket 终端 attach
     pub const ATTACH: &str = "attach";
 
     /// 全部合法 scope
-    pub const ALL: &[&str] = &[READ, CONTROL, LOGS, ATTACH];
+    pub const ALL: &[&str] = &[READ, CONTROL, MANAGE, LOGS, ATTACH];
 
     /// 校验 scope 列表是否全部合法
     pub fn validate(scopes: &[String]) -> Result<(), String> {
@@ -132,7 +134,7 @@ pub struct ApiKey {
     /// 可访问的服务 ID 列表（空 = 无服务）
     #[serde(default)]
     pub service_ids: Vec<String>,
-    /// 能力范围：read / control / logs / attach
+    /// 能力范围：read / control / manage / logs / attach
     #[serde(default)]
     pub scopes: Vec<String>,
     /// 创建者用户 ID

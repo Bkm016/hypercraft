@@ -33,6 +33,7 @@ base64 = "0.22"
 rand = "0.8"
 urlencoding = "2.1"
 url.workspace = true
+dotenvy.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

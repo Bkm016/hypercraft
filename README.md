@@ -1,158 +1,119 @@
 # Hypercraft
 
-跨平台的进程管理与监控平台，适用于 Minecraft 服务端等长期运行的进程。
+跨平台进程管理与监控系统，面向 Minecraft 服务端及其他需长期运行的进程。
 
 ![](/images/PixPin_2025-12-12_03-14-57.png)
 ![](/images/PixPin_2025-12-12_03-15-27.png)
 ![](/images/PixPin_2025-12-12_03-15-31.png)
 
-## 功能
+## 功能概览
 
-- **进程管理** - 启动、停止、重启服务，支持自动重启和优雅关闭命令
-- **实时终端** - 通过 WebSocket + PTY 实现终端 attach，支持输入输出交互
-- **日志管理** - 实时日志流、历史日志查看、自动截断
-- **定时调度** - 基于 Cron 表达式的定时启动/停止/重启
-- **用户认证** - JWT 认证，支持 Token 刷新与撤销
-- **权限控制** - 超级管理员 / 系统管理员 / 普通用户三层角色，用户级服务访问权限
-- **Agent API** - 长期 API Key + `/agent/*` 运维面，便于脚本与 LLM Agent 控服/看日志/挂终端
-- **安全策略** - 可配置命令白名单和工作目录限制
-- **Web 管理界面** - 服务分组、标签筛选、拖拽排序
+| 模块 | 说明 |
+|------|------|
+| 进程管理 | 启动 / 停止 / 重启 / 强杀；支持自动重启与优雅关闭指令 |
+| 终端 | WebSocket + PTY attach，可交互输入输出 |
+| 日志 | 历史截取、实时跟随（SSE）、自动截断 |
+| 调度 | Cron 定时 start / stop / restart |
+| 认证 | JWT 会话；DevToken 超管入口；Token 刷新与撤销 |
+| 权限 | 超级管理员 / 系统管理员 / 普通用户；服务级 ACL |
+| Agent API | 长期 API Key 与 `/agent/*` 运维面 |
+| 安全策略 | 可执行命令白名单、工作目录前缀限制 |
+| Web 控制台 | 服务分组、标签、拖拽排序、API Key 与接口测试 |
 
-## 安装
+## 快速部署
 
-### 使用预编译版本
+配置统一使用仓库根目录 `.env`（模板：`.env.example`）。
 
-从 [Releases](https://github.com/Bkm016/hypercraft/releases) 页面下载。
+### 预编译安装（推荐）
 
-#### Windows
-
-**后端服务**
-
-```powershell
-# 1. 创建环境配置文件（参考下方"环境变量"章节）
-
-# 2. 启动 API 服务
-.\hypercraft-api.exe
-
-# 3. 使用 CLI 工具
-.\hypercraft-cli.exe list
-.\hypercraft-cli.exe start <service-id>
-```
-
-**Web 管理界面**
-
-下载 `web-standalone-windows.zip`，解压后运行：
-
-```powershell
-.\start.ps1
-# 或
-start.cmd
-```
-
-默认运行在 `http://localhost:3000`。
-
-#### Linux
+自 [Releases / main](https://github.com/Bkm016/hypercraft/releases/tag/main) 拉取二进制与 Web standalone，无需本机安装 Rust / Node。
 
 ```bash
-# 添加执行权限
-chmod +x hypercraft-api hypercraft-cli
+# Linux / macOS
+chmod +x install.sh && ./install.sh
 
-# 启动 API 服务
-./hypercraft-api
-
-# 使用 CLI 工具
-./hypercraft-cli list
+# Windows PowerShell
+.\install.ps1
 ```
 
-### 从源码构建
+| 模式 | 命令 | 前置条件 |
+|------|------|----------|
+| 预编译（默认） | `./install.sh` · `.\install.ps1` | 可访问 GitHub |
+| Docker Compose | `--docker` · `-Docker` | Docker |
+| 源码构建 | `--build` · `-Build` | Rust 1.75+、Node 20+、pnpm |
+| 仅生成配置 | `--env-only` · `-EnvOnly` | — |
+| 日志 / 停止 | `--logs` · `--down` | — |
 
-#### 环境要求
+安装完成后访问 `http://localhost:3000`，使用脚本输出的 `HC_DEV_TOKEN` 以超级管理员身份登录。
 
-- Rust 1.75+
-- Node.js 20+ & pnpm
+### 运行时目录
 
-#### 启动后端
+| 路径 | 用途 |
+|------|------|
+| `dist/` | 预编译 API / CLI 与 Web standalone |
+| `data/` | 持久化数据、安装缓存、运行日志 |
+| `services/` | 被托管进程的推荐工作目录 |
+| `.env` | 运行时配置（勿提交版本库） |
+
+### 源码开发
 
 ```bash
-cd backend
-cp .env.example .env
-# 编辑 .env 配置
+./install.sh --env-only          # 或 .\install.ps1 -EnvOnly
+# Windows 可选用 .\dev.ps1 同时拉起前后端
 
-cargo run -p hypercraft-api
+cd backend && cargo run -p hypercraft-api
+cd web && pnpm install && pnpm dev
 ```
 
-#### 启动前端
+API 与 CLI 自当前工作目录向上查找 `.env`。
+
+## CLI
 
 ```bash
-cd web
-pnpm install
-pnpm dev
-```
+export HC_API_BASE=http://127.0.0.1:8080
+# 或 export HC_DEV_TOKEN=...
 
-访问 `http://localhost:3000`。
+hypercraft-cli list
+hypercraft-cli get <id>
+hypercraft-cli start|stop|restart <id>
+hypercraft-cli attach <id>
+hypercraft-cli logs <id> --follow
+hypercraft-cli shell
 
-### CLI 命令
-
-```bash
-# 设置 API 地址
-export HC_API_BASE="http://127.0.0.1:8080"
-
-# 服务管理
-hypercraft-cli list                     # 列出所有服务
-hypercraft-cli get <id>                 # 查看服务详情
-hypercraft-cli start <id>               # 启动服务
-hypercraft-cli stop <id>                # 停止服务
-hypercraft-cli restart <id>             # 重启服务
-hypercraft-cli attach <id>              # 附加到终端
-hypercraft-cli logs <id> --follow       # 实时日志
-hypercraft-cli shell                    # 交互式命令行
-
-# 定时调度
-hypercraft-cli schedule get <id>
-hypercraft-cli schedule set <id> --cron "0 0 8 * * *" --action start
-hypercraft-cli schedule enable <id>
-hypercraft-cli schedule disable <id>
-hypercraft-cli schedule remove <id>
-
-# 用户管理（管理员）
+hypercraft-cli schedule get|set|enable|disable|remove <id>
 hypercraft-cli user list
-hypercraft-cli user create -u <username> -p <password>
-hypercraft-cli user grant <user-id> <service-id>
-hypercraft-cli user revoke <user-id> <service-id>
+hypercraft-cli user create -u <name> -p <password>
+hypercraft-cli user grant|revoke <user-id> <service-id>
 ```
 
 ## Agent API
 
-面向自动化与 LLM Agent 的长期凭证 + 薄封装接口。Key **不是**超管，不能管理用户；权限 = `service_ids` ∩ `scopes`。
+长期凭证格式：`hc_ak_<id>_<secret>`。  
+权限为 Key 的 `service_ids` 与 `scopes` 之交集。API Key **不具备**用户管理与超管能力。
 
-### 创建 API Key（管理员 JWT）
-
-```bash
-# 先用 DevToken / 用户登录拿到 access_token
-curl -X POST http://127.0.0.1:8080/api-keys \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "ops-bot",
-    "service_ids": ["mc-survival"],
-    "scopes": ["read", "control", "logs", "attach"]
-  }'
-# 响应中 secret（hc_ak_...）仅返回一次
-```
+### Scopes
 
 | scope | 能力 |
 |-------|------|
 | `read` | 列表 / 详情 / 状态 |
 | `control` | start / stop / restart / shutdown / kill |
+| `manage` | 创建 / 更新 / 删除服务定义 |
 | `logs` | 日志 tail / follow |
-| `attach` | WebSocket 终端 |
+| `attach` | WebSocket PTY |
+
+### 管理端点（管理员 JWT）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api-keys` | 列出 Key |
-| POST | `/api-keys` | 创建（明文仅一次） |
-| GET | `/api-keys/:id` | 摘要 |
-| DELETE | `/api-keys/:id` | 撤销 |
+| `GET` | `/api-keys` | 列表 |
+| `POST` | `/api-keys` | 创建 |
+| `GET` | `/api-keys/:id` | 摘要 |
+| `GET` | `/api-keys/:id/secret` | 查看完整密钥（加密存储） |
+| `PATCH` | `/api-keys/:id` | 更新 |
+| `POST` | `/api-keys/:id/rotate` | 重置密钥 |
+| `DELETE` | `/api-keys/:id` | 撤销 |
+
+Web 控制台：`/api-keys`（密钥管理）、`/api-test`（接口联调，仅超管）。
 
 ### 调用示例
 
@@ -160,172 +121,46 @@ curl -X POST http://127.0.0.1:8080/api-keys \
 export HC_API=http://127.0.0.1:8080
 export HC_API_KEY=hc_ak_...
 
-curl -H "Authorization: Bearer $HC_API_KEY" $HC_API/agent/me
-curl -H "Authorization: Bearer $HC_API_KEY" $HC_API/agent/help
-curl -H "Authorization: Bearer $HC_API_KEY" $HC_API/agent/services
+curl -H "Authorization: Bearer $HC_API_KEY" "$HC_API/agent/me"
+curl -H "Authorization: Bearer $HC_API_KEY" "$HC_API/agent/help"
+curl -H "Authorization: Bearer $HC_API_KEY" "$HC_API/agent/services"
 
 curl -X POST -H "Authorization: Bearer $HC_API_KEY" \
-  $HC_API/agent/services/mc-survival/restart
+  "$HC_API/agent/services/<id>/restart"
 
-# 默认 text/plain，tail 为行数
 curl -H "Authorization: Bearer $HC_API_KEY" \
-  "$HC_API/agent/services/mc-survival/logs?tail=100"
+  "$HC_API/agent/services/<id>/logs?tail=100"
 
-# 实时日志 SSE（纯文本）
 curl -N -H "Authorization: Bearer $HC_API_KEY" \
-  "$HC_API/agent/services/mc-survival/logs?follow=true"
+  "$HC_API/agent/services/<id>/logs?follow=true"
 
-# 终端 WebSocket（也可用 ?token=$HC_API_KEY）
-# ws://127.0.0.1:8080/agent/services/mc-survival/attach
+# WebSocket: ws://127.0.0.1:8080/agent/services/<id>/attach?token=$HC_API_KEY
 ```
 
-同一 Key 也可直接调用现有 `/services/:id/*` 路径；`/services/:id/logs?format=text` 可拿纯文本日志。
-
-Web 超管可在 **测试** 页（`/api-test`）选择已有 API Key，对 `/agent/*` 端点做真实请求调试（含 curl 复制与 control 二次确认）。
-
-## 项目结构
-
-```
-hypercraft/
-├── backend/                     # Rust 后端 (Cargo workspace)
-│   ├── hypercraft-core/         # 核心库
-│   │   ├── manager/             # 进程生命周期、attach、日志、调度
-│   │   └── user/                # 用户认证、权限、JWT
-│   ├── hypercraft-api/          # HTTP/WebSocket API (Axum)
-│   └── hypercraft-cli/          # 命令行工具 (Clap)
-└── web/                         # Next.js 管理界面
-    ├── app/                     # 页面路由 (services, users, login, profile)
-    ├── components/              # UI 组件
-    ├── hooks/                   # 自定义 Hooks (useTerminal, useXterm)
-    └── lib/                     # API 客户端、认证上下文
-```
+同一 Key 亦可调用 `/services/*`；日志纯文本：`/services/:id/logs?format=text`。
 
 ## 环境变量
 
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `HC_DATA_DIR` | 数据存储目录 | `./data` |
-| `HC_BIND` | API 监听地址 | `127.0.0.1:8080` |
-| `HC_DEV_TOKEN` | 管理员开发令牌（>=32 字符） | - |
-| `HC_JWT_SECRET` | JWT 签名密钥 | 运行时生成 |
-| `HC_JWT_ISSUER` | JWT 签发者 | `hypercraft-api` |
-| `HC_JWT_AUDIENCE` | JWT 受众 | `hypercraft-clients` |
-| `HC_ALLOWED_COMMANDS` | 命令白名单（逗号分隔） | `*` |
-| `HC_ALLOWED_CWD_PREFIXES` | 工作目录白名单（分号分隔） | `*` |
-| `HC_CORS_ORIGINS` | 前端面板的 Origin（逗号分隔，不支持 `*`） | 本地 `localhost:3000` / `127.0.0.1:3000` |
-| `HC_WEB_GATEWAY_BASE_DOMAIN` | 服务 Web 反代根域名（按服务 ID 生成子域，不含协议和路径） | - |
+| 变量 | 说明 | 默认 |
+|------|------|------|
+| `HC_DATA_DIR` | 数据目录 | `./data` |
+| `HC_BIND` | API 监听地址 | `0.0.0.0:8080` |
+| `HC_API_BASE` | CLI 默认 API 地址 | `http://127.0.0.1:8080` |
+| `HC_DEV_TOKEN` | 超级管理员口令（≥32 字符） | 未设置则每次启动随机生成 |
+| `HC_JWT_SECRET` | JWT 签名密钥 | 未设置则每次启动随机生成 |
+| `HC_JWT_ISSUER` | JWT iss | `hypercraft-api` |
+| `HC_JWT_AUDIENCE` | JWT aud | `hypercraft-clients` |
+| `HC_ACCESS_TOKEN_TTL` | Access Token 有效期（秒） | `21600` |
+| `HC_REFRESH_TOKEN_TTL` | Refresh Token 有效期（秒） | `604800` |
+| `HC_ALLOWED_COMMANDS` | 可执行命令白名单（逗号分隔） | 见 `.env.example` |
+| `HC_ALLOWED_CWD_PREFIXES` | 工作目录白名单（本机分号分隔） | 空则按实现放宽 |
+| `HC_CORS_ORIGINS` | 前端 Origin 列表（禁止 `*`） | 本地 `3000` |
+| `HC_WEB_GATEWAY_BASE_DOMAIN` | Web 网关基础域（无协议） | — |
+| `NEXT_PUBLIC_API_URL` | 浏览器侧 API 基址 | `http://localhost:8080` |
+| `HC_API_PORT` / `HC_WEB_PORT` | Compose 宿主机端口映射 | `8080` / `3000` |
+| `RUST_LOG` | 日志级别 | `info` |
 
-## 使用 systemd 托管
-
-Linux 上建议用 **两个 unit**：`hypercraft-api`（Rust 后端）与 `hypercraft-web`（Next standalone）。被管理的业务进程仍由 API 写入 `HC_DATA_DIR`（默认 `./data`），与 systemd 无关。
-
-### 1. 准备目录与配置
-
-1. 将 Release 中的 `hypercraft-api`、`hypercraft-cli` 放到同一目录（下文记为 `BACKEND_DIR`），例如 `/opt/hypercraft/backend`。
-2. 在 `BACKEND_DIR` 复制 `backend/.env.example` 为 `.env`，设置 `HC_BIND`、`HC_DATA_DIR` 等（见「环境变量」）。密钥与 `HC_DEV_TOKEN` 只保留在服务器上的 `.env`，不要提交仓库。
-3. 解压 `web-standalone` 到 `WEB_DIR`（例如 `/opt/hypercraft/web`），确认存在 `server.js`；包内通常自带 `node` 可执行文件。
-4. 若构建时已写入 API 地址，检查 standalone 内的 `NEXT_PUBLIC_API_URL`；否则按「跨域部署」在构建或运行前配置，使浏览器能访问 API。
-
-运行用户需对 `BACKEND_DIR`（含 `data/`）和 `WEB_DIR` 有读写/执行权限；不要用 root 跑长期服务。
-
-### 2. 编写 API 的 unit
-
-新建 `/etc/systemd/system/hypercraft-api.service`：
-
-| 配置项 | 作用 |
-|--------|------|
-| `WorkingDirectory` | 必须为 `BACKEND_DIR`，保证相对路径 `HC_DATA_DIR=./data` 落在正确位置 |
-| `EnvironmentFile` | 指向 `BACKEND_DIR/.env`，由 systemd 注入进程环境 |
-| `ExecStart` | `BACKEND_DIR/hypercraft-api` 的绝对路径 |
-| `User` / `Group` | 专用系统用户，避免 root |
-| `After=network-online.target` | 网络就绪后再启动 |
-| `Restart=always` | 进程退出后自动拉起 |
-
-示例（替换路径与用户）：
-
-```ini
-[Unit]
-Description=HyperCraft API
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=hypercraft
-Group=hypercraft
-WorkingDirectory=/opt/hypercraft/backend
-EnvironmentFile=/opt/hypercraft/backend/.env
-ExecStart=/opt/hypercraft/backend/hypercraft-api
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-监听地址与端口仅由 `.env` 中的 `HC_BIND` 控制，unit 里不必再写 `Environment=HC_BIND`。
-
-### 3. 编写 Web 的 unit
-
-新建 `/etc/systemd/system/hypercraft-web.service`：
-
-| 配置项 | 作用 |
-|--------|------|
-| `After=hypercraft-api.service` | 面板依赖 API；仅保证启动顺序，不表示 API 必须已监听成功 |
-| `WorkingDirectory` | `WEB_DIR`，Next standalone 的根目录 |
-| `Environment=PORT` / `HOSTNAME` | standalone 用 `PORT` 监听；`0.0.0.0` 表示对外网卡开放 |
-| `ExecStart` | 使用包内 `node` 的绝对路径执行 `server.js`，避免依赖系统 Node 版本 |
-
-示例：
-
-```ini
-[Unit]
-Description=HyperCraft Web
-After=network-online.target hypercraft-api.service
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=hypercraft
-Group=hypercraft
-WorkingDirectory=/opt/hypercraft/web
-Environment=PORT=3000
-Environment=HOSTNAME=0.0.0.0
-ExecStart=/opt/hypercraft/web/node /opt/hypercraft/web/server.js
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Web 的环境变量一般不用 `EnvironmentFile`，除非你在运行前用脚本生成 `.env` 并由 standalone 读取；API 地址应在构建时写入或通过反向代理统一入口。
-
-### 4. 加载并开机自启
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable hypercraft-api.service
-sudo systemctl enable hypercraft-web.service
-sudo systemctl start hypercraft-api.service
-sudo systemctl start hypercraft-web.service
-```
-
-### 5. 检查与排错
-
-```bash
-systemctl status hypercraft-api hypercraft-web
-journalctl -u hypercraft-api -f
-journalctl -u hypercraft-web -f
-```
-
-- API 无响应：核对 `HC_BIND`、防火墙、以及 `curl http://127.0.0.1:<端口>/health`。
-- Web 白屏或登录失败：核对 `NEXT_PUBLIC_API_URL`、Nginx/Caddy 反代与「跨域部署」中的 `HC_CORS_ORIGINS`。
-- 更新二进制后：`systemctl restart hypercraft-api`（或 web）；仅改 `.env` 同样需要 restart 才会读入新环境。
-
-## 服务配置示例
-
-服务配置保存为 JSON 格式：
+## 服务清单示例
 
 ```json
 {
@@ -349,68 +184,118 @@ journalctl -u hypercraft-web -f
 }
 ```
 
-## 跨域部署
+## systemd（Linux）
 
-当前端和后端部署在不同域名时：
+将 Release 中的 API 二进制与 Web standalone 分别部署，例如：
 
-`HC_CORS_ORIGINS` 必须填写用户浏览器实际访问的前端面板 Origin（协议 + 域名 + 非默认端口），不能填写 `*`、API 地址、Web Gateway 地址或带路径的 URL。浏览器会话使用 HttpOnly Cookie，带凭据的 CORS 请求不支持通配来源。
+- API：`/opt/hypercraft/backend/hypercraft-api`
+- Web：`/opt/hypercraft/web`（含 `node`、`server.js`）
+- 配置：`/opt/hypercraft/.env`
 
-**后端配置**
+```ini
+# /etc/systemd/system/hypercraft-api.service
+[Unit]
+Description=Hypercraft API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hypercraft
+Group=hypercraft
+WorkingDirectory=/opt/hypercraft/backend
+EnvironmentFile=/opt/hypercraft/.env
+ExecStart=/opt/hypercraft/backend/hypercraft-api
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```ini
+# /etc/systemd/system/hypercraft-web.service
+[Unit]
+Description=Hypercraft Web
+After=network-online.target hypercraft-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hypercraft
+Group=hypercraft
+WorkingDirectory=/opt/hypercraft/web
+Environment=PORT=3000
+Environment=HOSTNAME=0.0.0.0
+ExecStart=/opt/hypercraft/web/node /opt/hypercraft/web/server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
 ```bash
-# backend/.env
+sudo systemctl daemon-reload
+sudo systemctl enable --now hypercraft-api hypercraft-web
+systemctl status hypercraft-api hypercraft-web
+journalctl -u hypercraft-api -f
+```
+
+修改 `.env` 或替换二进制后需 `systemctl restart` 对应单元。健康检查：`curl -fsS http://127.0.0.1:8080/health`。
+
+## 反向代理与跨域
+
+浏览器会话使用带凭据 Cookie，`HC_CORS_ORIGINS` 必须为面板实际 Origin（协议 + 主机 + 非默认端口），不得使用 `*`。
+
+```bash
+# .env
 HC_CORS_ORIGINS=https://panel.example.com
-```
-
-多个前端入口使用逗号分隔：
-
-```bash
-HC_CORS_ORIGINS=https://panel.example.com,https://admin.example.com
-```
-
-内嵌浏览器通过 Web Gateway iframe 导航，不依赖 API CORS。可以让面板与 Web Gateway 共用根域名，例如：
-
-```bash
-HC_CORS_ORIGINS=https://hyper.sacredcraft.cn
-HC_WEB_GATEWAY_BASE_DOMAIN=hyper.sacredcraft.cn
-```
-
-此时服务页面使用 `https://<服务编码>.hyper.sacredcraft.cn`，需要为 `*.hyper.sacredcraft.cn` 配置 DNS、TLS 证书和到 Hypercraft API 的反向代理。
-
-**前端配置**
-```bash
-# web/.env
 NEXT_PUBLIC_API_URL=https://api.example.com
+# 可选：服务页子域网关
+# HC_WEB_GATEWAY_BASE_DOMAIN=hyper.example.com
 ```
 
-**Nginx 示例**
 ```nginx
-# 后端
 server {
     listen 443 ssl;
     server_name api.example.com;
-    
     location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        # WebSocket 支持
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
     }
 }
 
-# 前端
 server {
     listen 443 ssl;
     server_name panel.example.com;
-    
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
 }
+```
+
+Web Gateway 子域需配置通配 DNS、TLS 及至 API 的反代。
+
+## 仓库结构
+
+```
+hypercraft/
+├── backend/                 # Rust workspace
+│   ├── hypercraft-core/     # 进程与用户核心库
+│   ├── hypercraft-api/      # HTTP / WebSocket API
+│   └── hypercraft-cli/      # 命令行客户端
+├── web/                     # Next.js 控制台
+├── docker/                  # 容器构建与入口
+├── install.sh / install.ps1 # 安装与启停
+├── docker-compose.yml
+└── .env.example
 ```
 
 ## 许可证

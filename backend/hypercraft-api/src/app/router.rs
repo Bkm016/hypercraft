@@ -5,16 +5,16 @@ use axum::http::{header, HeaderName, HeaderValue, Method};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use super::handlers::{
-    add_user_service, agent_attach, agent_get_service, agent_get_status, agent_help, agent_kill,
-    agent_list_services, agent_logs, agent_me, agent_restart, agent_shutdown, agent_start,
-    agent_stop, attach_service, change_password, create_api_key, create_group, create_service,
-    create_user, create_web_session, delete_group, delete_service, delete_user, devtoken_login,
-    disable_2fa, download_log_file, enable_2fa, get_api_key, get_logs, get_me, get_schedule,
-    get_service, get_status, get_system_stats, get_user, handler_404, health, kill_service,
-    list_api_keys, list_groups, list_services, list_users, login, logout, refresh, remove_user_service,
-    reorder_groups, reorder_services, restart_service, reveal_api_key_secret, revoke_api_key,
-    rotate_api_key, set_user_services, setup_2fa, shutdown_service, start_service, stop_service,
-    update_api_key,
+    add_user_service, agent_attach, agent_create_service, agent_delete_service, agent_get_service,
+    agent_get_status, agent_help, agent_kill, agent_list_services, agent_logs, agent_me,
+    agent_restart, agent_shutdown, agent_start, agent_stop, agent_update_service, attach_service,
+    change_password, create_api_key, create_group, create_service, create_user, create_web_session,
+    delete_group, delete_service, delete_user, devtoken_login, disable_2fa, download_log_file,
+    enable_2fa, get_api_key, get_logs, get_me, get_schedule, get_service, get_status,
+    get_system_stats, get_user, handler_404, health, kill_service, list_api_keys, list_groups,
+    list_services, list_users, login, logout, refresh, remove_user_service, reorder_groups,
+    reorder_services, restart_service, reveal_api_key_secret, revoke_api_key, rotate_api_key,
+    set_user_services, setup_2fa, shutdown_service, start_service, stop_service, update_api_key,
     update_group, update_schedule, update_service, update_service_group, update_service_tags,
     update_user, validate_cron,
 };
@@ -121,8 +121,16 @@ pub fn app_router(state: AppState, cors_origins: Vec<String>) -> Router {
     let agent_routes = Router::new()
         .route("/agent/me", get(agent_me))
         .route("/agent/help", get(agent_help))
-        .route("/agent/services", get(agent_list_services))
-        .route("/agent/services/:id", get(agent_get_service))
+        .route(
+            "/agent/services",
+            get(agent_list_services).post(agent_create_service),
+        )
+        .route(
+            "/agent/services/:id",
+            get(agent_get_service)
+                .put(agent_update_service)
+                .delete(agent_delete_service),
+        )
         .route("/agent/services/:id/status", get(agent_get_status))
         .route("/agent/services/:id/start", post(agent_start))
         .route("/agent/services/:id/stop", post(agent_stop))

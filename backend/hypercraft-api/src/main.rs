@@ -1,8 +1,7 @@
 mod app;
 
 use app::{app_router, AppState, RateLimiter, StreamConcurrencyLimiter};
-use dotenvy::dotenv;
-use hypercraft_core::{init_tracing, ServiceManager, ServiceScheduler, UserManager};
+use hypercraft_core::{init_tracing, load_dotenv, ServiceManager, ServiceScheduler, UserManager};
 use rand::Rng;
 use std::collections::HashSet;
 use std::env;
@@ -171,8 +170,8 @@ impl ApiConfig {
 /// 可通过环境变量 TOKIO_WORKER_THREADS 覆盖
 #[tokio::main(worker_threads = 4)]
 async fn main() -> anyhow::Result<()> {
-    // 优先读取 .env（若存在）
-    let _ = dotenv();
+    // 读取仓库根或当前目录的 .env
+    load_dotenv();
     init_tracing();
 
     let config = ApiConfig::from_env();

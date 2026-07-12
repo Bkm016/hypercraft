@@ -164,6 +164,20 @@ impl UserManager {
         Ok(keys)
     }
 
+    /// 将服务写入 Key 的 service_ids（已存在则跳过）
+    #[instrument(skip(self))]
+    pub async fn add_api_key_service(&self, id: &str, service_id: &str) -> Result<ApiKey> {
+        let mut key = self.get_api_key(id).await?;
+        if key.revoked_at.is_some() {
+            return Err(ServiceError::Other("api key already revoked".into()));
+        }
+        if !key.service_ids.iter().any(|s| s == service_id) {
+            key.service_ids.push(service_id.to_string());
+            self.persist_api_key(&key)?;
+        }
+        Ok(key)
+    }
+
     /// 更新 API Key 元数据与权限（不可改明文；已撤销的不可改）
     #[instrument(skip(self, req))]
     pub async fn update_api_key(&self, id: &str, req: UpdateApiKeyRequest) -> Result<ApiKey> {
