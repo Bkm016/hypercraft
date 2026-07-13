@@ -7,15 +7,13 @@ import {
   RiDeleteBinLine,
   RiEditLine,
   RiLoader4Line,
-  RiMoreLine,
   RiPlayCircleLine,
+  RiRestartLine,
   RiStopCircleLine,
   RiTerminalBoxLine,
 } from "@remixicon/react";
 import * as Button from "@/components/ui/button";
 import * as TabMenu from "@/components/ui/tab-menu-horizontal";
-import * as Dropdown from "@/components/ui/dropdown";
-import * as CompactButton from "@/components/ui/compact-button";
 import { ServiceStatusBadge } from "@/components/ui/service-status";
 import { PageLayout, PageContent, PageEmpty } from "@/components/layout/page-layout";
 import { api, type ServiceDetail } from "@/lib/api";
@@ -181,120 +179,100 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
 
   return (
     <PageLayout>
-      {/* 自定义 Header */}
-      <div className="shrink-0 border-b border-stroke-soft-200 bg-bg-white-0">
-        <div className="mx-auto max-w-7xl px-4 py-2 sm:px-6 sm:py-3">
-          {/* 标题行 */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              {operating ? (
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-stroke-soft-200 bg-bg-white-0 px-2 py-1 text-xs font-medium text-text-soft-400 shadow-regular-xs">
-                  <RiLoader4Line className="size-3.5 animate-spin" />
-                  处理中
-                </span>
-              ) : (
-                <ServiceStatusBadge state={service.status.state} className="shrink-0" />
-              )}
-              <h1 className="truncate text-base font-semibold tracking-tight text-text-strong-950 sm:text-lg">{service.manifest.name}</h1>
+      {/* 与列表页 PageHeader 同一套边距与操作按钮位置 */}
+      <div className="z-30 shrink-0 border-b border-stroke-soft-200 bg-bg-white-0">
+        <div className="mx-auto max-w-7xl px-4 py-5 md:px-6 md:py-6">
+          <div className="flex items-start justify-between gap-3 md:gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 sm:gap-3">
+                {operating ? (
+                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-stroke-soft-200 bg-bg-white-0 px-2 py-1 text-xs font-medium text-text-soft-400 shadow-regular-xs">
+                    <RiLoader4Line className="size-3.5 animate-spin" />
+                    处理中
+                  </span>
+                ) : (
+                  <ServiceStatusBadge state={service.status.state} className="shrink-0" />
+                )}
+                <h1 className="truncate text-xl font-semibold tracking-tight text-text-strong-950 md:text-2xl">
+                  {service.manifest.name}
+                </h1>
+              </div>
             </div>
 
-            {/* 桌面端按钮 */}
-            <div className="hidden sm:flex items-center gap-2">
-              {service.status.state === "running" ? (
+            <div className="flex shrink-0 items-center gap-2">
+              {service.status.state !== "running" && (
+                <Button.Root
+                  size="small"
+                  disabled={operating}
+                  onClick={() => handleAction("start")}
+                  aria-label="启动服务"
+                >
+                  <Button.Icon as={RiPlayCircleLine} />
+                  <span className="hidden sm:inline">启动</span>
+                </Button.Root>
+              )}
+              <Button.Root
+                size="small"
+                variant="neutral"
+                mode="stroke"
+                disabled={operating}
+                onClick={() => handleAction("restart")}
+                aria-label="重启服务"
+              >
+                <Button.Icon as={RiRestartLine} />
+                <span className="hidden sm:inline">重启</span>
+              </Button.Root>
+              {service.status.state === "running" && (
                 <StopServicePopover
                   onShutdown={() => handleAction("shutdown")}
                   onKill={() => handleAction("kill")}
+                  align="end"
                 >
-                  <Button.Root 
-                    size="xsmall" 
-                    variant="error" 
+                  <Button.Root
+                    size="small"
+                    variant="error"
                     mode="stroke"
                     disabled={operating}
+                    aria-label="停止服务"
                   >
                     <Button.Icon as={RiStopCircleLine} />
-                    停止
+                    <span className="hidden sm:inline">停止</span>
                   </Button.Root>
                 </StopServicePopover>
-              ) : (
-                <Button.Root 
-                  size="xsmall"
-                  disabled={operating}
-                  onClick={() => handleAction("start")}
-                >
-                  <Button.Icon as={RiPlayCircleLine} />
-                  启动
-                </Button.Root>
               )}
               {isAdmin && (
                 <>
-                  <div className="mx-1 h-6 w-px bg-stroke-soft-200" />
-                  <Button.Root 
-                    size="xsmall" 
-                    variant="neutral" 
+                  <Button.Root
+                    size="small"
+                    variant="neutral"
                     mode="stroke"
                     disabled={operating}
                     onClick={() => setShowEditModal(true)}
+                    aria-label="编辑服务"
                   >
                     <Button.Icon as={RiEditLine} />
-                    编辑
+                    <span className="hidden sm:inline">编辑</span>
                   </Button.Root>
-                  <Button.Root 
-                    size="xsmall" 
-                    variant="error" 
+                  <Button.Root
+                    size="small"
+                    variant="error"
                     mode="stroke"
                     disabled={operating}
                     onClick={() => setShowDeleteModal(true)}
+                    aria-label="删除服务"
                   >
                     <Button.Icon as={RiDeleteBinLine} />
-                    删除
+                    <span className="hidden sm:inline">删除</span>
                   </Button.Root>
                 </>
               )}
             </div>
-
-            {/* 移动端按钮 */}
-            <div className="flex sm:hidden items-center gap-1">
-              {service.status.state === "running" ? (
-                <StopServicePopover
-                  onShutdown={() => handleAction("shutdown")}
-                  onKill={() => handleAction("kill")}
-                >
-                  <CompactButton.Root variant="ghost" disabled={operating}>
-                    <CompactButton.Icon as={RiStopCircleLine} className="text-error-base" />
-                  </CompactButton.Root>
-                </StopServicePopover>
-              ) : (
-                <CompactButton.Root variant="ghost" disabled={operating} onClick={() => handleAction("start")}>
-                  <CompactButton.Icon as={RiPlayCircleLine} className="text-success-base" />
-                </CompactButton.Root>
-              )}
-              {isAdmin && (
-                <Dropdown.Root>
-                  <Dropdown.Trigger asChild>
-                    <CompactButton.Root variant="ghost">
-                      <CompactButton.Icon as={RiMoreLine} />
-                    </CompactButton.Root>
-                  </Dropdown.Trigger>
-                  <Dropdown.Content align="end" className="w-32">
-                    <Dropdown.Item onClick={() => setShowEditModal(true)}>
-                      <Dropdown.ItemIcon as={RiEditLine} />
-                      编辑
-                    </Dropdown.Item>
-                    <Dropdown.Item onClick={() => setShowDeleteModal(true)} className="text-error-base">
-                      <Dropdown.ItemIcon as={RiDeleteBinLine} className="text-error-base" />
-                      删除
-                    </Dropdown.Item>
-                  </Dropdown.Content>
-                </Dropdown.Root>
-              )}
-            </div>
           </div>
 
-          {/* Tab 导航 */}
           <TabMenu.Root
             value={activeTab}
             onValueChange={(v) => setActiveTab(v as "logs" | "terminal" | "browser" | "config")}
-            className="mt-3 sm:mt-4"
+            className="mt-3 md:mt-4"
           >
             <TabMenu.List>
               {hasBrowserTab && (
@@ -313,6 +291,7 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
         {activeTab === "terminal" && (
           <TerminalPanel
             serviceId={params.id}
+            serviceState={service.status.state}
             ptyRows={service.manifest.pty_rows}
             terminalTui={service.manifest.terminal_tui}
           />

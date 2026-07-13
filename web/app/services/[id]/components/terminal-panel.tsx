@@ -12,9 +12,11 @@ import * as Tooltip from "@/components/ui/tooltip";
 import { QuickCommands } from "./quick-commands";
 import { useTerminal, type TerminalStatus } from "@/hooks/use-terminal";
 import { useXterm } from "@/hooks/use-xterm";
+import type { ServiceState } from "@/lib/api";
 
 export interface TerminalPanelProps {
   serviceId: string;
+  serviceState: ServiceState;
   ptyRows?: number;
   terminalTui?: boolean;
 }
@@ -27,7 +29,12 @@ const statusConfig: Record<TerminalStatus, { label: string; color: string; dotCo
   error: { label: "连接错误", color: "text-red-400", dotColor: "bg-red-400" },
 };
 
-export function TerminalPanel({ serviceId, ptyRows = 300, terminalTui = false }: TerminalPanelProps) {
+export function TerminalPanel({
+  serviceId,
+  serviceState,
+  ptyRows = 300,
+  terminalTui = false,
+}: TerminalPanelProps) {
   const [zenMode, setZenMode] = useState(false);
   const lastTapRef = useRef<number>(0);
 
@@ -59,7 +66,8 @@ export function TerminalPanel({ serviceId, ptyRows = 300, terminalTui = false }:
   // 使用终端 Hook（自动连接）
   const { status, error, disconnect, sendInput } = useTerminal({
     serviceId,
-    autoConnect: true,
+    autoConnect: serviceState === "running",
+    autoReconnect: serviceState === "running",
     onData: handleData,
   });
 
@@ -95,6 +103,12 @@ export function TerminalPanel({ serviceId, ptyRows = 300, terminalTui = false }:
     }, 100);
   }, [isInitialized, terminalTui, writeln, containerRef]);
 
+  // 停止状态不建立 WebSocket，避免持续输出连接失败/重连。
+  useEffect(() => {
+    if (!isInitialized || terminalTui || serviceState === "running") return;
+    writeln("\x1b[38;5;245m服务未运行，启动后将自动连接终端。\x1b[0m");
+  }, [isInitialized, serviceState, terminalTui, writeln]);
+
   // 连接状态变化时的提示
   const prevStatusRef = useRef<TerminalStatus>("disconnected");
   const lastErrorRef = useRef<string | null>(null);
@@ -103,6 +117,7 @@ export function TerminalPanel({ serviceId, ptyRows = 300, terminalTui = false }:
   useEffect(() => {
     if (!xtermRef.current) return;
     if (terminalTui) return;
+    if (serviceState !== "running") return;
 
     const prevStatus = prevStatusRef.current;
     prevStatusRef.current = status;
@@ -127,7 +142,7 @@ export function TerminalPanel({ serviceId, ptyRows = 300, terminalTui = false }:
         writeln(`\x1b[1;31m${error}，正在重连...\x1b[0m`);
       }
     }
-  }, [status, error, isInitialized, terminalTui, writeln, xtermRef]);
+  }, [status, error, isInitialized, serviceState, terminalTui, writeln, xtermRef]);
 
   // 断开连接清理
   useEffect(() => {
@@ -168,10 +183,10 @@ export function TerminalPanel({ serviceId, ptyRows = 300, terminalTui = false }:
 
   return (
     <div className={`terminal-dark flex min-h-0 flex-1 flex-col overflow-hidden ${
-      zenMode ? "fixed inset-0 z-50" : "rounded-lg border border-white/10"
+      zenMode ? "fixed inset-0 z-50" : "rounded-lg border border-stroke-soft-200"
     }`}>
       {/* 头部工具栏 */}
-      <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-3 py-2 sm:px-4 sm:py-3">
+      <div className="flex shrink-0 items-center justify-between border-b border-stroke-soft-200 px-3 py-2 sm:px-4 sm:py-3">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <RiTerminalBoxLine className="size-4 text-neutral-500 shrink-0" />
           <span className="text-sm text-neutral-400 truncate hidden sm:inline">终端 - {serviceId}</span>
@@ -220,11 +235,11 @@ export function TerminalPanel({ serviceId, ptyRows = 300, terminalTui = false }:
       {/* 终端容器 */}
       <div
         ref={containerRef}
-        className="min-h-0 flex-1 overflow-auto hc-terminal-surface"
+        className="hc-terminal-surface min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
         onDoubleClick={toggleZenMode}
         onTouchEnd={handleTouchEnd}
       >
-        <div ref={wrapperRef} className="overflow-x-auto overflow-y-hidden">
+        <div ref={wrapperRef} className="overflow-x-auto overflow-y-hidden hc-terminal-x-scroll">
           <div ref={terminalRef} className="p-2" />
         </div>
       </div>

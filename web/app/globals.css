@@ -309,14 +309,16 @@ body {
 }
 
 .terminal-dark {
-  --terminal-bg: #050505;
-  --terminal-text: #e8e8e8;
+  --terminal-bg: #1e1e1e;
+  --terminal-text: #d4d4d4;
   background-color: var(--terminal-bg);
   color: var(--terminal-text);
 }
 
 .hc-terminal-surface {
-  background-color: var(--terminal-bg);
+  /* 还原旧终端：深灰外壳 + 柔和黑色显示区 */
+  background-color: #0a0a0a;
+  overflow-x: hidden;
 }
 
 .remixicon path {
@@ -350,10 +352,12 @@ body {
 
 .xterm-viewport {
   overflow-y: auto !important;
+  overflow-x: hidden !important;
 }
 
 .xterm-viewport::-webkit-scrollbar {
   width: 6px;
+  height: 0;
 }
 
 .xterm-viewport::-webkit-scrollbar-track {
@@ -367,6 +371,29 @@ body {
 
 .xterm-viewport::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+/* 终端/日志：隐藏横向滚动条（终端、日志共用） */
+.terminal-dark,
+.terminal-dark *,
+.hc-terminal-surface,
+.hc-terminal-surface *,
+.hc-terminal-x-scroll {
+  scrollbar-width: thin;
+}
+
+.hc-terminal-x-scroll {
+  scrollbar-width: none;
+}
+
+.terminal-dark::-webkit-scrollbar:horizontal,
+.terminal-dark *::-webkit-scrollbar:horizontal,
+.hc-terminal-surface::-webkit-scrollbar:horizontal,
+.hc-terminal-surface *::-webkit-scrollbar:horizontal,
+.hc-terminal-x-scroll::-webkit-scrollbar {
+  height: 0 !important;
+  width: 0;
+  display: none;
 }
 
 .group-card-header {

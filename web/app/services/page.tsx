@@ -13,7 +13,6 @@ import {
 } from "@remixicon/react";
 import * as Button from "@/components/ui/button";
 import { SearchField } from "@/components/ui/search-field";
-import * as CompactButton from "@/components/ui/compact-button";
 import * as TabMenu from "@/components/ui/tab-menu-horizontal";
 import { PageLayout, PageHeader, PageToolbar, PageContent, PageFooter, PageEmpty } from "@/components/layout/page-layout";
 import { api, type ServiceSummary, type ServiceManifest } from "@/lib/api";
@@ -245,7 +244,7 @@ export default function ServicesPage() {
       >
         <PageToolbar>
           {/* 状态筛选：下划线 Tab，与详情页 Tab 风格保持一致 */}
-          <div className="w-full overflow-x-auto md:flex-1">
+          <div className="min-w-0 flex-1 overflow-x-auto">
             <TabMenu.Root value={filter} onValueChange={(v) => setFilter(v as StateFilter)}>
               <TabMenu.List className="min-w-full">
                 {STAT_TILES.map((tile) => (
@@ -261,10 +260,11 @@ export default function ServicesPage() {
             </TabMenu.Root>
           </div>
 
-          <div className="flex w-full items-center gap-2 md:w-auto md:gap-3 md:shrink-0">
+          {/* 右侧贴齐内容区右缘，与标题栏操作按钮对齐 */}
+          <div className="flex shrink-0 items-center gap-2 md:ml-auto md:gap-3">
             <SearchField
               variant="toolbar"
-              className="min-w-0 flex-1 sm:max-w-[14rem] md:w-56 md:flex-none"
+              className="w-full sm:w-56"
               placeholder="搜索服务名称或 ID…"
               value={search}
               onValueChange={setSearch}
@@ -279,34 +279,43 @@ export default function ServicesPage() {
             )}
 
             {selected.size > 0 && (
-              <div className="flex items-center gap-1 border-l border-stroke-soft-200 pl-2 md:gap-2 md:pl-3">
-                <span className="hidden text-sm text-text-sub-600 sm:inline">已选 {selected.size}</span>
-                <span className="text-xs text-text-sub-600 sm:hidden">{selected.size}</span>
-                <CompactButton.Root 
-                  variant="ghost"
+              <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+                <span className="hidden whitespace-nowrap text-xs text-text-sub-600 sm:inline">
+                  已选 {selected.size}
+                </span>
+                <Button.Root
+                  size="xsmall"
                   onClick={() => handleBatchAction("start")}
-                  className="text-success-base hover:bg-success-lighter hover:text-success-base"
+                  aria-label="批量启动"
                 >
-                  <CompactButton.Icon as={RiPlayCircleLine} />
-                </CompactButton.Root>
+                  <Button.Icon as={RiPlayCircleLine} />
+                  <span className="hidden sm:inline">启动</span>
+                </Button.Root>
                 <StopServicePopover
                   onShutdown={() => handleBatchAction("shutdown")}
                   onKill={() => handleBatchAction("kill")}
+                  align="end"
                 >
-                  <CompactButton.Root
-                    variant="ghost"
-                    className="text-error-base hover:bg-error-lighter hover:text-error-base"
+                  <Button.Root
+                    size="xsmall"
+                    variant="error"
+                    mode="stroke"
+                    aria-label="批量停止"
                   >
-                    <CompactButton.Icon as={RiStopCircleLine} />
-                  </CompactButton.Root>
+                    <Button.Icon as={RiStopCircleLine} />
+                    <span className="hidden sm:inline">停止</span>
+                  </Button.Root>
                 </StopServicePopover>
-                <CompactButton.Root
-                  variant="ghost"
+                <Button.Root
+                  size="xsmall"
+                  variant="neutral"
+                  mode="stroke"
                   onClick={() => setShowBatchCommandModal(true)}
-                  className="text-information-base hover:bg-information-lighter hover:text-information-base"
+                  aria-label="批量指令"
                 >
-                  <CompactButton.Icon as={RiCommandLine} />
-                </CompactButton.Root>
+                  <Button.Icon as={RiCommandLine} />
+                  <span className="hidden sm:inline">指令</span>
+                </Button.Root>
               </div>
             )}
           </div>

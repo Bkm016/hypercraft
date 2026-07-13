@@ -72,10 +72,10 @@ export function BrowserPanel({
   return (
     <div
       className={`terminal-dark flex min-h-0 flex-1 flex-col overflow-hidden ${
-        zenMode ? "fixed inset-0 z-50" : "rounded-lg border border-white/10"
+        zenMode ? "fixed inset-0 z-50" : "rounded-lg border border-stroke-soft-200"
       }`}
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-3 py-2 sm:px-4 sm:py-3">
+      <div className="flex shrink-0 items-center justify-between border-b border-stroke-soft-200 px-3 py-2 sm:px-4 sm:py-3">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <RiGlobalLine className="size-4 shrink-0 text-neutral-500" />
           <span className="hidden truncate text-sm text-neutral-400 sm:inline">

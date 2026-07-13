@@ -197,16 +197,16 @@ export function useTerminal({
     connectRef.current = connect;
   }, [connect]);
 
-  // 自动连接
+  // 根据服务状态连接/断开；停止后禁止后台重连。
   useEffect(() => {
     if (autoConnect && connectRef.current) {
-      // 延迟一点确保终端已初始化
       const timer = setTimeout(() => {
         connectRef.current?.();
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [autoConnect]);
+    disconnect();
+  }, [autoConnect, disconnect]);
 
   // 组件卸载时清理
   useEffect(() => {

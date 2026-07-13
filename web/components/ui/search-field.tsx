@@ -60,9 +60,11 @@ export const SearchField = React.forwardRef<
 	return (
 		<div
 			className={cn(
-				"flex h-9 w-full min-w-0 items-center rounded-lg border border-stroke-soft-200",
+				// 默认不写死 w-full，由调用方控制宽度，避免挤掉同排操作区
+				"flex h-9 min-w-0 items-center rounded-lg border border-stroke-soft-200",
 				"bg-bg-white-0 transition-[border-color,box-shadow,background-color] duration-200 ease-out",
 				variant === "toolbar" && "bg-bg-weak-50/80",
+				variant === "embedded" && "w-full",
 				focused &&
 					"border-stroke-sub-300 bg-bg-white-0 shadow-[0_0_0_2px_var(--primary-alpha-10)]",
 				disabled && "pointer-events-none opacity-50",

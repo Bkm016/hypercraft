@@ -14,6 +14,7 @@ import {
   RiMoreLine,
   RiPlayCircleLine,
   RiPriceTag3Line,
+  RiRestartLine,
   RiStarFill,
   RiStarLine,
   RiStopCircleLine,
@@ -283,14 +284,28 @@ export function ServiceCard({
         ) : (
           <>
             {isRunning ? (
-              <StopServicePopover
-                onShutdown={() => onAction("shutdown")}
-                onKill={() => onAction("kill")}
-              >
-                <CompactButton.Root variant="ghost" size="medium">
-                  <CompactButton.Icon as={RiStopCircleLine} className="text-error-base" />
-                </CompactButton.Root>
-              </StopServicePopover>
+              <>
+                <Tooltip.Root>
+                  <Tooltip.Trigger asChild>
+                    <CompactButton.Root
+                      variant="ghost"
+                      size="medium"
+                      onClick={() => onAction("restart")}
+                    >
+                      <CompactButton.Icon as={RiRestartLine} />
+                    </CompactButton.Root>
+                  </Tooltip.Trigger>
+                  <Tooltip.Content>重启</Tooltip.Content>
+                </Tooltip.Root>
+                <StopServicePopover
+                  onShutdown={() => onAction("shutdown")}
+                  onKill={() => onAction("kill")}
+                >
+                  <CompactButton.Root variant="ghost" size="medium">
+                    <CompactButton.Icon as={RiStopCircleLine} className="text-error-base" />
+                  </CompactButton.Root>
+                </StopServicePopover>
+              </>
             ) : (
               <Tooltip.Root>
                 <Tooltip.Trigger asChild>
