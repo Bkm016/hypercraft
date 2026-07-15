@@ -14,10 +14,10 @@ pub struct User {
     pub username: String,
     /// bcrypt 哈希后的密码
     pub password_hash: String,
-    /// 用户可访问的服务 ID 列表
+    /// 默认服务列表可见的服务 ID（系统管理员控制权另由 is_admin 覆盖）
     #[serde(default)]
     pub service_ids: Vec<String>,
-    /// 是否为系统管理员（管理用户，不旁路服务访问）
+    /// 是否为系统管理员（可控制全部服务；默认列表仍按 service_ids）
     #[serde(default)]
     pub is_admin: bool,
     /// Token 版本号（用于撤销旧 token）

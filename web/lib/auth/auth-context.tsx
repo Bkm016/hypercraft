@@ -35,6 +35,8 @@ interface AuthContextValue {
   loginWithDevToken: (token: string, totpCode?: string) => Promise<void>;
   logout: () => void;
   retryConnection: () => Promise<void>;
+  /** 从后端同步当前会话身份 */
+  reloadSession: () => Promise<void>;
 
   // 工具
   canAccessService: (serviceId: string) => boolean;
@@ -272,10 +274,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push("/login");
   }, [router]);
 
+  // 自助改权限时后端已重签 cookie，这里只需同步最新身份
+  const reloadSession = useCallback(async () => {
+    const me = await api.getMe();
+    setUser(userSummaryToClaims(me));
+  }, []);
+
   const canAccessService = useCallback(
     (serviceId: string): boolean => {
       if (!user) return false;
-      if (user.sub === "__devtoken__") return true;
+      // 超管与系统管理员对全部服务有控制权；默认列表仍由后端按 service_ids 过滤
+      if (user.sub === "__devtoken__" || user.is_admin) return true;
       return user.service_ids?.includes(serviceId) ?? false;
     },
     [user]
@@ -295,6 +304,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginWithDevToken,
     logout,
     retryConnection,
+    reloadSession,
     canAccessService,
   };
 

@@ -66,6 +66,7 @@ fn append_set_cookie(response: &mut Response, cookie: String) {
     }
 }
 
+/// 给任意 JSON 响应附带新的 access/refresh 会话 cookie
 /// 登录/刷新成功后附带 HttpOnly 会话 cookie；JSON body 仍返回 token 以兼容 CLI Bearer。
 fn auth_token_response(
     auth_token: AuthToken,

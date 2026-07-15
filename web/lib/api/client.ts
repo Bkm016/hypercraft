@@ -443,8 +443,14 @@ class ApiClient {
 
   // ==================== 服务 API ====================
 
+  /** 默认服务页列表（按当前用户 service_ids 过滤） */
   async listServices(): Promise<ServiceSummary[]> {
     return this.request<ServiceSummary[]>("/services");
+  }
+
+  /** 用户授权用全量服务候选（仅管理员） */
+  async listServicesForAssign(): Promise<ServiceSummary[]> {
+    return this.request<ServiceSummary[]>("/users/service-catalog");
   }
 
   async getService(id: string): Promise<ServiceDetail> {

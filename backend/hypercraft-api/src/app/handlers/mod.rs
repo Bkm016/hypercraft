@@ -38,7 +38,7 @@ pub use services::{
 pub use stats::get_system_stats;
 pub use two_factor::{disable_2fa, enable_2fa, setup_2fa, verify_user_2fa};
 pub use users::{
-    add_user_service, change_password, create_user, delete_user, get_user, list_users,
-    remove_user_service, set_user_services, update_user,
+    add_user_service, change_password, create_user, delete_user, get_user,
+    list_assignable_services, list_users, remove_user_service, set_user_services, update_user,
 };
 pub use web::create_web_session;

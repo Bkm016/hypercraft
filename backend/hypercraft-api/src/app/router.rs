@@ -13,10 +13,11 @@ use super::handlers::{
     create_service, create_user, create_web_session, delete_group, delete_service, delete_user,
     devtoken_login, disable_2fa, download_log_file, enable_2fa, get_api_key, get_logs, get_me,
     get_schedule, get_service, get_status, get_system_stats, get_user, handler_404, health,
-    kill_service, list_api_keys, list_groups, list_services, list_users, login, logout, refresh,
-    remove_user_service, reorder_groups, reorder_services, restart_service, reveal_api_key_secret,
-    revoke_api_key, rotate_api_key, set_user_services, setup_2fa, shutdown_service, start_service,
-    stop_service, update_api_key, update_group, update_schedule, update_service,
+    kill_service, list_api_keys, list_assignable_services, list_groups, list_services, list_users,
+    login, logout, refresh, remove_user_service, reorder_groups, reorder_services, restart_service,
+    reveal_api_key_secret, revoke_api_key, rotate_api_key, set_user_services, setup_2fa,
+    shutdown_service, start_service, stop_service, update_api_key, update_group, update_schedule,
+    update_service,
     update_service_group, update_service_tags, update_user, validate_cron,
 };
 use super::middleware::{auth_middleware, web_gateway_middleware};
@@ -76,6 +77,7 @@ pub fn app_router(state: AppState, cors_origins: Vec<String>) -> Router {
     // 用户管理端点（需要管理员权限，由 handler 中的 RequireAdmin extractor 检查）
     let admin_routes = Router::new()
         .route("/users", get(list_users).post(create_user))
+        .route("/users/service-catalog", get(list_assignable_services))
         .route(
             "/users/:id",
             get(get_user).put(update_user).delete(delete_user),

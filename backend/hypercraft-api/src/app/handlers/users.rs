@@ -3,7 +3,7 @@
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
-use hypercraft_core::{CreateUserRequest, UpdateUserRequest, UserSummary};
+use hypercraft_core::{CreateUserRequest, ServiceSummary, UpdateUserRequest, UserSummary};
 use serde::Deserialize;
 
 use super::super::error::ApiError;
@@ -19,9 +19,10 @@ fn forbid_devtoken_target(id: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
-/// 非超管赋权时，service_ids 必须全部在本人可访问范围内
+/// 非管理员赋权时，service_ids 必须全部在本人可访问范围内。
+/// 系统管理员/超管对任意服务有控制权，可给自己或他人分配全量服务。
 fn ensure_service_ids_in_scope(auth: &AuthInfo, service_ids: &[String]) -> Result<(), ApiError> {
-    if auth.is_super_admin() {
+    if auth.is_admin() {
         return Ok(());
     }
     for sid in service_ids {
@@ -53,6 +54,15 @@ pub async fn list_users(
     Ok(Json(summaries))
 }
 
+/// GET /users/service-catalog - 用户授权用全量服务候选
+pub async fn list_assignable_services(
+    State(state): State<AppState>,
+    RequireAdmin(_): RequireAdmin,
+) -> Result<Json<Vec<ServiceSummary>>, ApiError> {
+    let services = state.manager.list_services().await?;
+    Ok(Json(services))
+}
+
 /// POST /users - 创建用户
 pub async fn create_user(
     State(state): State<AppState>,
@@ -65,7 +75,7 @@ pub async fn create_user(
     if req.password.is_empty() {
         return Err(ApiError::bad_request("password is required"));
     }
-    // 非超管创建用户时，初始服务权限不得超出本人范围
+    // 非管理员创建用户时，初始服务权限不得超出本人范围
     ensure_service_ids_in_scope(&auth, &req.service_ids)?;
     // 密码强度验证由 core 层 UserManager::create_user 执行
     let user = state.user_manager.create_user(req).await?;
@@ -94,7 +104,7 @@ pub async fn update_user(
     forbid_devtoken_target(&id)?;
     // is_admin 仅超管可写
     ensure_can_write_is_admin(&auth, req.is_admin)?;
-    // 非超管赋权范围受限
+    // 非管理员赋权范围受限
     if let Some(ref service_ids) = req.service_ids {
         ensure_service_ids_in_scope(&auth, service_ids)?;
     }
@@ -171,7 +181,7 @@ pub async fn remove_user_service(
     Path((user_id, service_id)): Path<(String, String)>,
 ) -> Result<Json<UserSummary>, ApiError> {
     forbid_devtoken_target(&user_id)?;
-    // 非超管只能收回自己权限范围内的服务
+    // 非管理员只能收回自己权限范围内的服务
     ensure_service_ids_in_scope(&auth, &[service_id.clone()])?;
     let user = state
         .user_manager

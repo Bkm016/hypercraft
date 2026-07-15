@@ -23,7 +23,7 @@ export function EditUserModal({
   onClose,
   onSuccess,
 }: EditUserModalProps) {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, user: currentUser, reloadSession } = useAuth();
   const [selectedServices, setSelectedServices] = useState<Set<string>>(
     new Set(user.service_ids.filter((id) => id !== "*"))
   );
@@ -48,6 +48,10 @@ export function EditUserModal({
         service_ids: Array.from(selectedServices),
         ...(isSuperAdmin ? { is_admin: isAdminUser } : {}),
       });
+      // 服务权限不会撤销会话，保存后同步前端身份；修改密码仍按安全策略重新登录
+      if (currentUser?.sub === user.id && !newPassword) {
+        await reloadSession();
+      }
       notification({ status: "success", title: "用户已更新" });
       onSuccess();
     } catch (err: unknown) {
@@ -88,7 +92,7 @@ export function EditUserModal({
                 checked={isAdminUser}
                 onCheckedChange={setIsAdminUser}
                 label="设为系统管理员"
-                description="系统管理员可管理用户，但仍受服务权限约束"
+                description="系统管理员可控制全部服务；服务页默认列表仍按 service_ids"
               />
             )}
 

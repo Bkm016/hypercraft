@@ -13,8 +13,6 @@ impl UserManager {
         let mut user = self.get_user(user_id).await?;
         if !user.service_ids.contains(&service_id.to_string()) {
             user.service_ids.push(service_id.to_string());
-            user.token_version = user.token_version.saturating_add(1);
-            Self::rotate_refresh_nonce(&mut user);
             user.updated_at = Some(Utc::now());
             self.persist_user(&user)?;
         }
@@ -26,17 +24,15 @@ impl UserManager {
     pub async fn remove_service_permission(&self, user_id: &str, service_id: &str) -> Result<User> {
         let mut user = self.get_user(user_id).await?;
         user.service_ids.retain(|id| id != service_id);
-        user.token_version = user.token_version.saturating_add(1);
-        Self::rotate_refresh_nonce(&mut user);
         user.updated_at = Some(Utc::now());
         self.persist_user(&user)?;
         Ok(user)
     }
 
-    /// 检查用户是否有权限访问服务
-    /// `__devtoken__` 与 API Key 全量可见；系统管理员按 User.service_ids，不旁路。
+    /// 检查用户是否有权限控制服务
+    /// `__devtoken__`、系统管理员与 API Key 全量；普通用户按 service_ids。
     pub fn has_service_permission(&self, claims: &TokenClaims, service_id: &str) -> bool {
-        if claims.sub == "__devtoken__" {
+        if claims.sub == "__devtoken__" || claims.is_admin {
             return true;
         }
         match claims.token_type {

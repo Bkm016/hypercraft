@@ -21,15 +21,11 @@ pub async fn list_services(
     auth.require_scope(api_key_scopes::READ)?;
     let services = state.manager.list_services().await?;
 
-    // 仅超管看全量；系统管理员与普通用户均按 can_access_service 过滤
-    let filtered: Vec<ServiceSummary> = if auth.is_super_admin() {
-        services
-    } else {
-        services
-            .into_iter()
-            .filter(|s| auth.can_access_service(&s.id))
-            .collect()
-    };
+    // 默认服务页按 service_ids 展示；控制权限由 can_access_service 独立判断
+    let filtered = services
+        .into_iter()
+        .filter(|s| auth.is_service_listed(&s.id))
+        .collect();
 
     Ok(Json(filtered))
 }
@@ -44,7 +40,7 @@ pub async fn create_service(
     auth.require_manage_create()?;
     let svc = state.manager.create_service(payload).await?;
 
-    // 非超管用户 JWT 创建后写回 User.service_ids；API Key 全量可见，无需回写白名单
+    // 非超管用户 JWT 创建后写回 User.service_ids，让新服务出现在默认列表；API Key 无需白名单
     if !auth.is_super_admin() && !auth.is_api_key() {
         state
             .user_manager
@@ -82,7 +78,7 @@ pub async fn delete_service(
     Extension(auth): Extension<AuthInfo>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    // 管理员 JWT 或 manage scope；非超管仅限自己有权限的服务
+    // 管理员 JWT 可管理全部服务；API Key 需要 manage scope
     auth.require_manage_service(&id)?;
 
     // 移除调度任务
@@ -99,7 +95,7 @@ pub async fn update_service(
     Path(id): Path<String>,
     Json(payload): Json<ServiceManifest>,
 ) -> Result<StatusCode, ApiError> {
-    // 管理员 JWT 或 manage scope；非超管仅限自己有权限的服务
+    // 管理员 JWT 可管理全部服务；API Key 需要 manage scope
     auth.require_manage_service(&id)?;
 
     state.manager.update_service(&id, payload.clone()).await?;

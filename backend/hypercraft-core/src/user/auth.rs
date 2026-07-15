@@ -197,7 +197,7 @@ impl UserManager {
         )
         .map_err(|e| ServiceError::Unauthorized(format!("token 无效: {}", e)))?;
 
-        let claims = token_data.claims;
+        let mut claims = token_data.claims;
         let refresh_nonce = claims.refresh_nonce.clone();
 
         // 校验 token version 以支持撤销
@@ -213,6 +213,12 @@ impl UserManager {
             if nonce != user.refresh_nonce {
                 return Err(ServiceError::Unauthorized("refresh token 已被撤销".into()));
             }
+        }
+
+        // 服务权限不是凭据状态，每次验证用户 token 时以持久化记录为准，授权变更立即生效且不撤销会话。
+        if claims.token_type == TokenType::User {
+            claims.service_ids = user.service_ids;
+            claims.is_admin = user.is_admin || user.id == "__devtoken__";
         }
 
         Ok(claims)

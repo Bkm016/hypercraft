@@ -41,9 +41,10 @@ export default function UsersPage() {
   const loadData = useCallback(async () => {
     try {
       setError(null);
+      // 权限编辑器需要全量候选；服务页仍走 listServices（按 service_ids）
       const [usersData, servicesData, groupsData] = await Promise.all([
         api.listUsers(),
-        api.listServices(),
+        api.listServicesForAssign(),
         api.listGroups(),
       ]);
       setUsers(usersData);

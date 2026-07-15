@@ -71,9 +71,22 @@ impl AuthInfo {
 		}
 	}
 
-	/// 检查是否有权限访问指定服务
-	/// 超管与 API Key 全量可见（API Key 仅靠 scopes 裁剪能力）；用户 JWT 按 service_ids
+	/// 控制/管理某服务的运行权限。
+	/// 超管、系统管理员、API Key 覆盖全部服务；普通用户 JWT 仅限 service_ids。
 	pub fn can_access_service(&self, service_id: &str) -> bool {
+		match self.claims.token_type {
+			TokenType::User => {
+				self.is_admin() || self.claims.service_ids.contains(&service_id.to_string())
+			}
+			TokenType::Web => self.claims.service_id.as_deref() == Some(service_id),
+			TokenType::ApiKey => true,
+			_ => false,
+		}
+	}
+
+	/// 默认服务列表是否展示该服务（与控制权分离）。
+	/// 超管与 API Key 全量；系统管理员与普通用户均按 claims.service_ids。
+	pub fn is_service_listed(&self, service_id: &str) -> bool {
 		if self.is_super_admin() || self.is_api_key() {
 			return true;
 		}
@@ -102,11 +115,10 @@ impl AuthInfo {
 		}
 	}
 
-	/// 修改/删除已有服务：manage 能力 + 服务访问权
-	/// API Key 全量可见；用户 JWT 仍按 service_ids 校验。
+	/// 修改/删除已有服务：manage 能力 + 服务访问权（系统管理员可管全部）
 	pub fn require_manage_service(&self, service_id: &str) -> Result<(), ApiError> {
 		self.require_manage_create()?;
-		if !self.is_super_admin() && !self.can_access_service(service_id) {
+		if !self.can_access_service(service_id) {
 			return Err(ApiError::forbidden(format!(
 				"没有权限访问服务: {}",
 				service_id

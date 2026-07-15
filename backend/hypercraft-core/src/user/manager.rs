@@ -359,10 +359,9 @@ impl UserManager {
             bumped = true;
         }
 
-        // 更新服务权限
+        // 更新服务权限；verify_token 每次从用户记录同步，无需撤销会话
         if let Some(service_ids) = req.service_ids {
             user.service_ids = service_ids;
-            bumped = true;
         }
 
         // 更新系统管理员标记（变更时撤销旧 token）
