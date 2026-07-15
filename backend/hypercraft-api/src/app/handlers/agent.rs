@@ -1,16 +1,20 @@
-//! Agent 薄封装：复用 service 运维能力，默认文本日志
+//! Agent 薄封装：复用 service / 分组运维能力，默认文本日志
 
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::Response;
 use axum::Extension;
 use axum::Json;
-use hypercraft_core::{ServiceManifest, ServiceStatus, ServiceSummary};
+use hypercraft_core::{ServiceGroup, ServiceManifest, ServiceStatus, ServiceSummary};
 use serde::Serialize;
 use serde_json::json;
 use tracing::instrument;
 
 use super::attach::attach_service;
+use super::groups::{
+    create_group, delete_group, list_groups, reorder_groups, update_group, CreateGroupRequest,
+    ReorderGroupsRequest, UpdateGroupRequest,
+};
 use super::logs::{get_logs, LogQuery};
 use super::services::{
     create_service, delete_service, get_service, get_status, kill_service, list_services,
@@ -27,7 +31,6 @@ pub async fn agent_me(Extension(auth): Extension<AuthInfo>) -> Json<serde_json::
         "sub": auth.claims.sub,
         "username": auth.claims.username,
         "token_type": auth.claims.token_type,
-        "service_ids": auth.claims.service_ids,
         "scopes": auth.scopes,
         "is_admin": auth.is_admin(),
         "is_api_key": auth.is_api_key(),
@@ -42,7 +45,7 @@ pub async fn agent_help() -> Json<AgentHelp> {
         scopes: vec![
             "read — list/get/status".into(),
             "control — start/stop/restart/shutdown/kill".into(),
-            "manage — create/update/delete service".into(),
+            "manage — create/update/delete service 与 group".into(),
             "logs — logs tail/follow".into(),
             "attach — WebSocket PTY".into(),
         ],
@@ -69,7 +72,7 @@ pub async fn agent_help() -> Json<AgentHelp> {
                 method: "POST",
                 path: "/agent/services",
                 scope: Some("manage"),
-                note: "创建服务（body=ServiceManifest；创建后自动写入 Key.service_ids）",
+                note: "创建服务（body=ServiceManifest；API Key 凭 manage scope，全量服务可见）",
             },
             AgentEndpoint {
                 method: "GET",
@@ -136,6 +139,36 @@ pub async fn agent_help() -> Json<AgentHelp> {
                 path: "/agent/services/:id/attach",
                 scope: Some("attach"),
                 note: "WebSocket PTY；可用 ?token=",
+            },
+            AgentEndpoint {
+                method: "GET",
+                path: "/agent/groups",
+                scope: Some("read"),
+                note: "分组列表",
+            },
+            AgentEndpoint {
+                method: "POST",
+                path: "/agent/groups",
+                scope: Some("manage"),
+                note: "创建分组（body={id,name,color?}）",
+            },
+            AgentEndpoint {
+                method: "POST",
+                path: "/agent/groups/reorder",
+                scope: Some("manage"),
+                note: "重排分组（body={group_ids:[...]}）",
+            },
+            AgentEndpoint {
+                method: "PATCH",
+                path: "/agent/groups/:id",
+                scope: Some("manage"),
+                note: "更新分组（body={name?,color?}）",
+            },
+            AgentEndpoint {
+                method: "DELETE",
+                path: "/agent/groups/:id",
+                scope: Some("manage"),
+                note: "删除分组",
             },
         ],
     })
@@ -274,4 +307,49 @@ pub async fn agent_attach(
     ws: axum::extract::ws::WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
     attach_service(state, auth, Path(id), ws).await
+}
+
+/// GET /agent/groups — 分组列表
+pub async fn agent_list_groups(
+    state: State<AppState>,
+    auth: Extension<AuthInfo>,
+) -> Result<Json<Vec<ServiceGroup>>, ApiError> {
+    list_groups(state, auth).await
+}
+
+/// POST /agent/groups — 创建分组
+pub async fn agent_create_group(
+    state: State<AppState>,
+    auth: Extension<AuthInfo>,
+    body: Json<CreateGroupRequest>,
+) -> Result<Json<ServiceGroup>, ApiError> {
+    create_group(state, auth, body).await
+}
+
+/// PATCH /agent/groups/:id — 更新分组
+pub async fn agent_update_group(
+    state: State<AppState>,
+    auth: Extension<AuthInfo>,
+    Path(id): Path<String>,
+    body: Json<UpdateGroupRequest>,
+) -> Result<Json<ServiceGroup>, ApiError> {
+    update_group(state, auth, Path(id), body).await
+}
+
+/// DELETE /agent/groups/:id — 删除分组
+pub async fn agent_delete_group(
+    state: State<AppState>,
+    auth: Extension<AuthInfo>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    delete_group(state, auth, Path(id)).await
+}
+
+/// POST /agent/groups/reorder — 重排分组
+pub async fn agent_reorder_groups(
+    state: State<AppState>,
+    auth: Extension<AuthInfo>,
+    body: Json<ReorderGroupsRequest>,
+) -> Result<Json<Vec<ServiceGroup>>, ApiError> {
+    reorder_groups(state, auth, body).await
 }

@@ -97,7 +97,8 @@ impl UserManager {
             key_prefix,
             key_hash,
             encrypted_secret,
-            service_ids: req.service_ids,
+            // API Key 不再做服务白名单，落盘恒为空
+            service_ids: vec![],
             scopes: req.scopes,
             created_by: created_by.to_string(),
             created_at: now,
@@ -164,20 +165,6 @@ impl UserManager {
         Ok(keys)
     }
 
-    /// 将服务写入 Key 的 service_ids（已存在则跳过）
-    #[instrument(skip(self))]
-    pub async fn add_api_key_service(&self, id: &str, service_id: &str) -> Result<ApiKey> {
-        let mut key = self.get_api_key(id).await?;
-        if key.revoked_at.is_some() {
-            return Err(ServiceError::Other("api key already revoked".into()));
-        }
-        if !key.service_ids.iter().any(|s| s == service_id) {
-            key.service_ids.push(service_id.to_string());
-            self.persist_api_key(&key)?;
-        }
-        Ok(key)
-    }
-
     /// 更新 API Key 元数据与权限（不可改明文；已撤销的不可改）
     #[instrument(skip(self, req))]
     pub async fn update_api_key(&self, id: &str, req: UpdateApiKeyRequest) -> Result<ApiKey> {
@@ -192,9 +179,6 @@ impl UserManager {
                 return Err(ServiceError::Other("name is required".into()));
             }
             key.name = name;
-        }
-        if let Some(service_ids) = req.service_ids {
-            key.service_ids = service_ids;
         }
         if let Some(scopes) = req.scopes {
             if scopes.is_empty() {
@@ -286,7 +270,8 @@ impl UserManager {
             iss: Some(self.jwt_issuer.clone()),
             aud: Some(self.jwt_audience.clone()),
             token_type: TokenType::ApiKey,
-            service_ids: key.service_ids.clone(),
+            // 鉴权不再读 service_ids；恒空，避免误当白名单
+            service_ids: vec![],
             is_admin: false,
             token_version: 0,
             refresh_nonce: None,

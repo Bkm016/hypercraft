@@ -9,25 +9,20 @@ import {
   type ApiKeySummary,
   type ApiKeyScope,
   type CreateApiKeyResponse,
-  type ServiceSummary,
-  type ServiceGroup,
 } from "@/lib/api";
 import { notification } from "@/hooks/use-notification";
-import { ServicePermissionPicker } from "@/app/users/components/service-permission-picker";
 import { copyText } from "./copy-text";
 
 const SCOPE_OPTIONS: { id: ApiKeyScope; label: string; description: string }[] = [
   { id: "read", label: "read", description: "列表 / 详情 / 状态" },
   { id: "control", label: "control", description: "启停 / 重启 / 强杀" },
-  { id: "manage", label: "manage", description: "创建 / 修改 / 删除服务" },
+  { id: "manage", label: "manage", description: "管理服务与分组" },
   { id: "logs", label: "logs", description: "查看与跟随日志" },
   { id: "attach", label: "attach", description: "WebSocket 终端" },
 ];
 
 export interface EditApiKeyModalProps {
   apiKey: ApiKeySummary;
-  services: ServiceSummary[];
-  groups: ServiceGroup[];
   onClose: () => void;
   onSuccess: () => void;
   onRotated: (result: CreateApiKeyResponse) => void;
@@ -35,16 +30,11 @@ export interface EditApiKeyModalProps {
 
 export function EditApiKeyModal({
   apiKey,
-  services,
-  groups,
   onClose,
   onSuccess,
   onRotated,
 }: EditApiKeyModalProps) {
   const [name, setName] = useState(apiKey.name);
-  const [selectedServices, setSelectedServices] = useState<Set<string>>(
-    new Set(apiKey.service_ids)
-  );
   const [scopes, setScopes] = useState<Set<ApiKeyScope>>(
     new Set(
       apiKey.scopes.filter((s): s is ApiKeyScope =>
@@ -128,7 +118,6 @@ export function EditApiKeyModal({
     try {
       await api.updateApiKey(apiKey.id, {
         name: name.trim(),
-        service_ids: Array.from(selectedServices),
         scopes: Array.from(scopes),
       });
       notification({ status: "success", title: "API Key 已更新" });
@@ -252,18 +241,6 @@ export function EditApiKeyModal({
                   </label>
                 ))}
               </div>
-            </FormDialog.Field>
-
-            <div className="border-t border-stroke-soft-200" />
-
-            <FormDialog.Field label="服务权限">
-              <ServicePermissionPicker
-                services={services}
-                groups={groups}
-                selectedIds={selectedServices}
-                onChange={setSelectedServices}
-                disabled={revoked}
-              />
             </FormDialog.Field>
 
             {!revoked && (

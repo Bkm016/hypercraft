@@ -44,19 +44,12 @@ pub async fn create_service(
     auth.require_manage_create()?;
     let svc = state.manager.create_service(payload).await?;
 
-    // 非超管创建后自动获得该服务权限（用户写 User；API Key 写 Key.service_ids）
-    if !auth.is_super_admin() {
-        if auth.is_api_key() {
-            state
-                .user_manager
-                .add_api_key_service(&auth.claims.sub, &svc.id)
-                .await?;
-        } else {
-            state
-                .user_manager
-                .add_service_permission(&auth.claims.sub, &svc.id)
-                .await?;
-        }
+    // 非超管用户 JWT 创建后写回 User.service_ids；API Key 全量可见，无需回写白名单
+    if !auth.is_super_admin() && !auth.is_api_key() {
+        state
+            .user_manager
+            .add_service_permission(&auth.claims.sub, &svc.id)
+            .await?;
     }
 
     // 同步调度任务

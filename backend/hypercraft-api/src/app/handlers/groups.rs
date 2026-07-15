@@ -16,17 +16,8 @@ pub async fn list_groups(
     Extension(auth): Extension<AuthInfo>,
 ) -> Result<Json<Vec<ServiceGroup>>, ApiError> {
     auth.require_scope(api_key_scopes::READ)?;
-    let mut groups = state.manager.list_groups().await?;
-    if auth.is_api_key() {
-        let services = state.manager.list_services().await?;
-        // 自动化凭据只看其服务实际关联的分组，避免泄露其他权限域的组织信息。
-        groups.retain(|group| {
-            services.iter().any(|service| {
-                auth.can_access_service(&service.id)
-                    && service.group.as_deref() == Some(group.id.as_str())
-            })
-        });
-    }
+    // API Key 与 JWT 均返回全部分组（Key 能力仅由 scopes 约束）
+    let groups = state.manager.list_groups().await?;
     Ok(Json(groups))
 }
 
@@ -41,9 +32,11 @@ pub struct CreateGroupRequest {
 #[instrument(skip_all)]
 pub async fn create_group(
     State(state): State<AppState>,
-    RequireAdmin(_): RequireAdmin,
+    Extension(auth): Extension<AuthInfo>,
     Json(payload): Json<CreateGroupRequest>,
 ) -> Result<Json<ServiceGroup>, ApiError> {
+    // 管理员 JWT 或带 manage 的 API Key
+    auth.require_manage_create()?;
     let group = state
         .manager
         .create_group(payload.id, payload.name, payload.color)
@@ -61,10 +54,12 @@ pub struct UpdateGroupRequest {
 #[instrument(skip_all)]
 pub async fn update_group(
     State(state): State<AppState>,
-    RequireAdmin(_): RequireAdmin,
+    Extension(auth): Extension<AuthInfo>,
     Path(id): Path<String>,
     Json(payload): Json<UpdateGroupRequest>,
 ) -> Result<Json<ServiceGroup>, ApiError> {
+    // 管理员 JWT 或带 manage 的 API Key
+    auth.require_manage_create()?;
     let group = state
         .manager
         .update_group(&id, payload.name, payload.color)
@@ -76,9 +71,11 @@ pub async fn update_group(
 #[instrument(skip_all)]
 pub async fn delete_group(
     State(state): State<AppState>,
-    RequireAdmin(_): RequireAdmin,
+    Extension(auth): Extension<AuthInfo>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
+    // 管理员 JWT 或带 manage 的 API Key
+    auth.require_manage_create()?;
     state.manager.delete_group(&id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -92,9 +89,11 @@ pub struct ReorderGroupsRequest {
 #[instrument(skip_all)]
 pub async fn reorder_groups(
     State(state): State<AppState>,
-    RequireAdmin(_): RequireAdmin,
+    Extension(auth): Extension<AuthInfo>,
     Json(payload): Json<ReorderGroupsRequest>,
 ) -> Result<Json<Vec<ServiceGroup>>, ApiError> {
+    // 管理员 JWT 或带 manage 的 API Key
+    auth.require_manage_create()?;
     let groups = state.manager.reorder_groups(payload.group_ids).await?;
     Ok(Json(groups))
 }

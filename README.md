@@ -89,7 +89,7 @@ hypercraft-cli user grant|revoke <user-id> <service-id>
 ## Agent API
 
 长期凭证格式：`hc_ak_<id>_<secret>`。  
-权限为 Key 的 `service_ids` 与 `scopes` 之交集。API Key **不具备**用户管理与超管能力。
+API Key 可访问全部服务，能力由 `scopes` 控制。API Key **不具备**用户管理与超管能力。
 
 ### Scopes
 
@@ -97,11 +97,11 @@ hypercraft-cli user grant|revoke <user-id> <service-id>
 |-------|------|
 | `read` | 列表 / 详情 / 状态 |
 | `control` | start / stop / restart / shutdown / kill |
-| `manage` | 创建 / 更新 / 删除服务定义 |
+| `manage` | 创建 / 更新 / 删除服务定义与分组 |
 | `logs` | 日志 tail / follow |
 | `attach` | WebSocket PTY |
 
-### 管理端点（管理员 JWT）
+### 管理端点（超级管理员 JWT）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -109,9 +109,31 @@ hypercraft-cli user grant|revoke <user-id> <service-id>
 | `POST` | `/api-keys` | 创建 |
 | `GET` | `/api-keys/:id` | 摘要 |
 | `GET` | `/api-keys/:id/secret` | 查看完整密钥（加密存储） |
-| `PATCH` | `/api-keys/:id` | 更新 |
+| `PATCH` | `/api-keys/:id` | 更新 scopes / 名称 |
 | `POST` | `/api-keys/:id/rotate` | 重置密钥 |
 | `DELETE` | `/api-keys/:id` | 撤销 |
+
+系统管理员 JWT **不能**调用上表；Web 控制台 `/api-keys`、`/api-test` 亦仅超级管理员可用。
+
+### Agent 分组与服务入组
+
+| 方法 | 路径 | scope |
+|------|------|-------|
+| `GET` | `/agent/groups` | `read` |
+| `POST` | `/agent/groups` | `manage` |
+| `POST` | `/agent/groups/reorder` | `manage` |
+| `PATCH` | `/agent/groups/:id` | `manage` |
+| `DELETE` | `/agent/groups/:id` | `manage` |
+| `PATCH` | `/services/:id/group` | `manage` |
+
+分配服务到分组（`group` 为分组 id；`null` 表示移出分组）：
+
+```bash
+curl -X PATCH -H "Authorization: Bearer $HC_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"group":"default"}' \
+  "$HC_API/services/<service-id>/group"
+```
 
 Web 控制台：`/api-keys`（密钥管理）、`/api-test`（接口联调，仅超管）。
 
@@ -124,6 +146,17 @@ export HC_API_KEY=hc_ak_...
 curl -H "Authorization: Bearer $HC_API_KEY" "$HC_API/agent/me"
 curl -H "Authorization: Bearer $HC_API_KEY" "$HC_API/agent/help"
 curl -H "Authorization: Bearer $HC_API_KEY" "$HC_API/agent/services"
+curl -H "Authorization: Bearer $HC_API_KEY" "$HC_API/agent/groups"
+
+curl -X POST -H "Authorization: Bearer $HC_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"default","name":"Default"}' \
+  "$HC_API/agent/groups"
+
+curl -X PATCH -H "Authorization: Bearer $HC_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"group":"default"}' \
+  "$HC_API/services/<service-id>/group"
 
 curl -X POST -H "Authorization: Bearer $HC_API_KEY" \
   "$HC_API/agent/services/<id>/restart"

@@ -160,7 +160,6 @@ export interface ApiKeySummary {
   id: string;
   name: string;
   key_prefix: string;
-  service_ids: string[];
   scopes: string[];
   created_by: string;
   created_at: string;
@@ -171,14 +170,12 @@ export interface ApiKeySummary {
 
 export interface CreateApiKeyRequest {
   name: string;
-  service_ids?: string[];
   scopes: string[];
   expires_at?: string | null;
 }
 
 export interface UpdateApiKeyRequest {
   name?: string;
-  service_ids?: string[];
   scopes?: string[];
   expires_at?: string | null;
 }

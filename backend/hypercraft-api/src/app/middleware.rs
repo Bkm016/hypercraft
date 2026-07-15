@@ -71,15 +71,14 @@ impl AuthInfo {
 		}
 	}
 
-	/// 检查是否有权限访问指定服务（仅超管全量旁路）
+	/// 检查是否有权限访问指定服务
+	/// 超管与 API Key 全量可见（API Key 仅靠 scopes 裁剪能力）；用户 JWT 按 service_ids
 	pub fn can_access_service(&self, service_id: &str) -> bool {
-		if self.is_super_admin() {
+		if self.is_super_admin() || self.is_api_key() {
 			return true;
 		}
 		match self.claims.token_type {
-			TokenType::User | TokenType::ApiKey => {
-				self.claims.service_ids.contains(&service_id.to_string())
-			}
+			TokenType::User => self.claims.service_ids.contains(&service_id.to_string()),
 			TokenType::Web => self.claims.service_id.as_deref() == Some(service_id),
 			_ => false,
 		}
@@ -103,7 +102,8 @@ impl AuthInfo {
 		}
 	}
 
-	/// 修改/删除已有服务：manage 能力 + 服务访问权（超管旁路）
+	/// 修改/删除已有服务：manage 能力 + 服务访问权
+	/// API Key 全量可见；用户 JWT 仍按 service_ids 校验。
 	pub fn require_manage_service(&self, service_id: &str) -> Result<(), ApiError> {
 		self.require_manage_create()?;
 		if !self.is_super_admin() && !self.can_access_service(service_id) {

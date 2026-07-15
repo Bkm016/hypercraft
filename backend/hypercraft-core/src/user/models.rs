@@ -131,7 +131,7 @@ pub struct ApiKey {
     /// 加密后的完整明文（AES-GCM，可随时解密给管理员）
     #[serde(default)]
     pub encrypted_secret: Option<String>,
-    /// 可访问的服务 ID 列表（空 = 无服务）
+    /// 历史字段：旧版服务白名单；鉴权已忽略，仅兼容落盘 JSON
     #[serde(default)]
     pub service_ids: Vec<String>,
     /// 能力范围：read / control / manage / logs / attach
@@ -162,8 +162,6 @@ pub struct ApiKeySecretResponse {
 pub struct CreateApiKeyRequest {
     pub name: String,
     #[serde(default)]
-    pub service_ids: Vec<String>,
-    #[serde(default)]
     pub scopes: Vec<String>,
     #[serde(default)]
     pub expires_at: Option<DateTime<Utc>>,
@@ -174,7 +172,6 @@ pub struct CreateApiKeyRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateApiKeyRequest {
     pub name: Option<String>,
-    pub service_ids: Option<Vec<String>>,
     pub scopes: Option<Vec<String>>,
     pub expires_at: Option<DateTime<Utc>>,
 }
@@ -185,7 +182,6 @@ pub struct ApiKeySummary {
     pub id: String,
     pub name: String,
     pub key_prefix: String,
-    pub service_ids: Vec<String>,
     pub scopes: Vec<String>,
     pub created_by: String,
     pub created_at: DateTime<Utc>,
@@ -200,7 +196,6 @@ impl From<ApiKey> for ApiKeySummary {
             id: key.id,
             name: key.name,
             key_prefix: key.key_prefix,
-            service_ids: key.service_ids,
             scopes: key.scopes,
             created_by: key.created_by,
             created_at: key.created_at,

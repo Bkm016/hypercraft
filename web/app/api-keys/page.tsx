@@ -20,8 +20,6 @@ import {
   api,
   type ApiKeySummary,
   type CreateApiKeyResponse,
-  type ServiceSummary,
-  type ServiceGroup,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { notification } from "@/hooks/use-notification";
@@ -36,8 +34,6 @@ export default function ApiKeysPage() {
   const router = useRouter();
   const { isSuperAdmin, isLoading: authLoading } = useAuth();
   const [keys, setKeys] = useState<ApiKeySummary[]>([]);
-  const [services, setServices] = useState<ServiceSummary[]>([]);
-  const [groups, setGroups] = useState<ServiceGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -55,14 +51,8 @@ export default function ApiKeysPage() {
   const loadData = useCallback(async () => {
     try {
       setError(null);
-      const [keysData, servicesData, groupsData] = await Promise.all([
-        api.listApiKeys(),
-        api.listServices(),
-        api.listGroups(),
-      ]);
+      const keysData = await api.listApiKeys();
       setKeys(keysData);
-      setServices(servicesData);
-      setGroups(groupsData);
     } catch (err: unknown) {
       const apiErr = err as { message?: string };
       setError(apiErr.message || "加载 API Key 失败");
@@ -84,8 +74,7 @@ export default function ApiKeysPage() {
       (k) =>
         k.name.toLowerCase().includes(q) ||
         k.key_prefix.toLowerCase().includes(q) ||
-        k.scopes.some((s) => s.toLowerCase().includes(q)) ||
-        k.service_ids.some((s) => s.toLowerCase().includes(q))
+        k.scopes.some((s) => s.toLowerCase().includes(q))
     );
   }, [keys, search]);
 
@@ -138,7 +127,7 @@ export default function ApiKeysPage() {
           <SearchField
             variant="toolbar"
             className="min-w-0 flex-1 sm:w-56 sm:flex-none"
-            placeholder="搜索名称 / scope / 服务…"
+            placeholder="搜索名称 / scope…"
             value={search}
             onValueChange={setSearch}
           />
@@ -171,8 +160,6 @@ export default function ApiKeysPage() {
                 <ApiKeyCard
                   key={key.id}
                   apiKey={key}
-                  services={services}
-                  groups={groups}
                   onEdit={() => setEditingKey(key)}
                   onRevoke={() => setRevokingKey(key)}
                 />
@@ -184,7 +171,6 @@ export default function ApiKeysPage() {
                 <PageTableTh className="w-48">名称</PageTableTh>
                 <PageTableTh className="w-40">前缀</PageTableTh>
                 <PageTableTh className="w-48">Scopes</PageTableTh>
-                <PageTableTh className="w-64">服务权限</PageTableTh>
                 <PageTableTh className="w-40">最近使用</PageTableTh>
                 <PageTableTh className="w-16" />
               </PageTableHead>
@@ -193,8 +179,6 @@ export default function ApiKeysPage() {
                   <ApiKeyRow
                     key={key.id}
                     apiKey={key}
-                    services={services}
-                    groups={groups}
                     onEdit={() => setEditingKey(key)}
                     onRevoke={() => setRevokingKey(key)}
                   />
@@ -211,8 +195,6 @@ export default function ApiKeysPage() {
 
       {showCreate && (
         <CreateApiKeyModal
-          services={services}
-          groups={groups}
           onClose={() => setShowCreate(false)}
           onSuccess={handleCreated}
         />
@@ -221,8 +203,6 @@ export default function ApiKeysPage() {
       {editingKey && (
         <EditApiKeyModal
           apiKey={editingKey}
-          services={services}
-          groups={groups}
           onClose={() => setEditingKey(null)}
           onSuccess={() => {
             setEditingKey(null);

@@ -2,21 +2,81 @@ import type { ApiKeyScope } from "@/lib/api";
 
 export type AgentEndpointKind = "json" | "text" | "sse" | "info";
 
+export type PathParamPicker = "service" | "group";
+
+export interface PathParamDef {
+  key: "id";
+  label: string;
+  picker: PathParamPicker;
+}
+
+export type BodyTemplateKey =
+  | "serviceManifest"
+  | "createGroup"
+  | "updateGroup"
+  | "reorderGroups"
+  | "assignGroup";
+
 export interface AgentEndpointDef {
   id: string;
-  method: "GET" | "POST" | "PUT" | "DELETE";
-  /** 含 :id 占位 */
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   scope: ApiKeyScope | null;
   note: string;
-  needsServiceId: boolean;
   kind: AgentEndpointKind;
-  /** 需要 JSON body（create/update） */
-  needsBody?: boolean;
-  /** control / manage 写操作需二次确认 */
+  bodyTemplate?: BodyTemplateKey;
   dangerous?: boolean;
 }
 
+/** 按路径推断 :id 绑定服务还是分组，避免每个端点重复写字段 */
+export function resolvePathParams(path: string): PathParamDef[] {
+  if (!path.includes(":id")) {
+    return [];
+  }
+  const picker: PathParamPicker =
+    path.startsWith("/agent/groups") || path.startsWith("/groups/")
+      ? "group"
+      : "service";
+  return [
+    {
+      key: "id",
+      label: picker === "group" ? "分组 id" : "服务 id",
+      picker,
+    },
+  ];
+}
+
+export function endpointNeedsPathParam(endpoint: AgentEndpointDef): boolean {
+  return resolvePathParams(endpoint.path).length > 0;
+}
+
+export const BODY_TEMPLATES: Record<BodyTemplateKey, string> = {
+  serviceManifest: `{
+  "id": "demo-svc",
+  "name": "Demo Service",
+  "command": "echo",
+  "args": ["hello"],
+  "auto_start": false,
+  "auto_restart": false
+}`,
+  createGroup: `{
+  "id": "default",
+  "name": "Default",
+  "color": "#5B8DEF"
+}`,
+  updateGroup: `{
+  "name": "Default",
+  "color": "#5B8DEF"
+}`,
+  reorderGroups: `{
+  "group_ids": ["default"]
+}`,
+  assignGroup: `{
+  "group": "default"
+}`,
+};
+
+/** 机器可读端点清单；路径参数与 body 模板由规则推导 */
 export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
   {
     id: "me",
@@ -24,7 +84,6 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/me",
     scope: null,
     note: "当前身份",
-    needsServiceId: false,
     kind: "json",
   },
   {
@@ -33,7 +92,6 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/help",
     scope: null,
     note: "能力说明",
-    needsServiceId: false,
     kind: "json",
   },
   {
@@ -42,7 +100,6 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/services",
     scope: "read",
     note: "可见服务列表",
-    needsServiceId: false,
     kind: "json",
   },
   {
@@ -51,9 +108,8 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/services",
     scope: "manage",
     note: "创建服务",
-    needsServiceId: false,
     kind: "json",
-    needsBody: true,
+    bodyTemplate: "serviceManifest",
     dangerous: true,
   },
   {
@@ -62,7 +118,6 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/services/:id",
     scope: "read",
     note: "manifest + status",
-    needsServiceId: true,
     kind: "json",
   },
   {
@@ -71,9 +126,8 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/services/:id",
     scope: "manage",
     note: "更新服务定义",
-    needsServiceId: true,
     kind: "json",
-    needsBody: true,
+    bodyTemplate: "serviceManifest",
     dangerous: true,
   },
   {
@@ -82,8 +136,17 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/services/:id",
     scope: "manage",
     note: "删除服务",
-    needsServiceId: true,
     kind: "json",
+    dangerous: true,
+  },
+  {
+    id: "assign-group",
+    method: "PATCH",
+    path: "/services/:id/group",
+    scope: "manage",
+    note: "分配服务到分组（group=null 解除）",
+    kind: "json",
+    bodyTemplate: "assignGroup",
     dangerous: true,
   },
   {
@@ -92,7 +155,6 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/services/:id/status",
     scope: "read",
     note: "运行状态",
-    needsServiceId: true,
     kind: "json",
   },
   {
@@ -101,7 +163,6 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/services/:id/start",
     scope: "control",
     note: "启动",
-    needsServiceId: true,
     kind: "json",
     dangerous: true,
   },
@@ -111,7 +172,6 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/services/:id/stop",
     scope: "control",
     note: "停止",
-    needsServiceId: true,
     kind: "json",
     dangerous: true,
   },
@@ -121,7 +181,6 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/services/:id/restart",
     scope: "control",
     note: "重启",
-    needsServiceId: true,
     kind: "json",
     dangerous: true,
   },
@@ -131,7 +190,6 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/services/:id/shutdown",
     scope: "control",
     note: "优雅关闭",
-    needsServiceId: true,
     kind: "json",
     dangerous: true,
   },
@@ -141,7 +199,6 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/services/:id/kill",
     scope: "control",
     note: "强杀",
-    needsServiceId: true,
     kind: "json",
     dangerous: true,
   },
@@ -151,7 +208,6 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/services/:id/logs",
     scope: "logs",
     note: "日志 tail / follow",
-    needsServiceId: true,
     kind: "text",
   },
   {
@@ -160,16 +216,71 @@ export const AGENT_ENDPOINTS: AgentEndpointDef[] = [
     path: "/agent/services/:id/attach",
     scope: "attach",
     note: "WebSocket PTY（本页仅展示连接信息）",
-    needsServiceId: true,
     kind: "info",
+  },
+  {
+    id: "groups-list",
+    method: "GET",
+    path: "/agent/groups",
+    scope: "read",
+    note: "分组列表",
+    kind: "json",
+  },
+  {
+    id: "groups-create",
+    method: "POST",
+    path: "/agent/groups",
+    scope: "manage",
+    note: "创建分组",
+    kind: "json",
+    bodyTemplate: "createGroup",
+    dangerous: true,
+  },
+  {
+    id: "groups-reorder",
+    method: "POST",
+    path: "/agent/groups/reorder",
+    scope: "manage",
+    note: "重排分组",
+    kind: "json",
+    bodyTemplate: "reorderGroups",
+    dangerous: true,
+  },
+  {
+    id: "groups-update",
+    method: "PATCH",
+    path: "/agent/groups/:id",
+    scope: "manage",
+    note: "更新分组",
+    kind: "json",
+    bodyTemplate: "updateGroup",
+    dangerous: true,
+  },
+  {
+    id: "groups-delete",
+    method: "DELETE",
+    path: "/agent/groups/:id",
+    scope: "manage",
+    note: "删除分组",
+    kind: "json",
+    dangerous: true,
   },
 ];
 
 export interface BuildUrlOptions {
   baseUrl: string;
   serviceId?: string;
+  groupId?: string;
   tail?: number;
   follow?: boolean;
+}
+
+function pickPathId(path: string, serviceId: string, groupId: string): string {
+  const params = resolvePathParams(path);
+  if (params.length === 0) {
+    return "";
+  }
+  return params[0].picker === "group" ? groupId : serviceId;
 }
 
 /** 拼出完整请求 URL（含 query） */
@@ -178,9 +289,16 @@ export function buildAgentUrl(
   opts: BuildUrlOptions
 ): string {
   let path = endpoint.path;
-  if (endpoint.needsServiceId) {
-    const id = (opts.serviceId || "").trim();
-    path = path.replace(":id", id ? encodeURIComponent(id) : ":id");
+  const id = pickPathId(
+    path,
+    (opts.serviceId || "").trim(),
+    (opts.groupId || "").trim()
+  );
+  if (path.includes(":id")) {
+    path = path.replace(
+      ":id",
+      id ? encodeURIComponent(id) : ":id"
+    );
   }
 
   const url = new URL(path, opts.baseUrl.replace(/\/$/, "") + "/");
@@ -193,6 +311,24 @@ export function buildAgentUrl(
   }
 
   return url.toString();
+}
+
+export function defaultBodyForEndpoint(endpoint: AgentEndpointDef): string {
+  if (!endpoint.bodyTemplate) {
+    return "";
+  }
+  return BODY_TEMPLATES[endpoint.bodyTemplate];
+}
+
+export function bodyTemplateLabel(key: BodyTemplateKey): string {
+  const labels: Record<BodyTemplateKey, string> = {
+    serviceManifest: "ServiceManifest",
+    createGroup: "CreateGroup",
+    updateGroup: "UpdateGroup",
+    reorderGroups: "ReorderGroups",
+    assignGroup: "AssignGroup",
+  };
+  return labels[key];
 }
 
 /** 掩码展示密钥 */
@@ -220,12 +356,5 @@ export function buildCurl(
   return parts.join(" ");
 }
 
-/** create/update 示例 body */
-export const SAMPLE_MANIFEST_BODY = `{
-  "id": "demo-svc",
-  "name": "Demo Service",
-  "command": "echo",
-  "args": ["hello"],
-  "auto_start": false,
-  "auto_restart": false
-}`;
+/** @deprecated 使用 BODY_TEMPLATES.serviceManifest */
+export const SAMPLE_MANIFEST_BODY = BODY_TEMPLATES.serviceManifest;

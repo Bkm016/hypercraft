@@ -22,6 +22,7 @@ const METHOD_COLOR: Record<string, string> = {
   GET: "text-success-base",
   POST: "text-away-base",
   PUT: "text-information-base",
+  PATCH: "text-information-base",
   DELETE: "text-error-base",
 };
 

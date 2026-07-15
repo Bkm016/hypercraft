@@ -6,7 +6,8 @@ import * as FormDialog from "@/components/ui/form-dialog";
 export interface ControlConfirmModalProps {
   keyName: string;
   actionLabel: string;
-  serviceId: string;
+  /** 路径参数目标（服务 id 或分组 id） */
+  targetLabel: string;
   loading?: boolean;
   onClose: () => void;
   onConfirm: () => void;
@@ -15,7 +16,7 @@ export interface ControlConfirmModalProps {
 export function ControlConfirmModal({
   keyName,
   actionLabel,
-  serviceId,
+  targetLabel,
   loading,
   onClose,
   onConfirm,
@@ -36,7 +37,7 @@ export function ControlConfirmModal({
           />
           <FormDialog.Body>
             <FormDialog.Error
-              message={`将对服务「${serviceId}」执行 ${actionLabel}，此操作会影响线上进程。`}
+              message={`将对「${targetLabel}」执行 ${actionLabel}，请确认影响范围后再继续。`}
             />
           </FormDialog.Body>
           <FormDialog.Footer>

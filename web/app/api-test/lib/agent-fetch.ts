@@ -9,7 +9,7 @@ export interface AgentFetchResult {
 }
 
 export interface AgentFetchOptions {
-  method: "GET" | "POST" | "PUT" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   url: string;
   secret: string;
   /** JSON 请求体（create/update） */

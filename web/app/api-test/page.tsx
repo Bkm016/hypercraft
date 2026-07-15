@@ -23,6 +23,7 @@ import {
 import {
   api,
   type ApiKeySummary,
+  type ServiceGroup,
   type ServiceSummary,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -30,10 +31,12 @@ import { notification } from "@/hooks/use-notification";
 import { copyText } from "@/app/api-keys/components/copy-text";
 import {
   AGENT_ENDPOINTS,
-  SAMPLE_MANIFEST_BODY,
+  bodyTemplateLabel,
   buildAgentUrl,
   buildCurl,
+  defaultBodyForEndpoint,
   maskSecret,
+  resolvePathParams,
   type AgentEndpointDef,
 } from "./agent-endpoints";
 import { agentFetch, type AgentFetchResult } from "./lib/agent-fetch";
@@ -47,6 +50,7 @@ export default function ApiTestPage() {
 
   const [keys, setKeys] = useState<ApiKeySummary[]>([]);
   const [services, setServices] = useState<ServiceSummary[]>([]);
+  const [groups, setGroups] = useState<ServiceGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -56,9 +60,10 @@ export default function ApiTestPage() {
 
   const [endpoint, setEndpoint] = useState<AgentEndpointDef>(AGENT_ENDPOINTS[0]);
   const [serviceId, setServiceId] = useState("");
+  const [groupId, setGroupId] = useState("");
   const [tail, setTail] = useState(100);
   const [follow, setFollow] = useState(false);
-  const [requestBody, setRequestBody] = useState(SAMPLE_MANIFEST_BODY);
+  const [requestBody, setRequestBody] = useState("");
 
   const [sending, setSending] = useState(false);
   const [streaming, setStreaming] = useState(false);
@@ -80,16 +85,19 @@ export default function ApiTestPage() {
     (async () => {
       try {
         setLoadError(null);
-        const [keysData, servicesData] = await Promise.all([
+        const [keysData, servicesData, groupsData] = await Promise.all([
           api.listApiKeys(),
           api.listServices(),
+          api.listGroups(),
         ]);
         if (cancelled) return;
         const active = keysData.filter((k) => !k.revoked_at);
         setKeys(active);
         setServices(servicesData);
+        setGroups(groupsData);
         setKeyId((prev) => prev || active[0]?.id || "");
         setServiceId((prev) => prev || servicesData[0]?.id || "");
+        setGroupId((prev) => prev || groupsData[0]?.id || "");
       } catch (err: unknown) {
         if (cancelled) return;
         const apiErr = err as { message?: string };
@@ -143,14 +151,39 @@ export default function ApiTestPage() {
 
   const baseUrl = api.getBaseUrl();
 
+  const pathParams = useMemo(
+    () => resolvePathParams(endpoint.path),
+    [endpoint.path]
+  );
+
+  const needsServicePicker = pathParams.some((p) => p.picker === "service");
+  const needsGroupPicker = pathParams.some((p) => p.picker === "group");
+  const needsBody = Boolean(endpoint.bodyTemplate);
+
+  // 切换端点时同步默认 JSON body
+  useEffect(() => {
+    setRequestBody(defaultBodyForEndpoint(endpoint));
+  }, [endpoint.id, endpoint.bodyTemplate]);
+
   const requestUrl = useMemo(() => {
     return buildAgentUrl(endpoint, {
       baseUrl,
       serviceId,
+      groupId,
       tail,
       follow: endpoint.id === "logs" && follow,
     });
-  }, [endpoint, baseUrl, serviceId, tail, follow]);
+  }, [endpoint, baseUrl, serviceId, groupId, tail, follow]);
+
+  const confirmTargetLabel = useMemo(() => {
+    if (needsGroupPicker && !needsServicePicker) {
+      return groupId.trim() || "—";
+    }
+    if (needsServicePicker) {
+      return serviceId.trim() || "—";
+    }
+    return "—";
+  }, [needsGroupPicker, needsServicePicker, groupId, serviceId]);
 
   const wsAttachUrl = useMemo(() => {
     if (endpoint.kind !== "info" || !serviceId.trim()) return "";
@@ -172,8 +205,12 @@ export default function ApiTestPage() {
       notification({ status: "error", title: "请先选择可用的 API Key" });
       return;
     }
-    if (endpoint.needsServiceId && !serviceId.trim()) {
+    if (needsServicePicker && !serviceId.trim()) {
       notification({ status: "error", title: "请选择服务 id" });
+      return;
+    }
+    if (needsGroupPicker && !groupId.trim()) {
+      notification({ status: "error", title: "请选择分组 id" });
       return;
     }
     if (endpoint.kind === "info") {
@@ -183,11 +220,11 @@ export default function ApiTestPage() {
       });
       return;
     }
-    if (endpoint.needsBody && !requestBody.trim()) {
+    if (needsBody && !requestBody.trim()) {
       notification({ status: "error", title: "请填写 JSON body" });
       return;
     }
-    if (endpoint.needsBody) {
+    if (needsBody) {
       try {
         JSON.parse(requestBody);
       } catch {
@@ -212,7 +249,7 @@ export default function ApiTestPage() {
       method: endpoint.method,
       url: requestUrl,
       secret,
-      body: endpoint.needsBody ? requestBody : undefined,
+      body: needsBody ? requestBody : undefined,
       signal: controller.signal,
       timeoutMs: isFollow ? 0 : 30_000,
       onChunk: isFollow
@@ -224,7 +261,19 @@ export default function ApiTestPage() {
     setStreaming(false);
     setSending(false);
     abortRef.current = null;
-  }, [secret, selectedKey, endpoint, serviceId, follow, requestUrl, requestBody]);
+  }, [
+    secret,
+    selectedKey,
+    endpoint,
+    needsServicePicker,
+    needsGroupPicker,
+    needsBody,
+    serviceId,
+    groupId,
+    follow,
+    requestUrl,
+    requestBody,
+  ]);
 
   const handleSendClick = () => {
     if (endpoint.dangerous) {
@@ -252,7 +301,7 @@ export default function ApiTestPage() {
       requestUrl,
       secret,
       endpoint.id === "logs" && follow,
-      endpoint.needsBody ? requestBody : undefined
+      needsBody ? requestBody : undefined
     );
     const ok = await copyText(curl);
     notification({
@@ -312,7 +361,15 @@ export default function ApiTestPage() {
         ) : (
           <div className="space-y-4">
             {/* 工具条：Key + 服务 */}
-            <div className="grid gap-3 rounded-xl border border-stroke-soft-200 bg-bg-white-0 p-4 md:grid-cols-2">
+            <div
+              className={`grid gap-3 rounded-xl border border-stroke-soft-200 bg-bg-white-0 p-4 ${
+                needsServicePicker && needsGroupPicker
+                  ? "md:grid-cols-3"
+                  : needsServicePicker || needsGroupPicker
+                    ? "md:grid-cols-2"
+                    : "md:grid-cols-1"
+              }`}
+            >
               <div className="space-y-1.5">
                 <span className="text-xs font-medium text-text-sub-600">
                   API Key
@@ -344,39 +401,39 @@ export default function ApiTestPage() {
                 </span>
               </div>
 
-              <div className="space-y-1.5">
-                <span className="text-xs font-medium text-text-sub-600">
-                  服务 id
-                </span>
-                <Select.Root
-                  size="medium"
-                  value={
-                    services.some((s) => s.id === serviceId)
-                      ? serviceId
-                      : undefined
-                  }
-                  onValueChange={setServiceId}
-                  disabled={!endpoint.needsServiceId || services.length === 0}
-                >
-                  <Select.Trigger>
-                    <Select.Value
-                      placeholder={
-                        services.length === 0 ? "无服务" : "选择服务"
-                      }
-                    />
-                  </Select.Trigger>
-                  <Select.Content>
-                    {services.map((s) => (
-                      <Select.Item key={s.id} value={s.id}>
-                        <span className="truncate">
-                          {s.id}
-                          {s.name && s.name !== s.id ? ` · ${s.name}` : ""}
-                        </span>
-                      </Select.Item>
-                    ))}
-                  </Select.Content>
-                </Select.Root>
-                {endpoint.needsServiceId && (
+              {needsServicePicker && (
+                <div className="space-y-1.5">
+                  <span className="text-xs font-medium text-text-sub-600">
+                    服务 id
+                  </span>
+                  <Select.Root
+                    size="medium"
+                    value={
+                      services.some((s) => s.id === serviceId)
+                        ? serviceId
+                        : undefined
+                    }
+                    onValueChange={setServiceId}
+                    disabled={services.length === 0}
+                  >
+                    <Select.Trigger>
+                      <Select.Value
+                        placeholder={
+                          services.length === 0 ? "无服务" : "选择服务"
+                        }
+                      />
+                    </Select.Trigger>
+                    <Select.Content>
+                      {services.map((s) => (
+                        <Select.Item key={s.id} value={s.id}>
+                          <span className="truncate">
+                            {s.id}
+                            {s.name && s.name !== s.id ? ` · ${s.name}` : ""}
+                          </span>
+                        </Select.Item>
+                      ))}
+                    </Select.Content>
+                  </Select.Root>
                   <Input.Root size="small">
                     <Input.Wrapper>
                       <Input.Input
@@ -387,8 +444,54 @@ export default function ApiTestPage() {
                       />
                     </Input.Wrapper>
                   </Input.Root>
-                )}
-              </div>
+                </div>
+              )}
+
+              {needsGroupPicker && (
+                <div className="space-y-1.5">
+                  <span className="text-xs font-medium text-text-sub-600">
+                    分组 id
+                  </span>
+                  <Select.Root
+                    size="medium"
+                    value={
+                      groups.some((g) => g.id === groupId)
+                        ? groupId
+                        : undefined
+                    }
+                    onValueChange={setGroupId}
+                    disabled={groups.length === 0}
+                  >
+                    <Select.Trigger>
+                      <Select.Value
+                        placeholder={
+                          groups.length === 0 ? "无分组" : "选择分组"
+                        }
+                      />
+                    </Select.Trigger>
+                    <Select.Content>
+                      {groups.map((g) => (
+                        <Select.Item key={g.id} value={g.id}>
+                          <span className="truncate">
+                            {g.id}
+                            {g.name && g.name !== g.id ? ` · ${g.name}` : ""}
+                          </span>
+                        </Select.Item>
+                      ))}
+                    </Select.Content>
+                  </Select.Root>
+                  <Input.Root size="small">
+                    <Input.Wrapper>
+                      <Input.Input
+                        value={groupId}
+                        onChange={(e) => setGroupId(e.target.value)}
+                        placeholder="或手输 group id"
+                        className="font-mono"
+                      />
+                    </Input.Wrapper>
+                  </Input.Root>
+                </div>
+              )}
             </div>
 
             <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
@@ -436,10 +539,10 @@ export default function ApiTestPage() {
                     </code>
                   </div>
 
-                  {endpoint.needsBody && (
+                  {needsBody && endpoint.bodyTemplate && (
                     <div className="mt-3 space-y-1.5">
                       <span className="text-xs font-medium text-text-sub-600">
-                        JSON body（ServiceManifest）
+                        JSON body（{bodyTemplateLabel(endpoint.bodyTemplate)}）
                       </span>
                       <textarea
                         value={requestBody}
@@ -542,7 +645,7 @@ export default function ApiTestPage() {
         <ControlConfirmModal
           keyName={selectedKey.name}
           actionLabel={endpoint.note}
-          serviceId={serviceId.trim() || "—"}
+          targetLabel={confirmTargetLabel}
           loading={sending}
           onClose={() => setConfirmOpen(false)}
           onConfirm={() => void runRequest()}

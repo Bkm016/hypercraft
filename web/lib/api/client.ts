@@ -42,10 +42,15 @@ function getApiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 }
 
+export const SESSION_EXPIRES_AT_KEY = "hc_session_expires_at";
+const SESSION_REFRESHED_AT_KEY = "hc_session_refreshed_at";
+const SESSION_REFRESH_LOCK = "hc_session_refresh";
+export const SESSION_INVALID_EVENT = "hypercraft:session-invalid";
+
 class ApiClient {
   /** 最近一次登录/刷新返回的 access 过期时间（unix 秒），仅用于 UI 展示 */
   private sessionExpiresAt: number | null = null;
-  private refreshPromise: Promise<AuthToken> | null = null;
+  private refreshPromise: Promise<void> | null = null;
   /** 是否已有浏览器会话（cookie），避免在未登录时对 /auth/me 无意义重试 */
   private hasSessionHint = false;
 
@@ -63,6 +68,11 @@ class ApiClient {
     this.hasSessionHint = true;
     this.sessionExpiresAt =
       Math.floor(Date.now() / 1000) + (tokens.expires_in || 0);
+    if (typeof window !== "undefined") {
+      // 仅跨标签同步会话时间，不向 JS 存储暴露任何 token。
+      localStorage.setItem(SESSION_EXPIRES_AT_KEY, String(this.sessionExpiresAt));
+      localStorage.setItem(SESSION_REFRESHED_AT_KEY, String(Date.now()));
+    }
   }
 
   clearSession() {
@@ -72,6 +82,15 @@ class ApiClient {
       // 清理历史 localStorage 残留，防止旧版本 token 继续暴露
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
+      localStorage.removeItem(SESSION_EXPIRES_AT_KEY);
+      localStorage.removeItem(SESSION_REFRESHED_AT_KEY);
+    }
+  }
+
+  invalidateSession() {
+    this.clearSession();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event(SESSION_INVALID_EVENT));
     }
   }
 
@@ -94,6 +113,12 @@ class ApiClient {
   }
 
   getSessionExpiresAt(): number | null {
+    if (typeof window !== "undefined") {
+      const storedExpiresAt = Number(localStorage.getItem(SESSION_EXPIRES_AT_KEY));
+      if (Number.isFinite(storedExpiresAt) && storedExpiresAt > 0) {
+        this.sessionExpiresAt = storedExpiresAt;
+      }
+    }
     return this.sessionExpiresAt;
   }
 
@@ -135,10 +160,15 @@ class ApiClient {
     // 401 时尝试用 refresh cookie 续期后重试
     if (response.status === 401 && allowRefresh) {
       try {
-        await this.refreshAccessToken();
-      } catch {
-        this.clearSession();
-        throw new Error("会话已过期，请重新登录");
+        await this.refreshSession(true);
+      } catch (error) {
+        if ((error as ApiError).status === 401) {
+          this.invalidateSession();
+          const sessionError = new Error("会话已过期，请重新登录") as Error & { status: number };
+          sessionError.status = 401;
+          throw sessionError;
+        }
+        throw error;
       }
 
       const retryResponse = await fetch(url, {
@@ -184,22 +214,44 @@ class ApiClient {
     }
   }
 
-  private async refreshAccessToken(): Promise<AuthToken> {
+  /** 刷新浏览器会话；所有标签页共用同一请求，避免重复消费轮换型 refresh token。 */
+  async refreshSession(force = false): Promise<void> {
     // 防止并发刷新
     if (this.refreshPromise) {
       return this.refreshPromise;
     }
 
-    this.refreshPromise = this.authRefresh({})
-      .then((tokens) => {
-        this.setSession(tokens);
-        return tokens;
-      })
-      .finally(() => {
-        this.refreshPromise = null;
-      });
+    const refreshStartedAt = Date.now();
+    const refresh = async () => {
+      if (typeof window !== "undefined") {
+        const refreshedAt = Number(localStorage.getItem(SESSION_REFRESHED_AT_KEY));
+        if (Number.isFinite(refreshedAt) && refreshedAt >= refreshStartedAt) {
+          this.hasSessionHint = true;
+          this.getSessionExpiresAt();
+          return;
+        }
+        const expiresAt = this.getSessionExpiresAt();
+        if (!force && expiresAt && expiresAt * 1000 - Date.now() > 5 * 60 * 1000) {
+          return;
+        }
+      }
+      await this.authRefresh({});
+    };
 
-    return this.refreshPromise;
+    const refreshRequest = (async () => {
+      if (typeof navigator !== "undefined" && navigator.locks) {
+        await navigator.locks.request(SESSION_REFRESH_LOCK, async () => {
+          await refresh();
+        });
+      } else {
+        await refresh();
+      }
+    })();
+    this.refreshPromise = refreshRequest.finally(() => {
+      this.refreshPromise = null;
+    });
+
+    return refreshRequest;
   }
 
   // ==================== 认证 API ====================
@@ -545,9 +597,16 @@ class ApiClient {
   // 下载服务配置的日志文件
   async downloadServiceLogFile(id: string): Promise<void> {
     const url = `${getApiBaseUrl()}/services/${id}/log-file`;
-    const response = await fetch(url, {
+    let response = await fetch(url, {
       credentials: "include",
     });
+
+    if (response.status === 401) {
+      await this.refreshSession(true);
+      response = await fetch(url, {
+        credentials: "include",
+      });
+    }
 
     if (!response.ok) {
       const error = await this.parseError(response);

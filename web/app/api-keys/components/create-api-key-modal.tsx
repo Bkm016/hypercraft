@@ -6,36 +6,28 @@ import * as FormDialog from "@/components/ui/form-dialog";
 import * as Checkbox from "@/components/ui/checkbox";
 import {
   api,
-  type ServiceSummary,
-  type ServiceGroup,
   type CreateApiKeyResponse,
   type ApiKeyScope,
 } from "@/lib/api";
-import { ServicePermissionPicker } from "@/app/users/components/service-permission-picker";
 
 const SCOPE_OPTIONS: { id: ApiKeyScope; label: string; description: string }[] = [
   { id: "read", label: "read", description: "列表 / 详情 / 状态" },
   { id: "control", label: "control", description: "启停 / 重启 / 强杀" },
-  { id: "manage", label: "manage", description: "创建 / 修改 / 删除服务" },
+  { id: "manage", label: "manage", description: "管理服务与分组" },
   { id: "logs", label: "logs", description: "查看与跟随日志" },
   { id: "attach", label: "attach", description: "WebSocket 终端" },
 ];
 
 export interface CreateApiKeyModalProps {
-  services: ServiceSummary[];
-  groups: ServiceGroup[];
   onClose: () => void;
   onSuccess: (result: CreateApiKeyResponse) => void;
 }
 
 export function CreateApiKeyModal({
-  services,
-  groups,
   onClose,
   onSuccess,
 }: CreateApiKeyModalProps) {
   const [name, setName] = useState("");
-  const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
   const [scopes, setScopes] = useState<Set<ApiKeyScope>>(
     new Set(["read", "control", "logs", "attach"])
   );
@@ -71,7 +63,6 @@ export function CreateApiKeyModal({
     try {
       const result = await api.createApiKey({
         name: name.trim(),
-        service_ids: Array.from(selectedServices),
         scopes: Array.from(scopes),
       });
       onSuccess(result);
@@ -128,20 +119,6 @@ export function CreateApiKeyModal({
                   </label>
                 ))}
               </div>
-            </FormDialog.Field>
-
-            <div className="border-t border-stroke-soft-200" />
-
-            <FormDialog.Field
-              label="服务权限"
-              hint="空表示不能访问任何服务；Key 只能操作勾选的服务"
-            >
-              <ServicePermissionPicker
-                services={services}
-                groups={groups}
-                selectedIds={selectedServices}
-                onChange={setSelectedServices}
-              />
             </FormDialog.Field>
           </FormDialog.Body>
 

@@ -10,17 +10,12 @@ import * as CompactButton from "@/components/ui/compact-button";
 import {
   api,
   type ApiKeySummary,
-  type ServiceGroup,
-  type ServiceSummary,
 } from "@/lib/api";
-import { ServicePermissionSummary } from "@/app/users/components/service-permission-summary";
 import { notification } from "@/hooks/use-notification";
 import { copyText } from "./copy-text";
 
 export interface ApiKeyRowProps {
   apiKey: ApiKeySummary;
-  services: ServiceSummary[];
-  groups: ServiceGroup[];
   onEdit: () => void;
   onRevoke: () => void;
 }
@@ -36,8 +31,6 @@ function formatTime(iso?: string | null) {
 
 export function ApiKeyRow({
   apiKey,
-  services,
-  groups,
   onEdit,
   onRevoke,
 }: ApiKeyRowProps) {
@@ -115,14 +108,6 @@ export function ApiKeyRow({
             </span>
           ))}
         </div>
-      </td>
-      <td className="max-w-[12rem] px-4 py-2.5">
-        <ServicePermissionSummary
-          serviceIds={apiKey.service_ids}
-          services={services}
-          groups={groups}
-          emptyLabel="无"
-        />
       </td>
       <td className="px-4 py-3 text-sm text-text-sub-600">
         {formatTime(apiKey.last_used_at)}

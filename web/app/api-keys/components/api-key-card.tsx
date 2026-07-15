@@ -13,25 +13,18 @@ import * as Dropdown from "@/components/ui/dropdown";
 import {
   api,
   type ApiKeySummary,
-  type ServiceGroup,
-  type ServiceSummary,
 } from "@/lib/api";
-import { ServicePermissionSummary } from "@/app/users/components/service-permission-summary";
 import { notification } from "@/hooks/use-notification";
 import { copyText } from "./copy-text";
 
 export interface ApiKeyCardProps {
   apiKey: ApiKeySummary;
-  services: ServiceSummary[];
-  groups: ServiceGroup[];
   onEdit: () => void;
   onRevoke: () => void;
 }
 
 export function ApiKeyCard({
   apiKey,
-  services,
-  groups,
   onEdit,
   onRevoke,
 }: ApiKeyCardProps) {
@@ -94,12 +87,11 @@ export function ApiKeyCard({
             {apiKey.key_prefix}…
             <RiFileCopyLine className="size-3" />
           </button>
-          <ServicePermissionSummary
-            serviceIds={apiKey.service_ids}
-            services={services}
-            groups={groups}
-            emptyLabel="无服务"
-          />
+          {apiKey.scopes.length > 0 && (
+            <span className="truncate text-xs text-text-soft-400">
+              {apiKey.scopes.join(", ")}
+            </span>
+          )}
         </div>
       </div>
 
