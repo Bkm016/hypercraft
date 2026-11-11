@@ -6,13 +6,18 @@ WORKDIR /app
 
 RUN corepack enable
 
+# 可选 npm 镜像（国内构建可传 --build-arg NPM_REGISTRY=https://registry.npmmirror.com）
+ARG NPM_REGISTRY=
+ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmjs.org}
+
 COPY web/package.json web/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN if [ -n "$NPM_REGISTRY" ]; then pnpm config set registry "$NPM_REGISTRY"; fi \
+  && pnpm install --frozen-lockfile
 
 COPY web/ ./
 ENV NEXT_OUTPUT=standalone \
     NEXT_TELEMETRY_DISABLED=1 \
-    NEXT_PUBLIC_API_URL=http://localhost:8080
+    NEXT_PUBLIC_API_URL=/api
 RUN pnpm build
 
 FROM node:20-bookworm-slim AS runner

@@ -22,12 +22,13 @@ export default function Header() {
 
   // 根据用户权限动态生成导航项
   const navItems: {
-    href: "/services" | "/users" | "/api-keys" | "/api-test";
+    href: "/services" | "/runtimes" | "/users" | "/api-keys" | "/api-test";
     label: string;
     adminOnly?: boolean;
     superAdminOnly?: boolean;
   }[] = [
     { href: "/services", label: "服务" },
+    { href: "/runtimes", label: "环境", adminOnly: true },
     { href: "/users", label: "用户", adminOnly: true },
     { href: "/api-keys", label: "API", superAdminOnly: true },
     { href: "/api-test", label: "测试", superAdminOnly: true },

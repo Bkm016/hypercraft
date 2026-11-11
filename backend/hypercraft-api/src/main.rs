@@ -1,4 +1,5 @@
 mod app;
+mod runtime_installer;
 
 use app::{app_router, AppState, RateLimiter, StreamConcurrencyLimiter};
 use hypercraft_core::{init_tracing, load_dotenv, ServiceManager, ServiceScheduler, UserManager};
@@ -217,6 +218,8 @@ async fn main() -> anyhow::Result<()> {
         .timeout(Duration::from_secs(30))
         .build()?;
 
+    let runtimes = runtime_installer::RuntimeInstaller::new(&config.data_dir, manager.runtimes().clone())?;
+
     let state = AppState {
         manager: manager.clone(),
         user_manager,
@@ -231,6 +234,7 @@ async fn main() -> anyhow::Result<()> {
         web_proxy_session_ttl: config.web_proxy_session_ttl,
         http_client,
         api_bind: config.bind,
+        runtimes,
     };
 
     let app = app_router(state, config.cors_origins.clone());

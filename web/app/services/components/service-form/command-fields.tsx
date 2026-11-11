@@ -1,6 +1,7 @@
 "use client";
 
 import * as FormDialog from "@/components/ui/form-dialog";
+import { RuntimesField } from "./runtimes-field";
 import type { ServiceFormData } from "./types";
 
 interface CommandFieldsProps {
@@ -17,16 +18,18 @@ export function CommandFields({ data, setField }: CommandFieldsProps) {
 
       <FormDialog.Field label="启动命令" required>
         <FormDialog.Input
-          placeholder="node 或 python"
+          placeholder="java / node / python / sh"
           value={data.command}
           onChange={(e) => setField("command", e.target.value)}
           className="font-mono"
         />
       </FormDialog.Field>
 
+      <RuntimesField data={data} setField={setField} />
+
       <FormDialog.Field label="命令参数" hint="每行一个参数">
         <FormDialog.Textarea
-          placeholder="server.js&#10;--port&#10;3000"
+          placeholder="-Xmx4G&#10;-jar&#10;server.jar&#10;nogui"
           value={data.args.join("\n")}
           onChange={(e) => setField("args", e.target.value.split(/\r?\n/))}
           className="font-mono min-h-10 text-sm field-sizing-content break-all"
@@ -35,7 +38,7 @@ export function CommandFields({ data, setField }: CommandFieldsProps) {
 
       <FormDialog.Field label="工作目录" hint="留空使用默认">
         <FormDialog.Input
-          placeholder="/home/app/my-service"
+          placeholder="/services/my-server"
           value={data.cwd}
           onChange={(e) => setField("cwd", e.target.value)}
           className="font-mono"

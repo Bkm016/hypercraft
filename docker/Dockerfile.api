@@ -4,6 +4,9 @@
 FROM rust:1-bookworm AS builder
 WORKDIR /src
 
+# 可选 crates 镜像（国内构建可传 --build-arg CARGO_MIRROR=sparse+https://rsproxy.cn/index/）
+ARG CARGO_MIRROR=
+RUN if [ -n "$CARGO_MIRROR" ]; then mkdir -p "$CARGO_HOME" && printf '[source.crates-io]\nreplace-with = "mirror"\n[source.mirror]\nregistry = "%s"\n' "$CARGO_MIRROR" > "$CARGO_HOME/config.toml"; fi
 # 先拷依赖清单以利用缓存
 COPY backend/Cargo.toml backend/Cargo.lock ./backend/
 COPY backend/hypercraft-core/Cargo.toml ./backend/hypercraft-core/
@@ -30,21 +33,41 @@ RUN touch backend/hypercraft-core/src/lib.rs \
 # 运行时：JRE 21，便于直接拉起 Minecraft 等 Java 进程
 FROM eclipse-temurin:21-jre-jammy
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl tini \
-  && rm -rf /var/lib/apt/lists/*
+  && apt-get install -y --no-install-recommends ca-certificates curl tini xz-utils unzip git \
+  && rm -rf /var/lib/apt/lists/* \
+  && git config --system --add safe.directory '*'
+
+# 内嵌 mise：用于在面板中安装多个 Java 运行环境（数据隔离在 /data/mise）
+# 国内构建可传 --build-arg GITHUB_PROXY=https://ghfast.top/
+ARG MISE_VERSION=2026.11.6
+ARG GITHUB_PROXY=
+RUN set -eux; \
+  case "$(uname -m)" in x86_64) a=x64 ;; aarch64) a=arm64 ;; *) echo "unsupported arch"; exit 1 ;; esac; \
+  url="https://github.com/jdx/mise/releases/download/v${MISE_VERSION}/mise-v${MISE_VERSION}-linux-${a}-musl"; \
+  curl -fsSL --retry 3 -o /usr/local/bin/mise "${GITHUB_PROXY}${url}" || curl -fsSL --retry 3 -o /usr/local/bin/mise "$url"; \
+  chmod 755 /usr/local/bin/mise; \
+  MISE_DATA_DIR=/tmp/m MISE_CACHE_DIR=/tmp/m MISE_STATE_DIR=/tmp/m mise --version; rm -rf /tmp/m
 
 WORKDIR /app
 COPY --from=builder /src/backend/target/release/hypercraft-api /usr/local/bin/hypercraft-api
 COPY --from=builder /src/backend/target/release/hypercraft-cli /usr/local/bin/hypercraft-cli
 
-RUN mkdir -p /data /services \
-  && useradd --system --home /app --shell /usr/sbin/nologin hypercraft \
-  && chown -R hypercraft:hypercraft /app /data /services
+# 固定 UID/GID=1000，便于宿主机挂载目录预先授权（1Panel init.sh 依赖此值）
+# 基础镜像自带 uid 1000 的 ubuntu 用户，先移除避免冲突
+RUN (userdel -r ubuntu 2>/dev/null || true) \
+  && groupadd --gid 1000 hypercraft \
+  && useradd --uid 1000 --gid 1000 --home /app --shell /usr/sbin/nologin hypercraft \
+  && mkdir -p /data /services \
+  && chown -R 1000:1000 /app /data /services
 
-USER hypercraft
+COPY docker/entrypoint-api.sh /entrypoint-api.sh
+RUN chmod 755 /entrypoint-api.sh
+
+USER 1000:1000
 ENV HC_DATA_DIR=/data \
     HC_BIND=0.0.0.0:8080 \
-    HC_ALLOWED_COMMANDS=java,java.exe,node,node.exe \
+    HC_ALLOWED_COMMANDS=java \
+    HC_MISE_BIN=/usr/local/bin/mise \
     HC_ALLOWED_CWD_PREFIXES=/services \
     RUST_LOG=info
 
@@ -53,5 +76,5 @@ VOLUME ["/data", "/services"]
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
   CMD curl -fsS "http://127.0.0.1:8080/health" || exit 1
 
-ENTRYPOINT ["tini", "--"]
+ENTRYPOINT ["tini", "--", "/entrypoint-api.sh"]
 CMD ["hypercraft-api"]

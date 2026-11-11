@@ -5,6 +5,7 @@ mod auth;
 mod groups;
 mod health;
 mod logs;
+mod runtimes;
 mod services;
 mod stats;
 mod two_factor;
@@ -34,6 +35,12 @@ pub use services::{
     create_service, delete_service, get_schedule, get_service, get_status, kill_service,
     list_services, restart_service, shutdown_service, start_service, stop_service, update_schedule,
     update_service, validate_cron,
+};
+pub use runtimes::{
+    cancel_install_task, cleanup_runtimes, clear_install_tasks, delete_install_task,
+    delete_runtime, get_install_task, get_runtime_settings, install_runtime, java_catalog,
+    list_install_tasks, list_runtimes, list_tools, register_runtime, runtime_storage,
+    tool_versions, update_runtime, update_runtime_settings,
 };
 pub use stats::get_system_stats;
 pub use two_factor::{disable_2fa, enable_2fa, setup_2fa, verify_user_2fa};

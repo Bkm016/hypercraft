@@ -4,7 +4,7 @@ use super::*;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::task;
 use tokio::time::Duration;
@@ -340,16 +340,58 @@ impl ServiceManager {
             .map_err(|e| ServiceError::SpawnFailed(e.to_string()))?;
 
         // 如果指定了 run_as 用户（仅 Linux），使用 sudo -u 包装命令
+        // 解析运行环境：前置各环境 bin 到 PATH、注入环境变量；裸命令优先在所选环境中查找
+        let mut runtime_env: Vec<(String, String)> = Vec::new();
+        let mut resolved_command = manifest.command.clone();
+        if !manifest.runtimes.is_empty() {
+            let mut bin_dirs: Vec<PathBuf> = Vec::new();
+            let mut merged: std::collections::BTreeMap<String, String> = Default::default();
+            let mut found_cmd: Option<PathBuf> = None;
+            // 逆序合并，使排在前面的环境变量覆盖后面的
+            let mut resolved = Vec::new();
+            for id in &manifest.runtimes {
+                resolved.push(self.runtimes.get(id)?);
+            }
+            for rt in resolved.iter().rev() {
+                merged.extend(rt.effective_env());
+            }
+            for rt in &resolved {
+                for dir in rt.effective_bin_paths() {
+                    if !bin_dirs.contains(&dir) {
+                        bin_dirs.push(dir);
+                    }
+                }
+                if found_cmd.is_none() && super::policy::is_bare(&manifest.command) {
+                    found_cmd = rt.find_executable(manifest.command.trim_end_matches(".exe"));
+                }
+            }
+            let base_path = manifest
+                .env
+                .get("PATH")
+                .cloned()
+                .or_else(|| std::env::var("PATH").ok())
+                .unwrap_or_default();
+            let mut parts: Vec<PathBuf> = bin_dirs;
+            parts.extend(std::env::split_paths(&base_path));
+            let joined = std::env::join_paths(parts)
+                .map_err(|e| ServiceError::SpawnFailed(format!("invalid PATH: {e}")))?;
+            runtime_env.extend(merged);
+            runtime_env.push(("PATH".into(), joined.to_string_lossy().into_owned()));
+            if let Some(bin) = found_cmd {
+                resolved_command = bin.to_string_lossy().into_owned();
+            }
+        }
+
         #[cfg(target_os = "linux")]
         let (actual_command, actual_args) = if let Some(ref user) = manifest.run_as {
-            let mut sudo_args = vec!["-u".to_string(), user.clone(), manifest.command.clone()];
+            let mut sudo_args = vec!["-u".to_string(), user.clone(), resolved_command.clone()];
             sudo_args.extend(manifest.args.clone());
             ("sudo".to_string(), sudo_args)
         } else {
-            (manifest.command.clone(), manifest.args.clone())
+            (resolved_command.clone(), manifest.args.clone())
         };
         #[cfg(not(target_os = "linux"))]
-        let (actual_command, actual_args) = (manifest.command.clone(), manifest.args.clone());
+        let (actual_command, actual_args) = (resolved_command.clone(), manifest.args.clone());
 
         let mut cmd = CommandBuilder::new(&actual_command);
         cmd.args(actual_args);
@@ -357,6 +399,10 @@ impl ServiceManager {
             cmd.cwd(cwd);
         }
         for (k, v) in manifest.env.iter() {
+            cmd.env(k, v);
+        }
+        // 运行环境变量覆盖用户同名变量，保证所选 JVM 生效
+        for (k, v) in runtime_env {
             cmd.env(k, v);
         }
 

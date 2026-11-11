@@ -54,6 +54,7 @@ pub struct ServiceManager {
     data_dir: PathBuf,
     allowed_commands: Option<HashSet<String>>,
     allowed_cwd_roots: Vec<PathBuf>,
+    runtimes: crate::runtime::RuntimeRegistry,
     runtime: Arc<Mutex<HashMap<String, RuntimeHandles>>>,
     system: Arc<StdMutex<System>>,
 }
@@ -73,6 +74,7 @@ impl ServiceManager {
             data_dir: data_dir.as_ref().to_path_buf(),
             allowed_commands,
             allowed_cwd_roots,
+            runtimes: crate::runtime::RuntimeRegistry::new(data_dir.as_ref()),
             runtime: Arc::new(Mutex::new(HashMap::new())),
             system: Arc::new(StdMutex::new(System::new())),
         }
@@ -81,7 +83,13 @@ impl ServiceManager {
     /// 确保基础目录存在。
     pub fn ensure_base_dirs(&self) -> Result<()> {
         std::fs::create_dir_all(self.services_dir())?;
+        self.runtimes.ensure_dirs()?;
         Ok(())
+    }
+
+    /// Java 运行环境注册表
+    pub fn runtimes(&self) -> &crate::runtime::RuntimeRegistry {
+        &self.runtimes
     }
 
     /// services 根目录：<data_dir>/services
@@ -156,6 +164,8 @@ mod tests {
             id: id.to_string(),
             name: id.to_string(),
             command: "cmd".into(), // dummy; not spawned in tests
+            runtimes: vec![],
+            java_runtime: None,
             args: vec![],
             env: std::collections::BTreeMap::new(),
             cwd: None,

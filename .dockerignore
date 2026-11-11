@@ -6,8 +6,8 @@
 **/target
 **/node_modules
 **/.next
-**/data
-**/services
+/data
+/services
 **/*.md
 !README.md
 images

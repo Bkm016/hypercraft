@@ -4,6 +4,7 @@ mod error;
 mod manager;
 mod manifest;
 mod models;
+pub mod runtime;
 pub mod user;
 mod web;
 
@@ -20,6 +21,7 @@ pub use user::{
     UserSummary, API_KEY_RAW_PREFIX,
 };
 pub use web::validate_web_upstream_url;
+pub use runtime::{JavaRuntime, Runtime, RuntimeRegistry, RuntimeSource, SYSTEM_RUNTIME_ID};
 
 /// 从当前目录向上查找并加载最近的 `.env`（仓库根一份即可）
 ///

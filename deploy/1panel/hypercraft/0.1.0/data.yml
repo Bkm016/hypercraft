@@ -1,0 +1,176 @@
+additionalProperties:
+  formFields:
+    - default: ""
+      envKey: HC_DEV_TOKEN
+      required: false
+      type: password
+      labelEn: "Super Admin Token (>=32 chars, leave empty to auto-generate)"
+      labelZh: "超级管理员口令（≥32 位，留空自动生成）"
+      label:
+        en: "Super Admin Token (>=32 chars, leave empty to auto-generate)"
+        es-es: "Token de superadministrador (>=32 caracteres, vacío para generar)"
+        ja: "スーパー管理者トークン（32文字以上、空欄で自動生成）"
+        ms: "Token Pentadbir Super (>=32 aksara, kosongkan untuk jana automatik)"
+        pt-br: "Token de superadministrador (>=32 caracteres, vazio para gerar)"
+        ru: "Токен суперадминистратора (>=32 символов, пусто — сгенерировать)"
+        ko: "최고 관리자 토큰 (32자 이상, 비워 두면 자동 생성)"
+        zh-Hant: "超級管理員口令（≥32 位，留空自動產生）"
+        zh: "超级管理员口令（≥32 位，留空自动生成）"
+        tr: "Süper Yönetici Belirteci (>=32 karakter, boş bırakılırsa otomatik)"
+      edit: true
+    - default: "*"
+      envKey: HC_ALLOWED_COMMANDS
+      required: true
+      type: text
+      labelEn: "Allowed Commands (comma-separated, * = unrestricted)"
+      labelZh: "允许执行的命令（逗号分隔，* 不限制）"
+      label:
+        en: "Allowed Commands (comma-separated, * = unrestricted)"
+        es-es: "Comandos permitidos (separados por comas, * = sin restricción)"
+        ja: "許可するコマンド（カンマ区切り、* で無制限）"
+        ms: "Arahan Dibenarkan (dipisah koma, * = tanpa had)"
+        pt-br: "Comandos permitidos (separados por vírgula, * = sem restrição)"
+        ru: "Разрешённые команды (через запятую, * — без ограничений)"
+        ko: "허용 명령 (쉼표로 구분, * = 제한 없음)"
+        zh-Hant: "允許執行的命令（逗號分隔，* 不限制）"
+        zh: "允许执行的命令（逗号分隔，* 不限制）"
+        tr: "İzin Verilen Komutlar (virgülle ayrılmış, * = sınırsız)"
+      edit: true
+    - default: ghcr.io/bkm016
+      envKey: HC_IMAGE_REGISTRY
+      required: true
+      type: text
+      labelEn: "Image Registry"
+      labelZh: "镜像仓库地址"
+      label:
+        en: "Image Registry"
+        es-es: "Registro de imágenes"
+        ja: "イメージレジストリ"
+        ms: "Pendaftaran Imej"
+        pt-br: "Registro de imagens"
+        ru: "Реестр образов"
+        ko: "이미지 레지스트리"
+        zh-Hant: "映像倉庫位址"
+        zh: "镜像仓库地址"
+        tr: "İmaj Kayıt Defteri"
+      edit: true
+    - default: official
+      envKey: HC_JAVA_MIRROR
+      required: true
+      type: select
+      values:
+        - label: "清华 TUNA"
+          value: tuna
+        - label: "中科大 USTC"
+          value: ustc
+        - label: "Official (GitHub)"
+          value: official
+      labelEn: "Java Download Mirror (Temurin)"
+      labelZh: "Java 下载镜像（Temurin）"
+      label:
+        en: "Java Download Mirror (Temurin)"
+        es-es: "Espejo de descarga de Java (Temurin)"
+        ja: "Java ダウンロードミラー（Temurin）"
+        ms: "Cermin Muat Turun Java (Temurin)"
+        pt-br: "Espelho de download do Java (Temurin)"
+        ru: "Зеркало загрузки Java (Temurin)"
+        ko: "Java 다운로드 미러 (Temurin)"
+        zh-Hant: "Java 下載鏡像（Temurin）"
+        zh: "Java 下载镜像（Temurin）"
+        tr: "Java İndirme Yansısı (Temurin)"
+      edit: true
+    - default: "false"
+      edit: true
+      envKey: HC_CN_MIRRORS
+      required: true
+      type: select
+      values:
+        - label: "开启 / On"
+          value: "true"
+        - label: "关闭 / Off"
+          value: "false"
+      labelEn: "CN Mirrors for Node.js / Python / Go"
+      labelZh: "Node.js / Python / Go 国内镜像"
+      label:
+        en: "CN Mirrors for Node.js / Python / Go"
+        es-es: "Espejos de China para Node.js / Python / Go"
+        ja: "Node.js / Python / Go の中国ミラー"
+        ms: "Cermin China untuk Node.js / Python / Go"
+        pt-br: "Espelhos da China para Node.js / Python / Go"
+        ru: "Китайские зеркала для Node.js / Python / Go"
+        ko: "Node.js / Python / Go 중국 미러"
+        zh-Hant: "Node.js / Python / Go 國內鏡像"
+        zh: "Node.js / Python / Go 国内镜像"
+        tr: "Node.js / Python / Go için Çin Yansıları"
+    - default: ""
+      envKey: HC_GITHUB_PROXY
+      required: false
+      type: text
+      labelEn: "GitHub Proxy (optional)"
+      labelZh: "GitHub 代理（可选）"
+      label:
+        en: "GitHub Proxy (optional)"
+        es-es: "Proxy de GitHub (opcional)"
+        ja: "GitHub プロキシ（任意）"
+        ms: "Proksi GitHub (pilihan)"
+        pt-br: "Proxy do GitHub (opcional)"
+        ru: "Прокси GitHub (необязательно)"
+        ko: "GitHub 프록시 (선택)"
+        zh-Hant: "GitHub 代理（選填）"
+        zh: "GitHub 代理（可选）"
+        tr: "GitHub Proxy (isteğe bağlı)"
+      edit: true
+    - default: 3000
+      envKey: PANEL_APP_PORT_HTTP
+      labelEn: "Web UI Port"
+      labelZh: "Web UI 端口"
+      label:
+        en: "Web UI Port"
+        es-es: "Puerto web"
+        ja: "Web UIポート"
+        ms: "Port Web UI"
+        pt-br: "Porta da Web UI"
+        ru: "Порт веб-интерфейса"
+        ko: "웹 UI 포트"
+        zh-Hant: "Web UI 埠"
+        zh: "Web UI 端口"
+        tr: "Web UI Bağlantı Noktası"
+      required: true
+      rule: paramPort
+      type: number
+    - default: 25565
+      envKey: PANEL_APP_PORT_GAME
+      labelEn: "Game Port"
+      labelZh: "Game Port"
+      label:
+        en: "Game Port"
+        es-es: "Game Port"
+        ja: "Game Port"
+        ms: "Game Port"
+        pt-br: "Game Port"
+        ru: "Game Port"
+        ko: "Game Port"
+        zh-Hant: "Game Port"
+        zh: "Game Port"
+        tr: "Game Port"
+      required: true
+      rule: paramPort
+      type: number
+    - default: "25566-25575"
+      envKey: HC_EXTRA_PORTS
+      labelEn: "Extra Ports (range, mapped 1:1 for hosted services)"
+      labelZh: "附加端口（范围，原样映射给托管服务）"
+      label:
+        en: "Extra Ports (range, mapped 1:1 for hosted services)"
+        es-es: "Extra Ports (range, mapped 1:1 for hosted services)"
+        ja: "Extra Ports (range, mapped 1:1 for hosted services)"
+        ms: "Extra Ports (range, mapped 1:1 for hosted services)"
+        pt-br: "Extra Ports (range, mapped 1:1 for hosted services)"
+        ru: "Extra Ports (range, mapped 1:1 for hosted services)"
+        ko: "Extra Ports (range, mapped 1:1 for hosted services)"
+        zh-Hant: "附加端口（范围，原样映射给托管服务）"
+        zh: "附加端口（范围，原样映射给托管服务）"
+        tr: "Extra Ports (range, mapped 1:1 for hosted services)"
+      required: true
+      type: text
+      edit: true

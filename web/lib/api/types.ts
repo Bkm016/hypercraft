@@ -72,6 +72,10 @@ export interface ServiceManifest {
   id: string;
   name: string;
   command: string;
+  /** 选用的运行环境 ID 列表（可多选，如 Java 21 + Node 22），前置到 PATH 并注入 JAVA_HOME 等 */
+  runtimes?: string[];
+  /** @deprecated 旧字段，读取时已并入 runtimes */
+  java_runtime?: string | null;
   args?: string[];
   env?: Record<string, string>;
   cwd?: string;
@@ -262,6 +266,129 @@ export interface LogsResponse {
 
 export interface WebSessionResponse {
   url: string;
+}
+
+// ==================== 运行环境 ====================
+
+export type JavaRuntimeSource = "managed" | "custom" | "system";
+
+export interface Runtime {
+  id: string;
+  /** mise 工具名：java / node / python / go … */
+  tool: string;
+  name: string;
+  major: number;
+  version: string;
+  vendor: string;
+  image_type: string;
+  arch: string;
+  home: string;
+  source: JavaRuntimeSource;
+  installed_at?: string | null;
+  size_bytes?: number | null;
+  mise_version?: string | null;
+  spec?: string | null;
+  bin_paths: string[];
+  env: Record<string, string>;
+  used_by: string[];
+}
+
+/** @deprecated 使用 Runtime */
+export type JavaRuntime = Runtime;
+
+export interface JavaCatalogItem {
+  spec: string;
+  vendor_key: string;
+  vendor: string;
+  image_type: string;
+  major: number;
+  latest: string;
+  common: boolean;
+  installed_id?: string | null;
+  installed_version?: string | null;
+}
+
+export type AdoptiumMirror = "official" | "tuna" | "ustc";
+
+export interface RuntimeDownloadSettings {
+  adoptium_mirror: AdoptiumMirror;
+  github_proxy: string;
+  /** Node.js / Python / Go 使用国内镜像 */
+  cn_mirrors: boolean;
+}
+
+/** @deprecated 使用 RuntimeDownloadSettings */
+export type JavaDownloadSettings = RuntimeDownloadSettings;
+
+export interface JavaCatalog {
+  arch: string;
+  mise_version: string;
+  settings: RuntimeDownloadSettings;
+  items: JavaCatalogItem[];
+}
+
+export interface RegistryTool {
+  name: string;
+  description?: string | null;
+  backends: string[];
+  bins: string[];
+  aliases: string[];
+}
+
+export interface ToolListResponse {
+  featured: RegistryTool[];
+  tools: RegistryTool[];
+}
+
+export interface ToolVersions {
+  tool: string;
+  channels: string[];
+  versions: string[];
+}
+
+export type InstallState =
+  | "pending"
+  | "resolving"
+  | "downloading"
+  | "extracting"
+  | "done"
+  | "failed"
+  | "cancelled";
+
+export interface InstallTask {
+  id: string;
+  tool: string;
+  runtime_id: string;
+  spec: string;
+  state: InstallState;
+  source_url?: string | null;
+  message?: string | null;
+  log: string[];
+  started_at: string;
+  finished_at?: string | null;
+}
+
+/** @deprecated 使用 InstallTask */
+export type JavaInstallTask = InstallTask;
+
+export interface OrphanInstall {
+  tool: string;
+  version: string;
+  path: string;
+  size_bytes: number;
+}
+
+export interface RuntimeStorage {
+  installs_bytes: number;
+  cache_bytes: number;
+  orphans: OrphanInstall[];
+}
+
+export interface CleanupResult {
+  removed_tasks: number;
+  freed_cache_bytes: number;
+  removed_orphans: string[];
+  freed_orphan_bytes: number;
 }
 
 // ==================== API 响应 ====================

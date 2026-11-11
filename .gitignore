@@ -6,8 +6,8 @@ AGENTS.md
 .env.local
 web/.env
 web/.env.local
-data/
-services/
+/data/
+/services/
 dist/
 
 # build

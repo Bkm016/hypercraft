@@ -1,0 +1,98 @@
+services:
+  gateway:
+    image: nginx:1.27-alpine
+    container_name: "${CONTAINER_NAME}"
+    restart: always
+    networks:
+      - 1panel-network
+    ports:
+      - "${PANEL_APP_PORT_HTTP}:80"
+    environment:
+      TZ: Asia/Shanghai
+      NGINX_ENVSUBST_FILTER: "^HC_"
+      HC_API_UPSTREAM: "${CONTAINER_NAME}-api:8080"
+      HC_WEB_UPSTREAM: "${CONTAINER_NAME}-web:3000"
+    volumes:
+      - ./conf/nginx.conf:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - "-qO-"
+        - http://127.0.0.1/api/health
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+    labels:
+      createdBy: Apps
+  api:
+    image: "${HC_IMAGE_REGISTRY}/hypercraft-api:0.1.0"
+    container_name: "${CONTAINER_NAME}-api"
+    restart: always
+    networks:
+      - 1panel-network
+    ports:
+      - "${PANEL_APP_PORT_GAME}:25565"
+      - "${HC_EXTRA_PORTS:-25566-25575}:${HC_EXTRA_PORTS:-25566-25575}"
+    environment:
+      TZ: Asia/Shanghai
+      HC_DATA_DIR: /data
+      HC_BIND: 0.0.0.0:8080
+      HC_DEV_TOKEN: "${HC_DEV_TOKEN}"
+      HC_ALLOWED_COMMANDS: "${HC_ALLOWED_COMMANDS}"
+      HC_ALLOWED_CWD_PREFIXES: /services
+      HC_CORS_ORIGINS: http://localhost:3000
+      RUST_LOG: info
+      HC_JAVA_MIRROR: "${HC_JAVA_MIRROR}"
+      HC_GITHUB_PROXY: "${HC_GITHUB_PROXY}"
+      HC_CN_MIRRORS: "${HC_CN_MIRRORS}"
+    volumes:
+      - ./data:/data
+      - ./services:/services
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - "-fsS"
+        - http://127.0.0.1:8080/health
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    labels:
+      createdBy: Apps
+  web:
+    image: "${HC_IMAGE_REGISTRY}/hypercraft-web:0.1.0"
+    container_name: "${CONTAINER_NAME}-web"
+    restart: always
+    networks:
+      - 1panel-network
+    environment:
+      TZ: Asia/Shanghai
+      NEXT_PUBLIC_API_URL: /api
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - "-fsS"
+        - http://127.0.0.1:3000
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    labels:
+      createdBy: Apps
+networks:
+  1panel-network:
+    external: true

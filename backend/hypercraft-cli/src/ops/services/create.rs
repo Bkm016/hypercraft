@@ -73,6 +73,8 @@ pub async fn create_service_interactive(
         id: id.clone(),
         name,
         command,
+        runtimes: vec![],
+            java_runtime: None,
         args,
         env,
         cwd,
