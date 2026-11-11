@@ -1,0 +1,33 @@
+name: Hypercraft
+tags:
+  - DevOps
+title: Hypercraft
+description: "面向 Minecraft 服务端及长期运行进程的跨平台进程管理与监控系统"
+additionalProperties:
+  key: hypercraft
+  name: Hypercraft
+  tags:
+    - DevOps
+  shortDescZh: "Minecraft 服务端与常驻进程管理面板"
+  shortDescEn: "Process manager for Minecraft servers and long-running processes"
+  description:
+    en: "Cross-platform process management and monitoring for Minecraft servers and long-running processes"
+    es-es: "Gestión y monitorización de procesos multiplataforma para servidores de Minecraft y procesos de larga duración"
+    ja: "Minecraft サーバーや常駐プロセス向けのクロスプラットフォームなプロセス管理・監視システム"
+    ms: "Pengurusan dan pemantauan proses merentas platform untuk pelayan Minecraft dan proses jangka panjang"
+    pt-br: "Gerenciamento e monitoramento de processos multiplataforma para servidores Minecraft e processos de longa duração"
+    ru: "Кроссплатформенное управление и мониторинг процессов для серверов Minecraft и долгоживущих процессов"
+    ko: "Minecraft 서버 및 장기 실행 프로세스를 위한 크로스 플랫폼 프로세스 관리 및 모니터링"
+    zh-Hant: "面向 Minecraft 伺服器及長期執行處理程序的跨平台處理程序管理與監控系統"
+    zh: "面向 Minecraft 服务端及长期运行进程的跨平台进程管理与监控系统"
+    tr: "Minecraft sunucuları ve uzun süre çalışan işlemler için platformlar arası işlem yönetimi ve izleme"
+  type: tool
+  crossVersionUpdate: true
+  limit: 0
+  architectures:
+    - amd64
+    - arm64
+  website: https://github.com/Bkm016/hypercraft
+  github: https://github.com/Bkm016/hypercraft
+  document: "https://github.com/Bkm016/hypercraft#readme"
+  memoryRequired: 1024
