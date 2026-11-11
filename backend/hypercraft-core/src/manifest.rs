@@ -70,6 +70,14 @@ pub struct ServiceManifest {
     pub name: String,
     /// 服务启动命令
     pub command: String,
+    /// 选用的运行环境 ID 列表（见 /runtimes），可同时选择多个（如 Java 21 + Node 22）。
+    /// 启动时按顺序前置各自 bin 目录到 PATH 并注入其环境变量（JAVA_HOME 等），排在前面的优先；
+    /// 裸命令（如 `java` / `node`）会优先在这些环境中解析。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runtimes: Vec<String>,
+    /// 兼容旧版本的单个 Java 运行环境字段；读取时并入 runtimes，写回时不再输出
+    #[serde(default, skip_serializing)]
+    pub java_runtime: Option<String>,
     /// 启动命令的参数列表
     #[serde(default)]
     pub args: Vec<String>,
@@ -121,6 +129,19 @@ pub struct ServiceManifest {
     /// 内嵌 Web 服务配置
     #[serde(default)]
     pub web: Option<WebConfig>,
+}
+
+impl ServiceManifest {
+    /// 规范化：把旧字段 java_runtime 并入 runtimes，去重、去空
+    pub fn normalize_runtimes(&mut self) {
+        if let Some(rt) = self.java_runtime.take().filter(|s| !s.trim().is_empty()) {
+            if !self.runtimes.contains(&rt) {
+                self.runtimes.insert(0, rt);
+            }
+        }
+        let mut seen = std::collections::HashSet::new();
+        self.runtimes.retain(|r| !r.trim().is_empty() && seen.insert(r.clone()));
+    }
 }
 
 fn default_clear_log_on_start() -> bool {

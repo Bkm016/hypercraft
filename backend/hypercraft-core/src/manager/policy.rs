@@ -44,6 +44,21 @@ impl ServiceManager {
         if let Some(web) = &manifest.web {
             self.validate_web_upstream(web)?;
         }
+
+        // 引用的运行环境必须存在，同一工具只能选一个（否则 PATH 优先级含糊）
+        if manifest.runtimes.len() > 16 {
+            return Err(ServiceError::PolicyViolation("too many runtimes (max 16)".into()));
+        }
+        let mut tools = HashSet::new();
+        for id in &manifest.runtimes {
+            let rt = self.runtimes.get(id)?;
+            if !tools.insert(rt.tool.clone()) {
+                return Err(ServiceError::PolicyViolation(format!(
+                    "multiple runtimes selected for tool `{}`",
+                    rt.tool
+                )));
+            }
+        }
         Ok(())
     }
 
@@ -61,6 +76,11 @@ impl ServiceManager {
         validate_web_upstream_url(&web.upstream)?;
         Ok(())
     }
+}
+
+/// 是否为裸命令名（不含路径）
+pub(super) fn is_bare(command: &str) -> bool {
+    is_bare_command(command)
 }
 
 /// 裸命令名：无路径分隔符，且不是 `.` / `..`。

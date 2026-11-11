@@ -12,6 +12,14 @@ import type {
   CreateApiKeyRequest,
   CreateApiKeyResponse,
   UpdateApiKeyRequest,
+  Runtime,
+  JavaCatalog,
+  RuntimeDownloadSettings,
+  InstallTask,
+  ToolListResponse,
+  ToolVersions,
+  RuntimeStorage,
+  CleanupResult,
   ServiceSummary,
   ServiceManifest,
   ServiceDetail,
@@ -33,13 +41,25 @@ import type {
   WebSessionResponse,
 } from "./types";
 
+/**
+ * 支持相对路径（如 "/api"）：在浏览器中基于当前页面 Origin 解析为绝对地址，
+ * 便于同源反代部署（1Panel 等），WebSocket 地址也由此正确推导。
+ */
+function resolveApiBaseUrl(raw: string): string {
+  const value = raw.trim().replace(/\/+$/, "");
+  if (typeof window !== "undefined" && value.startsWith("/")) {
+    return `${window.location.origin}${value}`;
+  }
+  return value;
+}
+
 function getApiBaseUrl(): string {
   // Runtime config takes precedence (from public/config.js)
   if (typeof window !== "undefined" && window.__RUNTIME_CONFIG__?.apiUrl) {
-    return window.__RUNTIME_CONFIG__.apiUrl;
+    return resolveApiBaseUrl(window.__RUNTIME_CONFIG__.apiUrl);
   }
   // Fallback to build-time env or default
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+  return resolveApiBaseUrl(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080");
 }
 
 export const SESSION_EXPIRES_AT_KEY = "hc_session_expires_at";
@@ -438,6 +458,89 @@ class ApiClient {
   async revokeApiKey(id: string): Promise<ApiKeySummary> {
     return this.request<ApiKeySummary>(`/api-keys/${id}`, {
       method: "DELETE",
+    });
+  }
+
+  // ==================== 运行环境 ====================
+
+  async listRuntimes(tool?: string): Promise<Runtime[]> {
+    return this.request<Runtime[]>(`/runtimes${tool ? `?tool=${encodeURIComponent(tool)}` : ""}`);
+  }
+
+  async listRuntimeTools(): Promise<ToolListResponse> {
+    return this.request<ToolListResponse>("/runtimes/tools");
+  }
+
+  async getToolVersions(tool: string, refresh = false): Promise<ToolVersions> {
+    return this.request<ToolVersions>(
+      `/runtimes/tools/${encodeURIComponent(tool)}/versions${refresh ? "?refresh=true" : ""}`
+    );
+  }
+
+  async getJavaCatalog(refresh = false): Promise<JavaCatalog> {
+    return this.request<JavaCatalog>(`/runtimes/java/catalog${refresh ? "?refresh=true" : ""}`);
+  }
+
+  async installRuntime(req: { tool?: string; spec: string; id?: string; name?: string }): Promise<InstallTask> {
+    return this.request<InstallTask>("/runtimes/install", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async listInstallTasks(): Promise<InstallTask[]> {
+    return this.request<InstallTask[]>("/runtimes/tasks");
+  }
+
+  async cancelInstallTask(id: string): Promise<void> {
+    await this.request<void>(`/runtimes/tasks/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+  }
+
+  async deleteInstallTask(id: string): Promise<void> {
+    await this.request<void>(`/runtimes/tasks/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  async clearInstallTasks(): Promise<{ removed: number }> {
+    return this.request<{ removed: number }>("/runtimes/tasks", { method: "DELETE" });
+  }
+
+  async getRuntimeStorage(): Promise<RuntimeStorage> {
+    return this.request<RuntimeStorage>("/runtimes/storage");
+  }
+
+  async cleanupRuntimes(req: { tasks?: boolean; cache?: boolean; orphans?: boolean }): Promise<CleanupResult> {
+    return this.request<CleanupResult>("/runtimes/cleanup", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async registerJavaRuntime(req: { id: string; name?: string; home: string }): Promise<Runtime> {
+    return this.request<Runtime>("/runtimes", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async renameRuntime(id: string, name: string): Promise<Runtime> {
+    return this.request<Runtime>(`/runtimes/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async deleteRuntime(id: string): Promise<void> {
+    await this.request<void>(`/runtimes/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  async getRuntimeSettings(): Promise<RuntimeDownloadSettings> {
+    return this.request<RuntimeDownloadSettings>("/runtimes/settings");
+  }
+
+  async updateRuntimeSettings(req: RuntimeDownloadSettings): Promise<RuntimeDownloadSettings> {
+    return this.request<RuntimeDownloadSettings>("/runtimes/settings", {
+      method: "PUT",
+      body: JSON.stringify(req),
     });
   }
 

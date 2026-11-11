@@ -11,6 +11,7 @@ export interface ServiceFormData {
   id: string;
   name: string;
   command: string;
+  runtimes: string[];
   args: string[];
   cwd: string;
   autoStart: boolean;

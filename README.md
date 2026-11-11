@@ -18,6 +18,7 @@
 | 权限 | 超级管理员 / 系统管理员 / 普通用户；服务级 ACL |
 | Agent API | 长期 API Key 与 `/agent/*` 运维面 |
 | 安全策略 | 可执行命令白名单、工作目录前缀限制 |
+| 运行环境 | 内嵌 mise 安装 Java（Temurin / Zulu / Corretto / Dragonwell / Kona …）、Node.js、Python、Go 等任意工具；每个服务可同时选择多个，支持国内镜像 |
 | Web 控制台 | 服务分组、标签、拖拽排序、API Key 与接口测试 |
 
 ## 快速部署
@@ -191,7 +192,41 @@ curl -N -H "Authorization: Bearer $HC_API_KEY" \
 | `HC_WEB_GATEWAY_BASE_DOMAIN` | Web 网关基础域（无协议） | — |
 | `NEXT_PUBLIC_API_URL` | 浏览器侧 API 基址 | `http://localhost:8080` |
 | `HC_API_PORT` / `HC_WEB_PORT` | Compose 宿主机端口映射 | `8080` / `3000` |
+| `HC_MISE_BIN` | mise 可执行文件路径 | PATH 中的 `mise`（Docker 镜像内置） |
+| `HC_JAVA_MIRROR` | Temurin 下载镜像初始值：`official` / `tuna` / `ustc` | `official` |
+| `HC_GITHUB_PROXY` | GitHub Release 代理前缀初始值，如 `https://ghfast.top/` | — |
+| `HC_CN_MIRRORS` | Node.js / Python / Go 使用国内镜像初始值 | Temurin 用国内镜像时为 `true` |
 | `RUST_LOG` | 日志级别 | `info` |
+
+## 运行环境
+
+管理员在 Web 控制台「环境」页安装与管理运行环境，创建服务时可**同时选择多个**（如 Java 21 + Node.js 22 + Python 3.12）。
+
+- 由内嵌 [mise](https://mise.jdx.dev) 安装，支持 mise registry 中的任意工具；Java 提供「主版本 × 发行版」选择器，其他工具按版本通道（如 Node 22 / Python 3.12）或完整版本选择。
+- 数据隔离在 `<HC_DATA_DIR>/mise`，不影响主机上的 mise。
+- 下载源（写入 mise `url_replacements`，具体规则优先于通用代理）：
+  - Java Temurin：清华 TUNA / 中科大 / 官方
+  - Node.js / Python / Go：npmmirror、golang.google.cn（「国内镜像」开关）
+  - 其他 GitHub Release（Dragonwell、Kona、Bun、Gradle …）：可配置 GitHub 代理前缀
+- 服务启动时按所选顺序把各环境的 bin 目录前置到 `PATH`，并注入其环境变量（`JAVA_HOME`、`GOROOT` 等），排在前面的优先；同一工具只能选一个。裸命令（`java`、`node` …）优先在所选环境中解析。
+- 安装任务可取消（自动清理半成品）、删除单条或一键清理已结束记录；「清理」可释放下载缓存并卸载未登记的残留安装。
+- 也可「登记 JDK」使用服务器上现成的 JDK / JRE 目录（只登记，不复制）。
+- 正在被服务使用的运行环境不能删除。
+
+| 方法 | 路径 | 权限 |
+|------|------|------|
+| `GET` | `/runtimes[?tool=java]` | 已登录（`read`） |
+| `GET` | `/runtimes/tools` · `/runtimes/tools/:tool/versions` | 管理员 |
+| `GET` | `/runtimes/java/catalog` | 管理员 |
+| `POST` | `/runtimes/install` `{"tool":"node","spec":"22"}` | 管理员 |
+| `GET` / `DELETE` | `/runtimes/tasks`（DELETE 清理已结束） | 管理员 |
+| `GET` / `DELETE` | `/runtimes/tasks/:id` · `POST /runtimes/tasks/:id/cancel` | 管理员 |
+| `GET` | `/runtimes/storage` · `POST /runtimes/cleanup` `{"tasks","cache","orphans"}` | 管理员 |
+| `POST` | `/runtimes` `{"id","home","name?"}` 登记已有 JDK | 管理员 |
+| `PATCH` / `DELETE` | `/runtimes/:id` | 管理员 |
+| `GET` / `PUT` | `/runtimes/settings` 下载源 | 管理员 |
+
+服务清单中使用 `"runtimes": ["<运行环境 ID>", ...]` 引用（旧字段 `java_runtime` 仍可读取）。
 
 ## 服务清单示例
 
@@ -200,6 +235,7 @@ curl -N -H "Authorization: Bearer $HC_API_KEY" \
   "id": "minecraft-server",
   "name": "Minecraft Server",
   "command": "java",
+  "runtimes": ["temurin-jre-21", "node-22"],
   "args": ["-Xmx4G", "-jar", "server.jar", "nogui"],
   "cwd": "/opt/minecraft",
   "env": {

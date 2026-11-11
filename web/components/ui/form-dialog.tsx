@@ -243,7 +243,7 @@ function FormDialogFooter({
 interface FormDialogFieldProps extends React.HTMLAttributes<HTMLDivElement> {
   label: string;
   required?: boolean;
-  hint?: string;
+  hint?: React.ReactNode;
   error?: string;
 }
 

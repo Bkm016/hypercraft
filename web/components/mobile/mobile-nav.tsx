@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { usePathname } from "next/navigation";
 
 interface NavItem {
-  href: "/services" | "/users" | "/api-keys" | "/api-test" | "/profile";
+  href: "/services" | "/runtimes" | "/users" | "/api-keys" | "/api-test" | "/profile";
   label: string;
   adminOnly?: boolean;
   superAdminOnly?: boolean;
@@ -27,6 +27,7 @@ export function MobileNav({ open, onOpenChange }: MobileNavProps) {
 
   const navItems: NavItem[] = [
     { href: "/services", label: "服务" },
+    { href: "/runtimes", label: "环境", adminOnly: true },
     { href: "/users", label: "用户", adminOnly: true },
     { href: "/api-keys", label: "API", superAdminOnly: true },
     { href: "/api-test", label: "测试", superAdminOnly: true },

@@ -16,6 +16,7 @@ export function ConfigPanel({
 }: ConfigPanelProps) {
   const config = [
     { key: "命令", value: manifest.command },
+    ...(manifest.runtimes?.length ? [{ key: "运行环境", value: manifest.runtimes.join("\n") }] : []),
     { key: "参数", value: manifest.args?.join(" ") || "—" },
     { key: "工作目录", value: manifest.cwd || "—" },
     { key: "运行用户", value: manifest.run_as || "—" },

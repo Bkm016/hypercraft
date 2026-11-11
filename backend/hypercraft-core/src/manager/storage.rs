@@ -8,6 +8,7 @@ impl ServiceManager {
     pub async fn create_service(&self, mut manifest: ServiceManifest) -> Result<ServiceManifest> {
         self.ensure_base_dirs_async().await?;
         self.validate_id(&manifest.id)?;
+        manifest.normalize_runtimes();
         self.enforce_policy(&manifest)?;
 
         let manifest_path = self.manifest_path(&manifest.id);
@@ -41,6 +42,7 @@ impl ServiceManager {
             return Err(ServiceError::NotFound(id.to_string()));
         }
 
+        manifest.normalize_runtimes();
         self.enforce_policy(&manifest)?;
 
         if manifest.created_at.is_none() {
@@ -110,7 +112,8 @@ impl ServiceManager {
             return Err(ServiceError::NotFound(id.to_string()));
         }
         let data = tokio::fs::read(&path).await?;
-        let manifest: ServiceManifest = serde_json::from_slice(&data)?;
+        let mut manifest: ServiceManifest = serde_json::from_slice(&data)?;
+        manifest.normalize_runtimes();
         Ok(manifest)
     }
 

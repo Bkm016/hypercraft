@@ -29,4 +29,6 @@ pub struct AppState {
     pub http_client: reqwest::Client,
     /// API 监听地址，用于阻止 Web 上游反向指向控制面。
     pub api_bind: SocketAddr,
+    /// 运行环境安装器（内嵌 mise）
+    pub runtimes: crate::runtime_installer::RuntimeInstaller,
 }

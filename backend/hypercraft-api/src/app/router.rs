@@ -19,6 +19,10 @@ use super::handlers::{
     shutdown_service, start_service, stop_service, update_api_key, update_group, update_schedule,
     update_service,
     update_service_group, update_service_tags, update_user, validate_cron,
+    cancel_install_task, cleanup_runtimes, clear_install_tasks, delete_install_task,
+    delete_runtime, get_install_task, get_runtime_settings, install_runtime, java_catalog,
+    list_install_tasks, list_runtimes, list_tools, register_runtime, runtime_storage,
+    tool_versions, update_runtime, update_runtime_settings,
 };
 use super::middleware::{auth_middleware, web_gateway_middleware};
 use super::state::AppState;
@@ -159,6 +163,33 @@ pub fn app_router(state: AppState, cors_origins: Vec<String>) -> Router {
         .route("/groups/:id", patch(update_group).delete(delete_group))
         .route("/services/reorder", post(reorder_services));
 
+    // 运行环境（Java / Node / Python / Go … 任意 mise 工具）
+    let runtime_routes = Router::new()
+        .route("/runtimes", get(list_runtimes).post(register_runtime))
+        .route("/runtimes/tools", get(list_tools))
+        .route("/runtimes/tools/:tool/versions", get(tool_versions))
+        .route("/runtimes/java/catalog", get(java_catalog))
+        .route("/runtimes/install", post(install_runtime))
+        .route(
+            "/runtimes/tasks",
+            get(list_install_tasks).delete(clear_install_tasks),
+        )
+        .route(
+            "/runtimes/tasks/:id",
+            get(get_install_task).delete(delete_install_task),
+        )
+        .route("/runtimes/tasks/:id/cancel", post(cancel_install_task))
+        .route("/runtimes/storage", get(runtime_storage))
+        .route("/runtimes/cleanup", post(cleanup_runtimes))
+        .route(
+            "/runtimes/settings",
+            get(get_runtime_settings).put(update_runtime_settings),
+        )
+        .route(
+            "/runtimes/:id",
+            patch(update_runtime).delete(delete_runtime),
+        );
+
     // 资源统计端点（仅系统级）
     let stats_routes = Router::new()
         .route("/stats/system", get(get_system_stats));
@@ -180,6 +211,7 @@ pub fn app_router(state: AppState, cors_origins: Vec<String>) -> Router {
         .merge(agent_routes)
         .merge(group_routes)
         .merge(stats_routes)
+        .merge(runtime_routes)
         .merge(password_routes)
         .merge(two_factor_routes)
         .layer(from_fn_with_state(state.clone(), auth_middleware));
