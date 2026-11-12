@@ -24,6 +24,7 @@ import { BrowserPanel } from "./components/browser-panel";
 import { LogsPanel } from "./components/logs-panel";
 import { TerminalPanel } from "./components/terminal-panel";
 import { ConfigPanel } from "./components/config-panel";
+import { FilesPanel } from "./components/files/files-panel";
 import { DeleteServiceModal } from "../components/delete-service-modal";
 import { ServiceFormModal } from "../components/service-form/service-form-modal";
 
@@ -31,15 +32,16 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
   const params = use(props.params);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get("tab") as "logs" | "terminal" | "browser" | "config" | null;
+  const initialTab = searchParams.get("tab") as "logs" | "terminal" | "browser" | "config" | "files" | null;
   
-  const { isAdmin } = useAuth();
+  const { isAdmin, fileAccess } = useAuth();
+  const canSeeFiles = fileAccess !== "none";
   const { refreshServices } = useServices();
   const [service, setService] = useState<ServiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [operating, setOperating] = useState(false);
-  const [activeTab, setActiveTab] = useState<"logs" | "terminal" | "browser" | "config">(
+  const [activeTab, setActiveTab] = useState<"logs" | "terminal" | "browser" | "config" | "files">(
     initialTab || "terminal",
   );
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -88,10 +90,15 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
       | "terminal"
       | "browser"
       | "config"
+      | "files"
       | null;
 
     if (urlTab === "browser" && !hasBrowser) {
       setActiveTab("terminal");
+      return;
+    }
+    if (urlTab === "files" && !canSeeFiles) {
+      setActiveTab(hasBrowser ? "browser" : "terminal");
       return;
     }
     if (urlTab === "config" && !isAdmin) {
@@ -103,7 +110,7 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
       return;
     }
     setActiveTab(hasBrowser ? "browser" : "terminal");
-  }, [service, isAdmin, searchParams]);
+  }, [service, isAdmin, canSeeFiles, searchParams]);
 
   useEffect(() => {
     if (service && activeTab === "browser" && !service.manifest.web?.enabled) {
@@ -271,7 +278,7 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
 
           <TabMenu.Root
             value={activeTab}
-            onValueChange={(v) => setActiveTab(v as "logs" | "terminal" | "browser" | "config")}
+            onValueChange={(v) => setActiveTab(v as "logs" | "terminal" | "browser" | "config" | "files")}
             className="mt-3 md:mt-4"
           >
             <TabMenu.List>
@@ -280,13 +287,16 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
               )}
               <TabMenu.Trigger value="terminal">终端</TabMenu.Trigger>
               <TabMenu.Trigger value="logs">日志</TabMenu.Trigger>
+              {canSeeFiles && <TabMenu.Trigger value="files">文件</TabMenu.Trigger>}
               {isAdmin && <TabMenu.Trigger value="config">配置</TabMenu.Trigger>}
             </TabMenu.List>
           </TabMenu.Root>
         </div>
       </div>
 
-      <PageContent fillHeight={activeTab === "logs" || activeTab === "terminal" || activeTab === "browser"}>
+      <PageContent
+        fillHeight={activeTab === "logs" || activeTab === "terminal" || activeTab === "browser" || activeTab === "files"}
+      >
         {activeTab === "logs" && <LogsPanel serviceId={params.id} serviceState={service.status.state} logPath={service.manifest.log_path} />}
         {activeTab === "terminal" && (
           <TerminalPanel
@@ -300,6 +310,13 @@ export default function ServiceDetailPage(props: { params: Promise<{ id: string 
           <BrowserPanel
             serviceId={params.id}
             title={service.manifest.web?.title}
+          />
+        )}
+        {activeTab === "files" && canSeeFiles && (
+          <FilesPanel
+            serviceId={params.id}
+            hasCwd={!!service.manifest.cwd?.trim()}
+            canWrite={fileAccess === "write"}
           />
         )}
         {activeTab === "config" && isAdmin && <ConfigPanel manifest={service.manifest} onEdit={() => setShowEditModal(true)} />}

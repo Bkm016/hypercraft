@@ -2,6 +2,7 @@ mod agent;
 mod api_keys;
 mod attach;
 mod auth;
+mod files;
 mod groups;
 mod health;
 mod logs;
@@ -25,6 +26,10 @@ pub use api_keys::{
 };
 pub use attach::attach_service;
 pub use auth::{devtoken_login, get_me, login, logout, refresh};
+pub use files::{
+    create_file_entry, delete_file_entry, download_file, list_files, read_file_content,
+    rename_file_entry, upload_file, write_file_content, MAX_FILE_BYTES, MAX_WRITE_BODY_BYTES,
+};
 pub use groups::{
     create_group, delete_group, list_groups, reorder_groups, reorder_services, update_group,
     update_service_group, update_service_tags,

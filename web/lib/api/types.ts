@@ -135,6 +135,8 @@ export interface UserSummary {
   username: string;
   service_ids: string[];
   is_admin: boolean;
+  /** 文件管理权限（系统管理员恒为 write） */
+  file_access: FileAccess;
   totp_enabled: boolean;
   created_at?: string;
 }
@@ -143,12 +145,14 @@ export interface CreateUserRequest {
   username: string;
   password: string;
   service_ids?: string[];
+  file_access?: FileAccess;
 }
 
 export interface UpdateUserRequest {
   password?: string;
   service_ids?: string[];
   is_admin?: boolean;
+  file_access?: FileAccess;
 }
 
 export interface ChangePasswordRequest {
@@ -158,7 +162,17 @@ export interface ChangePasswordRequest {
 
 // ==================== API Key（Agent）====================
 
-export type ApiKeyScope = "read" | "control" | "manage" | "logs" | "attach";
+export type ApiKeyScope =
+  | "read"
+  | "control"
+  | "manage"
+  | "logs"
+  | "attach"
+  | "files:read"
+  | "files:write";
+
+/** 文件管理权限：none 不可用；read 浏览/查看/下载；write 另可编辑/上传/新建/重命名/移动/删除 */
+export type FileAccess = "none" | "read" | "write";
 
 export interface ApiKeySummary {
   id: string;
@@ -206,6 +220,7 @@ export interface TokenClaims {
   service_ids?: string[];
   service_id?: string;
   is_admin?: boolean;
+  file_access?: FileAccess;
   exp: number;
   iat: number;
 }
@@ -398,4 +413,44 @@ export interface ApiError {
   error: string;
   message: string;
   status?: number;
+  /** 语法校验失败时的行号（1 起） */
+  line?: number;
+  /** 语法校验失败时的列号（1 起） */
+  column?: number;
+}
+
+// ==================== 服务文件 ====================
+
+export interface FileEntry {
+  name: string;
+  /** 相对服务工作目录的路径，"/" 分隔 */
+  path: string;
+  is_dir: boolean;
+  is_symlink: boolean;
+  size: number;
+  /** unix 毫秒 */
+  modified?: number | null;
+  /** 是否可在线查看/编辑（YAML / JSON / TOML） */
+  editable: boolean;
+}
+
+export interface DirListing {
+  path: string;
+  entries: FileEntry[];
+  truncated: boolean;
+}
+
+export interface FileContent {
+  path: string;
+  content: string;
+  etag: string;
+  size: number;
+  modified?: number | null;
+}
+
+export interface WriteFileResponse {
+  path: string;
+  etag: string;
+  size: number;
+  modified?: number | null;
 }

@@ -13,7 +13,7 @@ mod totp;
 pub use manager::UserManager;
 pub use models::{
     api_key_scopes, ApiKey, ApiKeySecretResponse, ApiKeySummary, AuthToken, CreateApiKeyRequest,
-    CreateApiKeyResponse, CreateUserRequest, DevTokenLoginRequest, Disable2FARequest,
+    CreateApiKeyResponse, CreateUserRequest, DevTokenLoginRequest, FileAccess, Disable2FARequest,
     Enable2FARequest, LoginRequest, RefreshRequest, Setup2FARequest, Setup2FAResponse, TokenClaims,
     TokenType, TwoFactorVerification, UpdateApiKeyRequest, UpdateUserRequest, User, UserSummary,
     API_KEY_RAW_PREFIX,

@@ -26,6 +26,12 @@ subtle.workspace = true
 cron.workspace = true
 chrono.workspace = true
 rand.workspace = true
+cap-std = "4"
+yaml-rust2 = "0.13"
+toml = "1"
+sha2 = "0.10"
+hex = "0.4"
+tokio-util = { version = "0.7", features = ["io"] }
 
 [dev-dependencies]
 tempfile.workspace = true

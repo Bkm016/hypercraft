@@ -181,6 +181,7 @@ impl UserManager {
             password_hash,
             service_ids: req.service_ids,
             is_admin: false,
+            file_access: req.file_access,
             token_version: 0,
             refresh_nonce: String::new(),
             totp_config: None,
@@ -214,6 +215,7 @@ impl UserManager {
             password_hash,
             service_ids: vec![],
             is_admin: true,
+            file_access: FileAccess::Write,
             token_version: 0,
             refresh_nonce: String::new(),
             totp_config: None,
@@ -362,6 +364,11 @@ impl UserManager {
         // 更新服务权限；verify_token 每次从用户记录同步，无需撤销会话
         if let Some(service_ids) = req.service_ids {
             user.service_ids = service_ids;
+        }
+
+        // 文件管理权限；与服务权限一样由 verify_token 每次同步，立即生效
+        if let Some(file_access) = req.file_access {
+            user.file_access = file_access;
         }
 
         // 更新系统管理员标记（变更时撤销旧 token）

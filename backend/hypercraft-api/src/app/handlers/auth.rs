@@ -263,6 +263,7 @@ pub async fn get_me(
                 password_hash: String::new(),
                 service_ids: vec![],
                 is_admin: true,
+                file_access: hypercraft_core::FileAccess::Write,
                 token_version: 0,
                 refresh_nonce: String::new(),
                 totp_config: None,

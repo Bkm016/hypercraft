@@ -39,6 +39,10 @@ import type {
   Enable2FARequest,
   Disable2FARequest,
   WebSessionResponse,
+  DirListing,
+  FileContent,
+  FileEntry,
+  WriteFileResponse,
 } from "./types";
 
 /**
@@ -224,6 +228,7 @@ class ApiClient {
         error: data.error || data.code || "Unknown error",
         message: data.message || data.error || response.statusText,
         status: response.status,
+        ...(typeof data.line === "number" ? { line: data.line, column: data.column } : {}),
       };
     } catch {
       return {
@@ -558,6 +563,121 @@ class ApiClient {
 
   async getService(id: string): Promise<ServiceDetail> {
     return this.request<ServiceDetail>(`/services/${id}`);
+  }
+
+  // ==================== 服务文件（工作目录内） ====================
+
+  async listServiceFiles(id: string, path = ""): Promise<DirListing> {
+    return this.request<DirListing>(`/services/${id}/files?path=${encodeURIComponent(path)}`);
+  }
+
+  async readServiceFile(id: string, path: string): Promise<FileContent> {
+    return this.request<FileContent>(`/services/${id}/files/content?path=${encodeURIComponent(path)}`);
+  }
+
+  /** etag 为空表示强制覆盖 */
+  async writeServiceFile(
+    id: string,
+    path: string,
+    content: string,
+    etag?: string | null,
+  ): Promise<WriteFileResponse> {
+    return this.request<WriteFileResponse>(`/services/${id}/files/content`, {
+      method: "PUT",
+      body: JSON.stringify({ path, content, etag: etag ?? null }),
+    });
+  }
+
+  async createServiceFile(id: string, path: string, kind: "file" | "dir"): Promise<FileEntry> {
+    return this.request<FileEntry>(`/services/${id}/files/create`, {
+      method: "POST",
+      body: JSON.stringify({ path, kind }),
+    });
+  }
+
+  /** 重命名或移动 */
+  async renameServiceFile(id: string, from: string, to: string): Promise<void> {
+    return this.request<void>(`/services/${id}/files/rename`, {
+      method: "POST",
+      body: JSON.stringify({ from, to }),
+    });
+  }
+
+  /**
+   * 上传文件（请求体为原始字节，≤ 25 MiB）。用 XHR 以获得上传进度；
+   * 401 时续期会话后重试一次。
+   */
+  async uploadServiceFile(
+    id: string,
+    dir: string,
+    file: File,
+    options: { overwrite?: boolean; onProgress?: (loaded: number, total: number) => void; signal?: AbortSignal } = {},
+  ): Promise<FileEntry> {
+    const params = new URLSearchParams({ dir, name: file.name, overwrite: String(!!options.overwrite) });
+    const url = `${getApiBaseUrl()}/services/${id}/files/upload?${params}`;
+    const send = () =>
+      new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", url);
+        xhr.withCredentials = true;
+        xhr.setRequestHeader("X-Hypercraft-CSRF", "1");
+        xhr.setRequestHeader("Content-Type", "application/octet-stream");
+        xhr.upload.onprogress = (e) => options.onProgress?.(e.loaded, e.lengthComputable ? e.total : file.size);
+        xhr.onload = () => resolve({ status: xhr.status, body: xhr.responseText });
+        xhr.onerror = () => reject({ error: "NetworkError", message: "网络错误，上传失败", status: 0 } satisfies ApiError);
+        xhr.onabort = () => reject({ error: "Aborted", message: "已取消上传", status: 0 } satisfies ApiError);
+        options.signal?.addEventListener("abort", () => xhr.abort(), { once: true });
+        xhr.send(file);
+      });
+
+    let res = await send();
+    if (res.status === 401) {
+      await this.refreshSession(true);
+      res = await send();
+    }
+    if (res.status < 200 || res.status >= 300) {
+      let data: { code?: string; message?: string; error?: string } = {};
+      try {
+        data = JSON.parse(res.body);
+      } catch {
+        // 代理返回的非 JSON 错误（如 nginx 413）
+      }
+      throw {
+        code: data.code,
+        error: data.error || data.code || "UploadFailed",
+        message: data.message || (res.status === 413 ? "文件过大" : `上传失败（HTTP ${res.status}）`),
+        status: res.status,
+      } satisfies ApiError;
+    }
+    return JSON.parse(res.body) as FileEntry;
+  }
+
+  /** 下载服务工作目录中的文件（≤ 25 MiB） */
+  async downloadServiceFile(id: string, path: string): Promise<void> {
+    const url = `${getApiBaseUrl()}/services/${id}/files/download?path=${encodeURIComponent(path)}`;
+    let response = await fetch(url, { credentials: "include" });
+    if (response.status === 401) {
+      await this.refreshSession(true);
+      response = await fetch(url, { credentials: "include" });
+    }
+    if (!response.ok) {
+      throw await this.parseError(response);
+    }
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = path.split("/").pop() || "download";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 1000);
+  }
+
+  async deleteServiceFile(id: string, path: string): Promise<void> {
+    return this.request<void>(`/services/${id}/files?path=${encodeURIComponent(path)}`, {
+      method: "DELETE",
+    });
   }
 
   async createService(manifest: ServiceManifest): Promise<ServiceManifest> {

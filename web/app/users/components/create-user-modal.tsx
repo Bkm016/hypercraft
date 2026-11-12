@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { RiAddLine, RiUserLine } from "@remixicon/react";
 import * as FormDialog from "@/components/ui/form-dialog";
-import { api, type ServiceSummary, type ServiceGroup } from "@/lib/api";
+import { api, type FileAccess, type ServiceSummary, type ServiceGroup } from "@/lib/api";
 import { notification } from "@/hooks/use-notification";
 import { ServicePermissionPicker } from "./service-permission-picker";
+import { FileAccessField } from "./file-access-field";
 
 export interface CreateUserModalProps {
   services: ServiceSummary[];
@@ -23,6 +24,7 @@ export function CreateUserModal({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
+  const [fileAccess, setFileAccess] = useState<FileAccess>("none");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,6 +47,7 @@ export function CreateUserModal({
         username: username.trim(),
         password,
         service_ids: Array.from(selectedServices),
+        file_access: fileAccess,
       });
       notification({ status: "success", title: "用户已创建" });
       onSuccess();
@@ -103,6 +106,8 @@ export function CreateUserModal({
                 onChange={setSelectedServices}
               />
             </FormDialog.Field>
+
+            <FileAccessField value={fileAccess} onChange={setFileAccess} />
           </FormDialog.Body>
 
           <FormDialog.Footer>

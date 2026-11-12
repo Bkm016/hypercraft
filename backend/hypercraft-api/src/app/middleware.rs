@@ -97,6 +97,45 @@ impl AuthInfo {
 		}
 	}
 
+	/// 文件管理：浏览、查看、下载。
+	/// 需服务访问权；JWT 管理员恒可，普通用户按 file_access；API Key 需 files:read 或 files:write。
+	pub fn require_files_read(&self, service_id: &str) -> Result<(), ApiError> {
+		self.require_service_access(service_id)?;
+		let ok = if self.is_api_key() {
+			self.has_scope(api_key_scopes::FILES_READ) || self.has_scope(api_key_scopes::FILES_WRITE)
+		} else {
+			self.is_admin() || self.claims.file_access.can_read()
+		};
+		if ok {
+			Ok(())
+		} else {
+			Err(ApiError::forbidden("没有文件管理权限"))
+		}
+	}
+
+	/// 文件管理：编辑、上传、新建、重命名、移动、删除。
+	pub fn require_files_write(&self, service_id: &str) -> Result<(), ApiError> {
+		self.require_service_access(service_id)?;
+		let ok = if self.is_api_key() {
+			self.has_scope(api_key_scopes::FILES_WRITE)
+		} else {
+			self.is_admin() || self.claims.file_access.can_write()
+		};
+		if ok {
+			Ok(())
+		} else {
+			Err(ApiError::forbidden("没有文件写入权限"))
+		}
+	}
+
+	fn require_service_access(&self, service_id: &str) -> Result<(), ApiError> {
+		if self.can_access_service(service_id) {
+			Ok(())
+		} else {
+			Err(ApiError::forbidden(format!("没有权限访问服务: {}", service_id)))
+		}
+	}
+
 	/// 是否可改服务定义：JWT 管理员，或 API Key 持 manage
 	pub fn can_manage_service_defs(&self) -> bool {
 		if self.is_api_key() {
@@ -399,4 +438,66 @@ pub async fn web_gateway_middleware(
 		return next.run(request).await;
 	};
 	handle_web_gateway_request(&state, request, service_id).await
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use hypercraft_core::FileAccess;
+
+	fn user(file_access: FileAccess, is_admin: bool, services: &[&str]) -> AuthInfo {
+		AuthInfo::from_claims(TokenClaims {
+			sub: "u1".into(),
+			username: "u1".into(),
+			iss: None,
+			aud: None,
+			token_type: TokenType::User,
+			service_ids: services.iter().map(|s| s.to_string()).collect(),
+			is_admin,
+			file_access,
+			token_version: 0,
+			refresh_nonce: None,
+			service_id: None,
+			exp: 0,
+			iat: 0,
+		})
+	}
+
+	fn api_key(scopes: &[&str]) -> AuthInfo {
+		let mut claims = user(FileAccess::None, false, &[]).claims;
+		claims.token_type = TokenType::ApiKey;
+		AuthInfo::from_api_key(claims, scopes.iter().map(|s| s.to_string()).collect())
+	}
+
+	#[test]
+	fn file_permissions_for_users() {
+		let none = user(FileAccess::None, false, &["s1"]);
+		assert!(none.require_files_read("s1").is_err());
+
+		let ro = user(FileAccess::Read, false, &["s1"]);
+		assert!(ro.require_files_read("s1").is_ok());
+		assert!(ro.require_files_write("s1").is_err());
+		// 文件权限不越过服务访问权
+		assert!(ro.require_files_read("s2").is_err());
+
+		let rw = user(FileAccess::Write, false, &["s1"]);
+		assert!(rw.require_files_read("s1").is_ok());
+		assert!(rw.require_files_write("s1").is_ok());
+		assert!(rw.require_files_write("s2").is_err());
+
+		// 系统管理员恒有读写，与 file_access 无关
+		let admin = user(FileAccess::None, true, &[]);
+		assert!(admin.require_files_write("any").is_ok());
+	}
+
+	#[test]
+	fn file_permissions_for_api_keys() {
+		assert!(api_key(&["read", "manage"]).require_files_read("s1").is_err());
+		let r = api_key(&["files:read"]);
+		assert!(r.require_files_read("s1").is_ok());
+		assert!(r.require_files_write("s1").is_err());
+		let w = api_key(&["files:write"]);
+		assert!(w.require_files_read("s1").is_ok());
+		assert!(w.require_files_write("s1").is_ok());
+	}
 }

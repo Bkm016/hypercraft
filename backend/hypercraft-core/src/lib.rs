@@ -15,7 +15,7 @@ pub use manifest::{Schedule, ScheduleAction, ServiceManifest, WebConfig};
 pub use models::{ServiceGroup, ServiceState, ServiceStatus, ServiceSummary};
 pub use user::{
     api_key_scopes, ApiKey, ApiKeySecretResponse, ApiKeySummary, AuthToken, CreateApiKeyRequest,
-    CreateApiKeyResponse, CreateUserRequest, DevTokenLoginRequest, Disable2FARequest,
+    CreateApiKeyResponse, CreateUserRequest, DevTokenLoginRequest, FileAccess, Disable2FARequest,
     Enable2FARequest, LoginRequest, RefreshRequest, Setup2FARequest, Setup2FAResponse, TokenClaims,
     TokenType, TwoFactorVerification, UpdateApiKeyRequest, UpdateUserRequest, User, UserManager,
     UserSummary, API_KEY_RAW_PREFIX,
