@@ -1,3 +1,4 @@
+use axum::extract::DefaultBodyLimit;
 use axum::middleware::from_fn_with_state;
 use axum::routing::{get, patch, post, put};
 use axum::Router;
@@ -23,6 +24,9 @@ use super::handlers::{
     delete_runtime, get_install_task, get_runtime_settings, install_runtime, java_catalog,
     list_install_tasks, list_runtimes, list_tools, register_runtime, runtime_storage,
     tool_versions, update_runtime, update_runtime_settings,
+    create_file_entry, delete_file_entry, download_file, list_files, read_file_content,
+    rename_file_entry, upload_file, write_file_content, MAX_TRANSFER_BYTES, MAX_WRITE_BODY_BYTES,
+    abort_upload, complete_upload, init_upload, upload_chunk, upload_status, MAX_CHUNK_BYTES,
 };
 use super::middleware::{auth_middleware, web_gateway_middleware};
 use super::state::AppState;
@@ -116,6 +120,36 @@ pub fn app_router(state: AppState, cors_origins: Vec<String>) -> Router {
         .route("/services/:id/log-file", get(download_log_file))
         .route("/services/:id/attach", get(attach_service))
         .route("/services/:id/web/session", post(create_web_session))
+        // 工作目录文件管理：浏览、YAML / JSON / TOML 在线编辑、上传下载（单文件 ≤ 512 MiB，在线编辑 ≤ 25 MiB）
+        .route(
+            "/services/:id/files",
+            get(list_files).delete(delete_file_entry),
+        )
+        .route(
+            "/services/:id/files/content",
+            get(read_file_content)
+                .put(write_file_content)
+                .layer(DefaultBodyLimit::max(MAX_WRITE_BODY_BYTES)),
+        )
+        .route("/services/:id/files/download", get(download_file))
+        // 上传在 handler 内流式计数并在超限时中止；这里放宽默认 2 MiB 上限，留少量余量
+        .route(
+            "/services/:id/files/upload",
+            put(upload_file).layer(DefaultBodyLimit::max(MAX_TRANSFER_BYTES as usize + 1024)),
+        )
+        // 分片上传 / 断点续传
+        .route("/services/:id/files/uploads", post(init_upload))
+        .route(
+            "/services/:id/files/uploads/:uid",
+            get(upload_status).delete(abort_upload),
+        )
+        .route(
+            "/services/:id/files/uploads/:uid/chunks/:index",
+            put(upload_chunk).layer(DefaultBodyLimit::max(MAX_CHUNK_BYTES as usize + 1024)),
+        )
+        .route("/services/:id/files/uploads/:uid/complete", post(complete_upload))
+        .route("/services/:id/files/create", post(create_file_entry))
+        .route("/services/:id/files/rename", post(rename_file_entry))
         .route("/services/:id/tags", patch(update_service_tags))
         .route("/services/:id/group", patch(update_service_group))
         .route(

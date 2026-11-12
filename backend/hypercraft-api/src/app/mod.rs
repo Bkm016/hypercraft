@@ -1,5 +1,5 @@
 mod error;
-mod handlers;
+pub mod handlers;
 mod middleware;
 mod rate_limit;
 mod router;

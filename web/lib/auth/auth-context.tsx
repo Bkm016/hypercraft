@@ -14,6 +14,7 @@ import {
   api,
   SESSION_EXPIRES_AT_KEY,
   SESSION_INVALID_EVENT,
+  type FileAccess,
   type TokenClaims,
   type UserSummary,
 } from "@/lib/api";
@@ -40,6 +41,8 @@ interface AuthContextValue {
 
   // 工具
   canAccessService: (serviceId: string) => boolean;
+  /** 当前用户的文件管理权限（系统管理员为 write） */
+  fileAccess: FileAccess;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -56,6 +59,7 @@ function userSummaryToClaims(user: UserSummary, expiresIn?: number): TokenClaims
     token_type: "user",
     service_ids: user.service_ids,
     is_admin: user.is_admin,
+    file_access: user.file_access,
     exp,
     iat: now,
   };
@@ -292,6 +296,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isSuperAdmin = user?.sub === "__devtoken__";
   const isAdmin = isSuperAdmin || !!user?.is_admin;
+  const fileAccess: FileAccess = isAdmin ? "write" : (user?.file_access ?? "none");
 
   const value: AuthContextValue = {
     user,
@@ -306,6 +311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     retryConnection,
     reloadSession,
     canAccessService,
+    fileAccess,
   };
 
   // 后端连接检查中 - 显示加载

@@ -19,6 +19,8 @@ const SCOPE_OPTIONS: { id: ApiKeyScope; label: string; description: string }[] =
   { id: "manage", label: "manage", description: "管理服务与分组" },
   { id: "logs", label: "logs", description: "查看与跟随日志" },
   { id: "attach", label: "attach", description: "WebSocket 终端" },
+  { id: "files:read", label: "files:read", description: "文件管理：浏览 / 查看 / 下载" },
+  { id: "files:write", label: "files:write", description: "文件管理：编辑 / 上传 / 新建 / 重命名 / 删除（含读取）" },
 ];
 
 export interface EditApiKeyModalProps {
@@ -38,7 +40,7 @@ export function EditApiKeyModal({
   const [scopes, setScopes] = useState<Set<ApiKeyScope>>(
     new Set(
       apiKey.scopes.filter((s): s is ApiKeyScope =>
-        ["read", "control", "manage", "logs", "attach"].includes(s)
+        ["read", "control", "manage", "logs", "attach", "files:read", "files:write"].includes(s)
       )
     )
   );

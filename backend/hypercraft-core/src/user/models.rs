@@ -4,6 +4,29 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
+/// 服务工作目录的文件管理权限（对用户已有访问权的服务生效）
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum FileAccess {
+    /// 不可使用文件管理
+    #[default]
+    None,
+    /// 浏览、查看、下载
+    Read,
+    /// 在 Read 基础上可编辑、上传、新建、重命名、移动、删除
+    Write,
+}
+
+impl FileAccess {
+    pub fn can_read(self) -> bool {
+        self >= FileAccess::Read
+    }
+
+    pub fn can_write(self) -> bool {
+        self >= FileAccess::Write
+    }
+}
+
 /// 用户账户（存储模型，包含密码哈希）
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,6 +43,9 @@ pub struct User {
     /// 是否为系统管理员（可控制全部服务；默认列表仍按 service_ids）
     #[serde(default)]
     pub is_admin: bool,
+    /// 文件管理权限（系统管理员恒为 Write）
+    #[serde(default)]
+    pub file_access: FileAccess,
     /// Token 版本号（用于撤销旧 token）
     #[serde(default)]
     pub token_version: u64,
@@ -56,6 +82,9 @@ pub struct CreateUserRequest {
     pub password: String,
     #[serde(default)]
     pub service_ids: Vec<String>,
+    /// 文件管理权限，默认 none
+    #[serde(default)]
+    pub file_access: FileAccess,
 }
 
 /// 更新用户请求
@@ -68,6 +97,8 @@ pub struct UpdateUserRequest {
     pub service_ids: Option<Vec<String>>,
     /// 是否设为系统管理员（可选）
     pub is_admin: Option<bool>,
+    /// 文件管理权限（可选）
+    pub file_access: Option<FileAccess>,
 }
 
 /// Token 类型
@@ -98,9 +129,13 @@ pub mod api_key_scopes {
     pub const LOGS: &str = "logs";
     /// WebSocket 终端 attach
     pub const ATTACH: &str = "attach";
+    /// 文件管理：浏览、查看、下载
+    pub const FILES_READ: &str = "files:read";
+    /// 文件管理：编辑、上传、新建、重命名、移动、删除（隐含 files:read）
+    pub const FILES_WRITE: &str = "files:write";
 
     /// 全部合法 scope
-    pub const ALL: &[&str] = &[READ, CONTROL, MANAGE, LOGS, ATTACH];
+    pub const ALL: &[&str] = &[READ, CONTROL, MANAGE, LOGS, ATTACH, FILES_READ, FILES_WRITE];
 
     /// 校验 scope 列表是否全部合法
     pub fn validate(scopes: &[String]) -> Result<(), String> {
@@ -235,6 +270,9 @@ pub struct TokenClaims {
     /// 是否为系统管理员（管理用户，不旁路服务访问）
     #[serde(default)]
     pub is_admin: bool,
+    /// 文件管理权限（仅 User token；每次校验时从用户记录同步）
+    #[serde(default)]
+    pub file_access: FileAccess,
     /// Token 版本号，用于撤销旧 token（用户字段缺省时默认为 0）
     #[serde(default)]
     pub token_version: u64,
@@ -297,6 +335,8 @@ pub struct UserSummary {
     pub service_ids: Vec<String>,
     /// 是否为系统管理员
     pub is_admin: bool,
+    /// 文件管理权限（系统管理员返回 write）
+    pub file_access: FileAccess,
     /// 是否启用了双因素认证
     pub totp_enabled: bool,
     pub created_at: Option<DateTime<Utc>>,
@@ -304,10 +344,16 @@ pub struct UserSummary {
 
 impl From<User> for UserSummary {
     fn from(user: User) -> Self {
+        let file_access = if user.is_admin || user.id == "__devtoken__" {
+            FileAccess::Write
+        } else {
+            user.file_access
+        };
         Self {
             id: user.id,
             username: user.username,
             service_ids: user.service_ids,
+            file_access,
             is_admin: user.is_admin,
             totp_enabled: user
                 .totp_config

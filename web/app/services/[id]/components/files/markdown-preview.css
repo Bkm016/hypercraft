@@ -1,0 +1,303 @@
+/* Markdown 预览排版：颜色取自文件工作区变量（--ws-*）与代码配色（--hc-code-*），随主题切换 */
+
+.hc-md {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 28px 32px 64px;
+  color: var(--ws-fg);
+  font-size: 14.5px;
+  line-height: 1.75;
+  word-wrap: break-word;
+}
+@media (max-width: 640px) {
+  .hc-md {
+    padding: 18px 16px 48px;
+  }
+}
+
+.hc-md > *:first-child {
+  margin-top: 0 !important;
+}
+.hc-md p,
+.hc-md blockquote,
+.hc-md ul,
+.hc-md ol,
+.hc-md dl,
+.hc-md table,
+.hc-md pre,
+.hc-md details,
+.hc-md .hc-md-table,
+.hc-md .hc-md-diagram {
+  margin: 0 0 16px;
+}
+
+.hc-md h1,
+.hc-md h2,
+.hc-md h3,
+.hc-md h4,
+.hc-md h5,
+.hc-md h6 {
+  margin: 28px 0 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ws-fg);
+  scroll-margin-top: 16px;
+}
+.hc-md h1 {
+  font-size: 1.85em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--ws-border);
+}
+.hc-md h2 {
+  font-size: 1.45em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--ws-border);
+}
+.hc-md h3 {
+  font-size: 1.2em;
+}
+.hc-md h4 {
+  font-size: 1.05em;
+}
+.hc-md h5,
+.hc-md h6 {
+  font-size: 0.95em;
+  color: var(--ws-sub);
+}
+
+.hc-md a {
+  color: var(--ws-accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 2px;
+}
+.hc-md a:hover {
+  text-decoration-color: currentColor;
+}
+
+.hc-md strong {
+  font-weight: 600;
+}
+.hc-md mark {
+  background: color-mix(in srgb, var(--away-base) 30%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.hc-md ul,
+.hc-md ol {
+  padding-left: 1.75em;
+}
+.hc-md ul {
+  list-style: disc;
+}
+.hc-md ol {
+  list-style: decimal;
+}
+.hc-md ul ul {
+  list-style: circle;
+}
+.hc-md ul ul ul {
+  list-style: square;
+}
+.hc-md li + li {
+  margin-top: 0.25em;
+}
+.hc-md li > ul,
+.hc-md li > ol {
+  margin: 0.25em 0 0;
+}
+.hc-md li.task-list-item {
+  list-style: none;
+}
+.hc-md ul.contains-task-list {
+  padding-left: 1.2em;
+}
+.hc-md .task-list-item input[type="checkbox"] {
+  margin: 0 0.5em 0.2em -1.3em;
+  vertical-align: middle;
+  accent-color: var(--ws-accent);
+}
+
+.hc-md blockquote {
+  padding: 0 1em;
+  color: var(--ws-sub);
+  border-left: 3px solid var(--ws-border);
+}
+
+.hc-md hr {
+  height: 1px;
+  margin: 24px 0;
+  border: 0;
+  background: var(--ws-border);
+}
+
+.hc-md img {
+  display: inline-block;
+  max-width: 100%;
+  border-radius: 6px;
+}
+
+.hc-md :not(pre) > code {
+  padding: 0.15em 0.4em;
+  font-size: 0.86em;
+  border-radius: 5px;
+  background: var(--ws-hover);
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.hc-md pre {
+  padding: 14px 16px;
+  overflow: auto;
+  font-size: 12.5px;
+  line-height: 1.6;
+  border-radius: 8px;
+  border: 1px solid var(--ws-border);
+  background: var(--ws-panel);
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.hc-md pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  color: var(--hc-code-fg);
+}
+
+/* 表格 */
+.hc-md .hc-md-table {
+  overflow-x: auto;
+}
+.hc-md table {
+  border-collapse: collapse;
+  margin: 0;
+  font-size: 0.94em;
+}
+.hc-md th,
+.hc-md td {
+  padding: 6px 13px;
+  border: 1px solid var(--ws-border);
+}
+.hc-md th {
+  font-weight: 600;
+  background: var(--ws-hover);
+}
+.hc-md tr:nth-child(2n) td {
+  background: color-mix(in srgb, var(--ws-hover) 50%, transparent);
+}
+
+.hc-md details {
+  padding: 8px 12px;
+  border: 1px solid var(--ws-border);
+  border-radius: 8px;
+}
+.hc-md summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+/* 脚注 */
+.hc-md .footnotes {
+  margin-top: 32px;
+  padding-top: 12px;
+  font-size: 0.88em;
+  color: var(--ws-sub);
+  border-top: 1px solid var(--ws-border);
+}
+.hc-md sup a {
+  text-decoration: none;
+}
+
+/* 公式 */
+.hc-md .katex-display {
+  margin: 0 0 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}
+
+/* Mermaid 图表 */
+.hc-md .hc-md-diagram {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--ws-border);
+}
+.hc-md .hc-md-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+.hc-md .hc-md-diagram-loading {
+  color: var(--ws-muted);
+  font-size: 12px;
+}
+.hc-md .hc-md-diagram-error {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--error-base);
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--error-base) 40%, transparent);
+}
+.hc-md .hc-md-diagram-error pre {
+  margin: 8px 0 0;
+}
+
+.hc-md .hc-md-broken,
+.hc-md .hc-md-img-loading {
+  font-size: 12px;
+  color: var(--ws-muted);
+}
+.hc-md .hc-md-empty {
+  color: var(--ws-muted);
+}
+
+/* 代码高亮（highlight.js 类名），复用编辑器的代码配色 */
+.hc-md .hljs-comment,
+.hc-md .hljs-quote {
+  color: var(--hc-code-comment);
+  font-style: italic;
+}
+.hc-md .hljs-keyword,
+.hc-md .hljs-selector-tag,
+.hc-md .hljs-built_in,
+.hc-md .hljs-type {
+  color: var(--hc-code-boolean);
+}
+.hc-md .hljs-string,
+.hc-md .hljs-regexp,
+.hc-md .hljs-addition,
+.hc-md .hljs-meta .hljs-string {
+  color: var(--hc-code-string);
+}
+.hc-md .hljs-number,
+.hc-md .hljs-literal,
+.hc-md .hljs-symbol,
+.hc-md .hljs-bullet {
+  color: var(--hc-code-number);
+}
+.hc-md .hljs-attr,
+.hc-md .hljs-attribute,
+.hc-md .hljs-variable,
+.hc-md .hljs-template-variable,
+.hc-md .hljs-property,
+.hc-md .hljs-title,
+.hc-md .hljs-section,
+.hc-md .hljs-name {
+  color: var(--hc-code-key);
+}
+.hc-md .hljs-meta,
+.hc-md .hljs-punctuation,
+.hc-md .hljs-operator {
+  color: var(--hc-code-punct);
+}
+.hc-md .hljs-deletion {
+  color: var(--error-base);
+}
+.hc-md .hljs-emphasis {
+  font-style: italic;
+}
+.hc-md .hljs-strong {
+  font-weight: 600;
+}

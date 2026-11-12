@@ -108,6 +108,7 @@ impl UserManager {
             token_type: TokenType::User,
             service_ids: user.service_ids.clone(),
             is_admin,
+            file_access: user.file_access,
             token_version: user.token_version,
             refresh_nonce: None,
             service_id: None,
@@ -124,6 +125,7 @@ impl UserManager {
             token_type: TokenType::Refresh,
             service_ids: vec![],
             is_admin,
+            file_access: FileAccess::None,
             token_version: user.token_version,
             refresh_nonce: Some(user.refresh_nonce.clone()),
             service_id: None,
@@ -170,6 +172,7 @@ impl UserManager {
             token_type: TokenType::Web,
             service_ids: vec![],
             is_admin: claims.is_admin || claims.sub == "__devtoken__",
+            file_access: FileAccess::None,
             token_version: claims.token_version,
             refresh_nonce: None,
             service_id: Some(service_id.to_string()),
@@ -219,6 +222,7 @@ impl UserManager {
         if claims.token_type == TokenType::User {
             claims.service_ids = user.service_ids;
             claims.is_admin = user.is_admin || user.id == "__devtoken__";
+            claims.file_access = user.file_access;
         }
 
         Ok(claims)

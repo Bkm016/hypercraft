@@ -61,6 +61,11 @@ export function UserCard({
 							系统管理员
 						</span>
 					)}
+					{!user.is_admin && user.file_access && user.file_access !== "none" && (
+						<span className="shrink-0 rounded-md bg-bg-weak-50 px-1.5 py-0.5 text-[11px] font-medium text-text-sub-600">
+							文件{user.file_access === "write" ? "读写" : "只读"}
+						</span>
+					)}
 				</div>
 				<div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
 					<ServicePermissionSummary

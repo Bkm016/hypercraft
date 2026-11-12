@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { RiEditLine } from "@remixicon/react";
 import * as FormDialog from "@/components/ui/form-dialog";
-import { api, type UserSummary, type ServiceSummary, type ServiceGroup } from "@/lib/api";
+import { api, type FileAccess, type UserSummary, type ServiceSummary, type ServiceGroup } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { notification } from "@/hooks/use-notification";
 import { ServicePermissionPicker } from "./service-permission-picker";
+import { FileAccessField } from "./file-access-field";
 
 export interface EditUserModalProps {
   user: UserSummary;
@@ -28,6 +29,8 @@ export function EditUserModal({
     new Set(user.service_ids.filter((id) => id !== "*"))
   );
   const [isAdminUser, setIsAdminUser] = useState(user.is_admin);
+  // 系统管理员的 file_access 由后端恒返回 write；取消管理员时默认降为 none，避免意外保留读写
+  const [fileAccess, setFileAccess] = useState<FileAccess>(user.is_admin ? "none" : (user.file_access ?? "none"));
   const [newPassword, setNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +49,7 @@ export function EditUserModal({
       await api.updateUser(user.id, {
         password: newPassword || undefined,
         service_ids: Array.from(selectedServices),
+        ...(isAdminUser ? {} : { file_access: fileAccess }),
         ...(isSuperAdmin ? { is_admin: isAdminUser } : {}),
       });
       // 服务权限不会撤销会话，保存后同步前端身份；修改密码仍按安全策略重新登录
@@ -111,6 +115,8 @@ export function EditUserModal({
                 onChange={setSelectedServices}
               />
             </FormDialog.Field>
+
+            <FileAccessField value={fileAccess} onChange={setFileAccess} lockedByAdmin={isAdminUser} />
           </FormDialog.Body>
 
           <FormDialog.Footer>

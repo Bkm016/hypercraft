@@ -148,6 +148,7 @@ pub async fn set_user_services(
                 password: None,
                 service_ids: Some(req.service_ids),
                 is_admin: None,
+                file_access: None,
             },
         )
         .await?;

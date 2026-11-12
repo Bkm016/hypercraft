@@ -20,6 +20,10 @@ impl ApiError {
         }
     }
 
+    pub fn status(&self) -> StatusCode {
+        self.status
+    }
+
     pub fn unauthorized() -> Self {
         Self::new("Unauthorized", StatusCode::UNAUTHORIZED, "unauthorized")
     }

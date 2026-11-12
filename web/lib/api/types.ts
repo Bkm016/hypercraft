@@ -135,6 +135,8 @@ export interface UserSummary {
   username: string;
   service_ids: string[];
   is_admin: boolean;
+  /** 文件管理权限（系统管理员恒为 write） */
+  file_access: FileAccess;
   totp_enabled: boolean;
   created_at?: string;
 }
@@ -143,12 +145,14 @@ export interface CreateUserRequest {
   username: string;
   password: string;
   service_ids?: string[];
+  file_access?: FileAccess;
 }
 
 export interface UpdateUserRequest {
   password?: string;
   service_ids?: string[];
   is_admin?: boolean;
+  file_access?: FileAccess;
 }
 
 export interface ChangePasswordRequest {
@@ -158,7 +162,17 @@ export interface ChangePasswordRequest {
 
 // ==================== API Key（Agent）====================
 
-export type ApiKeyScope = "read" | "control" | "manage" | "logs" | "attach";
+export type ApiKeyScope =
+  | "read"
+  | "control"
+  | "manage"
+  | "logs"
+  | "attach"
+  | "files:read"
+  | "files:write";
+
+/** 文件管理权限：none 不可用；read 浏览/查看/下载；write 另可编辑/上传/新建/重命名/移动/删除 */
+export type FileAccess = "none" | "read" | "write";
 
 export interface ApiKeySummary {
   id: string;
@@ -206,6 +220,7 @@ export interface TokenClaims {
   service_ids?: string[];
   service_id?: string;
   is_admin?: boolean;
+  file_access?: FileAccess;
   exp: number;
   iat: number;
 }
@@ -398,4 +413,88 @@ export interface ApiError {
   error: string;
   message: string;
   status?: number;
+  /** 语法校验失败时的行号（1 起） */
+  line?: number;
+  /** 语法校验失败时的列号（1 起） */
+  column?: number;
+}
+
+// ==================== 服务文件 ====================
+
+export interface FileEntry {
+  name: string;
+  /** 相对服务工作目录的路径，"/" 分隔 */
+  path: string;
+  is_dir: boolean;
+  is_symlink: boolean;
+  size: number;
+  /** unix 毫秒 */
+  modified?: number | null;
+  /** 是否可在线查看/编辑（YAML / JSON / TOML） */
+  editable: boolean;
+}
+
+export interface DirListing {
+  path: string;
+  entries: FileEntry[];
+  truncated: boolean;
+}
+
+/** 文本编码：保存时按原编码写回 */
+export type TextEncoding =
+  | "utf-8"
+  | "utf-8-bom"
+  | "utf-16le"
+  | "utf-16be"
+  | "gb18030"
+  | "big5"
+  | "shift_jis"
+  | "euc-kr"
+  | "windows-1252";
+
+export interface FileContent {
+  path: string;
+  content: string;
+  etag: string;
+  size: number;
+  modified?: number | null;
+  encoding: TextEncoding;
+  /** 为 true 时 content 是十六进制只读视图（二进制文件） */
+  binary?: boolean;
+}
+
+export interface WriteFileResponse {
+  path: string;
+  etag: string;
+  size: number;
+  modified?: number | null;
+}
+
+// ==================== 分片上传 ====================
+
+export interface UploadStatus {
+  upload_id: string;
+  path: string;
+  size: number;
+  chunk_size: number;
+  total_chunks: number;
+  /** 已收到的分片序号 */
+  received: number[];
+  received_bytes: number;
+  expires_at: string;
+}
+
+export interface InitUploadResponse extends UploadStatus {
+  /** 是否找回了未完成的会话（断点续传） */
+  resumed: boolean;
+}
+
+export interface InitUploadRequest {
+  dir: string;
+  name: string;
+  size: number;
+  chunk_size?: number;
+  overwrite?: boolean;
+  fingerprint?: string;
+  sha256?: string;
 }

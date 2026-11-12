@@ -273,6 +273,7 @@ impl UserManager {
             // 鉴权不再读 service_ids；恒空，避免误当白名单
             service_ids: vec![],
             is_admin: false,
+            file_access: FileAccess::None,
             token_version: 0,
             refresh_nonce: None,
             service_id: None,

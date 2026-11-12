@@ -39,6 +39,14 @@ import type {
   Enable2FARequest,
   Disable2FARequest,
   WebSessionResponse,
+  DirListing,
+  FileContent,
+  FileEntry,
+  WriteFileResponse,
+  InitUploadRequest,
+  TextEncoding,
+  InitUploadResponse,
+  UploadStatus,
 } from "./types";
 
 /**
@@ -224,6 +232,7 @@ class ApiClient {
         error: data.error || data.code || "Unknown error",
         message: data.message || data.error || response.statusText,
         status: response.status,
+        ...(typeof data.line === "number" ? { line: data.line, column: data.column } : {}),
       };
     } catch {
       return {
@@ -558,6 +567,228 @@ class ApiClient {
 
   async getService(id: string): Promise<ServiceDetail> {
     return this.request<ServiceDetail>(`/services/${id}`);
+  }
+
+  // ==================== 服务文件（工作目录内） ====================
+
+  async listServiceFiles(id: string, path = ""): Promise<DirListing> {
+    return this.request<DirListing>(`/services/${id}/files?path=${encodeURIComponent(path)}`);
+  }
+
+  /** 读取文件内容；view="hex" 时以十六进制只读视图打开（用于二进制文件） */
+  async readServiceFile(id: string, path: string, view?: "hex"): Promise<FileContent> {
+    const q = `path=${encodeURIComponent(path)}${view ? `&view=${view}` : ""}`;
+    return this.request<FileContent>(`/services/${id}/files/content?${q}`);
+  }
+
+  /** etag 为空表示强制覆盖；encoding 为读取时检测到的编码，按原编码写回 */
+  async writeServiceFile(
+    id: string,
+    path: string,
+    content: string,
+    etag?: string | null,
+    encoding?: TextEncoding,
+  ): Promise<WriteFileResponse> {
+    return this.request<WriteFileResponse>(`/services/${id}/files/content`, {
+      method: "PUT",
+      body: JSON.stringify({ path, content, etag: etag ?? null, ...(encoding ? { encoding } : {}) }),
+    });
+  }
+
+  async createServiceFile(id: string, path: string, kind: "file" | "dir"): Promise<FileEntry> {
+    return this.request<FileEntry>(`/services/${id}/files/create`, {
+      method: "POST",
+      body: JSON.stringify({ path, kind }),
+    });
+  }
+
+  /** 重命名或移动 */
+  async renameServiceFile(id: string, from: string, to: string): Promise<void> {
+    return this.request<void>(`/services/${id}/files/rename`, {
+      method: "POST",
+      body: JSON.stringify({ from, to }),
+    });
+  }
+
+  /**
+   * 整文件上传（请求体为原始字节，≤ 512 MiB）。面板默认使用分片上传（可断点续传），
+   * 此方法保留给脚本 / 小文件场景。用 XHR 以获得上传进度；
+   * 401 时续期会话后重试一次。
+   */
+  async uploadServiceFile(
+    id: string,
+    dir: string,
+    file: File,
+    options: { overwrite?: boolean; onProgress?: (loaded: number, total: number) => void; signal?: AbortSignal } = {},
+  ): Promise<FileEntry> {
+    const params = new URLSearchParams({ dir, name: file.name, overwrite: String(!!options.overwrite) });
+    const url = `${getApiBaseUrl()}/services/${id}/files/upload?${params}`;
+    const send = () =>
+      new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", url);
+        xhr.withCredentials = true;
+        xhr.setRequestHeader("X-Hypercraft-CSRF", "1");
+        xhr.setRequestHeader("Content-Type", "application/octet-stream");
+        xhr.upload.onprogress = (e) => options.onProgress?.(e.loaded, e.lengthComputable ? e.total : file.size);
+        xhr.onload = () => resolve({ status: xhr.status, body: xhr.responseText });
+        xhr.onerror = () => reject({ error: "NetworkError", message: "网络错误，上传失败", status: 0 } satisfies ApiError);
+        xhr.onabort = () => reject({ error: "Aborted", message: "已取消上传", status: 0 } satisfies ApiError);
+        options.signal?.addEventListener("abort", () => xhr.abort(), { once: true });
+        xhr.send(file);
+      });
+
+    let res = await send();
+    if (res.status === 401) {
+      await this.refreshSession(true);
+      res = await send();
+    }
+    if (res.status < 200 || res.status >= 300) {
+      let data: { code?: string; message?: string; error?: string } = {};
+      try {
+        data = JSON.parse(res.body);
+      } catch {
+        // 代理返回的非 JSON 错误（如 nginx 413）
+      }
+      throw {
+        code: data.code,
+        error: data.error || data.code || "UploadFailed",
+        message: data.message || (res.status === 413 ? "文件过大" : `上传失败（HTTP ${res.status}）`),
+        status: res.status,
+      } satisfies ApiError;
+    }
+    return JSON.parse(res.body) as FileEntry;
+  }
+
+  // ==================== 分片上传 / 断点续传 ====================
+
+  /** 创建上传会话；fingerprint 相同则找回未完成的会话 */
+  async initChunkedUpload(id: string, req: InitUploadRequest): Promise<InitUploadResponse> {
+    return this.request<InitUploadResponse>(`/services/${id}/files/uploads`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async getChunkedUpload(id: string, uploadId: string): Promise<UploadStatus> {
+    return this.request<UploadStatus>(`/services/${id}/files/uploads/${uploadId}`);
+  }
+
+  /** 上传单个分片（原始字节 + SHA-256），可重复调用（幂等） */
+  async uploadChunk(
+    id: string,
+    uploadId: string,
+    index: number,
+    data: Blob,
+    sha256: string,
+    options: { signal?: AbortSignal; onProgress?: (loaded: number) => void } = {},
+  ): Promise<UploadStatus> {
+    const url = `${getApiBaseUrl()}/services/${id}/files/uploads/${uploadId}/chunks/${index}`;
+    const send = () =>
+      new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", url);
+        xhr.withCredentials = true;
+        xhr.setRequestHeader("X-Hypercraft-CSRF", "1");
+        xhr.setRequestHeader("Content-Type", "application/octet-stream");
+        xhr.setRequestHeader("X-Chunk-Sha256", sha256);
+        xhr.upload.onprogress = (e) => options.onProgress?.(e.loaded);
+        xhr.onload = () => resolve({ status: xhr.status, body: xhr.responseText });
+        xhr.onerror = () => reject({ error: "NetworkError", message: "网络错误", status: 0 } satisfies ApiError);
+        xhr.onabort = () => reject({ error: "Aborted", message: "已暂停", status: 0 } satisfies ApiError);
+        if (options.signal?.aborted) {
+          reject({ error: "Aborted", message: "已暂停", status: 0 } satisfies ApiError);
+          return;
+        }
+        options.signal?.addEventListener("abort", () => xhr.abort(), { once: true });
+        xhr.send(data);
+      });
+    let res = await send();
+    if (res.status === 401) {
+      await this.refreshSession(true);
+      res = await send();
+    }
+    if (res.status < 200 || res.status >= 300) {
+      let data: { code?: string; message?: string; error?: string } = {};
+      try {
+        data = JSON.parse(res.body);
+      } catch {
+        // 代理返回的非 JSON 错误
+      }
+      throw {
+        code: data.code,
+        error: data.error || data.code || "ChunkFailed",
+        message: data.message || `分片上传失败（HTTP ${res.status}）`,
+        status: res.status,
+      } satisfies ApiError;
+    }
+    return JSON.parse(res.body) as UploadStatus;
+  }
+
+  async completeChunkedUpload(id: string, uploadId: string, overwrite?: boolean): Promise<FileEntry> {
+    return this.request<FileEntry>(`/services/${id}/files/uploads/${uploadId}/complete`, {
+      method: "POST",
+      body: JSON.stringify(overwrite === undefined ? {} : { overwrite }),
+    });
+  }
+
+  async abortChunkedUpload(id: string, uploadId: string): Promise<void> {
+    return this.request<void>(`/services/${id}/files/uploads/${uploadId}`, { method: "DELETE" });
+  }
+
+  /**
+   * 下载服务工作目录中的文件（≤ 512 MiB）。
+   * 交给浏览器原生下载（流式写盘、自带进度），不把整个文件读进页面内存；
+   * 先用 HEAD 预检权限与会话，避免 401/403 时浏览器打开错误页面。
+   */
+  async downloadServiceFile(id: string, path: string): Promise<void> {
+    const url = `${getApiBaseUrl()}/services/${id}/files/download?path=${encodeURIComponent(path)}`;
+    let response = await fetch(url, { method: "HEAD", credentials: "include" });
+    if (response.status === 401) {
+      await this.refreshSession(true);
+      response = await fetch(url, { method: "HEAD", credentials: "include" });
+    }
+    if (!response.ok) {
+      // HEAD 无响应体，按状态码给出提示
+      const messages: Record<number, string> = {
+        401: "会话已过期，请重新登录",
+        403: "没有权限下载该文件",
+        404: "文件不存在",
+        413: "文件超过 512 MB，无法下载",
+      };
+      throw {
+        error: "DownloadFailed",
+        message: messages[response.status] || `下载失败（HTTP ${response.status}）`,
+        status: response.status,
+      } satisfies ApiError;
+    }
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = path.split("/").pop() || "download";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  /** 读取服务文件为 Blob（Markdown 预览中嵌入的相对路径图片等小文件） */
+  async fetchServiceFileBlob(id: string, path: string): Promise<Blob> {
+    const url = `${getApiBaseUrl()}/services/${id}/files/download?path=${encodeURIComponent(path)}`;
+    let response = await fetch(url, { credentials: "include" });
+    if (response.status === 401) {
+      await this.refreshSession(true);
+      response = await fetch(url, { credentials: "include" });
+    }
+    if (!response.ok) {
+      throw { error: "DownloadFailed", message: `读取失败（HTTP ${response.status}）`, status: response.status } satisfies ApiError;
+    }
+    return response.blob();
+  }
+
+  async deleteServiceFile(id: string, path: string): Promise<void> {
+    return this.request<void>(`/services/${id}/files?path=${encodeURIComponent(path)}`, {
+      method: "DELETE",
+    });
   }
 
   async createService(manifest: ServiceManifest): Promise<ServiceManifest> {

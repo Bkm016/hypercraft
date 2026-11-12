@@ -235,7 +235,9 @@ async fn main() -> anyhow::Result<()> {
         http_client,
         api_bind: config.bind,
         runtimes,
+        uploads: std::sync::Arc::new(app::handlers::UploadStore::new(&config.data_dir)),
     };
+    app::handlers::spawn_upload_janitor(state.clone());
 
     let app = app_router(state, config.cors_origins.clone());
     let listener = tokio::net::TcpListener::bind(config.bind).await?;

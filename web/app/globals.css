@@ -82,6 +82,19 @@
   --elev-md: 0 4px 8px -2px rgba(16, 17, 18, 0.06), 0 2px 4px -2px rgba(16, 17, 18, 0.05);
   --elev-lg: 0 12px 24px -6px rgba(16, 17, 18, 0.1), 0 4px 8px -4px rgba(16, 17, 18, 0.06);
   --elev-overlay: 0 8px 24px -6px rgba(16, 17, 18, 0.12), 0 2px 6px -2px rgba(16, 17, 18, 0.08);
+
+  /* 代码编辑器（文件工作区「跟随界面」主题） */
+  --hc-code-fg: #24292f;
+  --hc-code-gutter: #a8a8af;
+  --hc-code-indent: #ececee;
+  --hc-code-active-line: rgba(10, 10, 10, 0.025);
+  --hc-code-selection: rgba(37, 99, 235, 0.14);
+  --hc-code-comment: #8b8b94;
+  --hc-code-key: #7c3aed;
+  --hc-code-string: #15803d;
+  --hc-code-number: #c2410c;
+  --hc-code-boolean: #2563eb;
+  --hc-code-punct: #71717a;
 }
 
 .dark {
@@ -154,6 +167,18 @@
   --elev-md: 0 6px 16px -4px rgba(0, 0, 0, 0.6);
   --elev-lg: 0 16px 32px -8px rgba(0, 0, 0, 0.7);
   --elev-overlay: 0 12px 32px -8px rgba(0, 0, 0, 0.72);
+
+  --hc-code-fg: #e4e4e7;
+  --hc-code-gutter: #55555c;
+  --hc-code-indent: #26262b;
+  --hc-code-active-line: rgba(255, 255, 255, 0.03);
+  --hc-code-selection: rgba(96, 165, 250, 0.22);
+  --hc-code-comment: #6b6b74;
+  --hc-code-key: #c4b5fd;
+  --hc-code-string: #86efac;
+  --hc-code-number: #fdba74;
+  --hc-code-boolean: #93c5fd;
+  --hc-code-punct: #8b8b94;
 }
 
 @theme {
