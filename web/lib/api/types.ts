@@ -440,12 +440,27 @@ export interface DirListing {
   truncated: boolean;
 }
 
+/** 文本编码：保存时按原编码写回 */
+export type TextEncoding =
+  | "utf-8"
+  | "utf-8-bom"
+  | "utf-16le"
+  | "utf-16be"
+  | "gb18030"
+  | "big5"
+  | "shift_jis"
+  | "euc-kr"
+  | "windows-1252";
+
 export interface FileContent {
   path: string;
   content: string;
   etag: string;
   size: number;
   modified?: number | null;
+  encoding: TextEncoding;
+  /** 为 true 时 content 是十六进制只读视图（二进制文件） */
+  binary?: boolean;
 }
 
 export interface WriteFileResponse {
@@ -453,4 +468,33 @@ export interface WriteFileResponse {
   etag: string;
   size: number;
   modified?: number | null;
+}
+
+// ==================== 分片上传 ====================
+
+export interface UploadStatus {
+  upload_id: string;
+  path: string;
+  size: number;
+  chunk_size: number;
+  total_chunks: number;
+  /** 已收到的分片序号 */
+  received: number[];
+  received_bytes: number;
+  expires_at: string;
+}
+
+export interface InitUploadResponse extends UploadStatus {
+  /** 是否找回了未完成的会话（断点续传） */
+  resumed: boolean;
+}
+
+export interface InitUploadRequest {
+  dir: string;
+  name: string;
+  size: number;
+  chunk_size?: number;
+  overwrite?: boolean;
+  fingerprint?: string;
+  sha256?: string;
 }

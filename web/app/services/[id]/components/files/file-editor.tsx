@@ -9,8 +9,10 @@ import {
   RiCheckboxCircleFill,
   RiCloseCircleFill,
   RiCloseLine,
+  RiDownload2Line,
   RiErrorWarningLine,
   RiFileCodeLine,
+  RiFileWarningLine,
   RiLoader4Line,
   RiLock2Line,
   RiRefreshLine,
@@ -19,8 +21,9 @@ import {
 import * as Button from "@/components/ui/button";
 import * as Tooltip from "@/components/ui/tooltip";
 import { notification } from "@/hooks/use-notification";
-import { api, type ApiError } from "@/lib/api";
+import { api, type ApiError, type TextEncoding } from "@/lib/api";
 import { langOf, lintConfig, type LintError } from "./lint";
+import { modeForPath, modeLabel } from "./ace-modes";
 import { IconButton, StatusBar } from "./workspace-ui";
 
 const AceConfigEditor = dynamic(() => import("./ace-editor"), {
@@ -43,11 +46,31 @@ export interface FileEditorProps {
   onClose: () => void;
 }
 
-type Status = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready" };
+type Status =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  /** 二进制：提示可十六进制查看或下载 */
+  | { kind: "binary"; message: string }
+  /** 超过在线编辑上限 */
+  | { kind: "too-large"; message: string }
+  | { kind: "ready" };
 
 type Message = { kind: "saved"; at: Date } | { kind: "conflict" } | { kind: "error"; text: string } | null;
 
-const LANG_LABEL: Record<string, string> = { yaml: "YAML", json: "JSON", toml: "TOML" };
+const ENCODING_LABEL: Record<TextEncoding, string> = {
+  "utf-8": "UTF-8",
+  "utf-8-bom": "UTF-8 BOM",
+  "utf-16le": "UTF-16 LE",
+  "utf-16be": "UTF-16 BE",
+  gb18030: "GBK / GB18030",
+  big5: "Big5",
+  shift_jis: "Shift_JIS",
+  "euc-kr": "EUC-KR",
+  "windows-1252": "Latin-1",
+};
+
+/** 超过这么多字符自动软换行之外，也作为日志类文件的判断依据 */
+const WRAP_EXTS = /\.(log|out|txt|md|csv)$/i;
 
 function formatSize(n: number) {
   if (n < 1024) return `${n} B`;
@@ -56,7 +79,12 @@ function formatSize(n: number) {
 }
 
 export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange, onSaved, onClose }: FileEditorProps) {
+  // 语法校验只针对 YAML / JSON / TOML；其他文本照常打开编辑，只做高亮
   const lang = langOf(path);
+  const [mode, setMode] = useState("text");
+  const [encoding, setEncoding] = useState<TextEncoding>("utf-8");
+  /** 十六进制只读视图（二进制文件） */
+  const [hexView, setHexView] = useState(false);
   const [status, setStatus] = useState<Status>({ kind: "loading" });
   const [value, setValue] = useState("");
   const [original, setOriginal] = useState("");
@@ -67,24 +95,42 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
   const etagRef = useRef<string | null>(null);
   const editorRef = useRef<Ace.Editor | null>(null);
 
-  const load = useCallback(async () => {
-    setStatus({ kind: "loading" });
-    setMessage(null);
-    setServerError(null);
-    try {
-      const file = await api.readServiceFile(serviceId, path);
-      etagRef.current = file.etag;
-      setValue(file.content);
-      setOriginal(file.content);
-      setStatus({ kind: "ready" });
-    } catch (err) {
-      setStatus({ kind: "error", message: (err as ApiError).message || "读取文件失败" });
-    }
-  }, [serviceId, path]);
+  useEffect(() => {
+    let alive = true;
+    modeForPath(path).then((m) => alive && setMode(m));
+    return () => {
+      alive = false;
+    };
+  }, [path]);
+
+  const load = useCallback(
+    async (asHex = false) => {
+      setStatus({ kind: "loading" });
+      setMessage(null);
+      setServerError(null);
+      try {
+        const file = await api.readServiceFile(serviceId, path, asHex ? "hex" : undefined);
+        etagRef.current = file.etag;
+        setEncoding(file.encoding ?? "utf-8");
+        setHexView(!!file.binary);
+        setValue(file.content);
+        setOriginal(file.content);
+        setStatus({ kind: "ready" });
+      } catch (err) {
+        const e = err as ApiError;
+        if (e.code === "BinaryFile") setStatus({ kind: "binary", message: e.message });
+        else if (e.code === "FileTooLarge") setStatus({ kind: "too-large", message: e.message });
+        else setStatus({ kind: "error", message: e.message || "读取文件失败" });
+      }
+    },
+    [serviceId, path],
+  );
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const writable = canWrite && !hexView;
 
   const dirty = status.kind === "ready" && value !== original;
   useEffect(() => {
@@ -95,7 +141,7 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
   // 小文件即时校验；大文件防抖，避免每次按键整体解析几 MB 的文本
   const [lintError, setLintError] = useState<LintError | null>(null);
   useEffect(() => {
-    if (!lang || status.kind !== "ready") {
+    if (!lang || hexView || status.kind !== "ready") {
       setLintError(null);
       return;
     }
@@ -105,7 +151,7 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
     }
     const t = setTimeout(() => setLintError(lintConfig(lang, value)), value.length < 2_000_000 ? 300 : 800);
     return () => clearTimeout(t);
-  }, [lang, value, status.kind]);
+  }, [lang, hexView, value, status.kind]);
   // 编辑后清掉上一次服务端返回的错误位置
   useEffect(() => {
     setServerError(null);
@@ -114,7 +160,7 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
 
   const save = useCallback(
     async (force = false) => {
-      if (!canWrite || !dirty || saving) return;
+      if (!writable || !dirty || saving) return;
       // 保存时同步校验一次，不依赖防抖结果
       const err = lang ? lintConfig(lang, value) : null;
       setLintError(err);
@@ -126,7 +172,7 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
       }
       setSaving(true);
       try {
-        const res = await api.writeServiceFile(serviceId, path, value, force ? null : etagRef.current);
+        const res = await api.writeServiceFile(serviceId, path, value, force ? null : etagRef.current, encoding);
         etagRef.current = res.etag;
         setOriginal(value);
         setMessage({ kind: "saved", at: new Date() });
@@ -145,7 +191,7 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
         setSaving(false);
       }
     },
-    [canWrite, dirty, saving, lang, serviceId, path, value, onSaved],
+    [writable, dirty, saving, lang, serviceId, path, value, encoding, onSaved],
   );
 
   // Ace 的快捷键在挂载时绑定，用 ref 拿最新的 save
@@ -155,7 +201,7 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
 
   const reload = async () => {
     if (dirty && !window.confirm("将放弃当前未保存的修改，重新加载磁盘上的版本？")) return;
-    await load();
+    await load(hexView);
     notification({ status: "success", title: "已重新加载" });
   };
 
@@ -184,14 +230,23 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
           {dir && <span className="hidden truncate text-xs text-[var(--ws-muted)] lg:inline">/{dir}</span>}
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          {!canWrite && (
+          {(!canWrite || hexView) && status.kind === "ready" && (
             <span className="mr-1 inline-flex items-center gap-1 rounded-md bg-[var(--ws-hover)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--ws-sub)]">
               <RiLock2Line className="size-3" />
-              只读
+              {hexView ? "十六进制 · 只读" : "只读"}
             </span>
           )}
           <IconButton label="从磁盘重新加载" onClick={reload} icon={RiRefreshLine} />
-          {canWrite && (
+          <IconButton
+            label="下载"
+            onClick={() =>
+              api.downloadServiceFile(serviceId, path).catch((e: ApiError) =>
+                notification({ status: "error", title: e.message || "下载失败" }),
+              )
+            }
+            icon={RiDownload2Line}
+          />
+          {writable && (
             <>
               <IconButton
                 label="撤销全部修改"
@@ -230,20 +285,46 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
           <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
             <RiErrorWarningLine className="size-8 text-[var(--ws-muted)]" />
             <div className="text-sm text-[var(--ws-sub)]">{status.message}</div>
-            <Button.Root size="xxsmall" variant="neutral" mode="stroke" onClick={load}>
+            <Button.Root size="xxsmall" variant="neutral" mode="stroke" onClick={() => load()}>
               重试
             </Button.Root>
           </div>
         )}
-        {status.kind === "ready" && lang && (
+        {(status.kind === "binary" || status.kind === "too-large") && (
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <RiFileWarningLine className="size-8 text-[var(--ws-muted)]" />
+            <div className="max-w-sm text-sm text-[var(--ws-sub)]">{status.message}</div>
+            <div className="flex gap-2">
+              {status.kind === "binary" && (
+                <Button.Root size="xxsmall" variant="neutral" mode="stroke" onClick={() => load(true)}>
+                  以十六进制查看
+                </Button.Root>
+              )}
+              <Button.Root
+                size="xxsmall"
+                variant="neutral"
+                mode="stroke"
+                onClick={() =>
+                  api.downloadServiceFile(serviceId, path).catch((e: ApiError) =>
+                    notification({ status: "error", title: e.message || "下载失败" }),
+                  )
+                }
+              >
+                下载
+              </Button.Root>
+            </div>
+          </div>
+        )}
+        {status.kind === "ready" && (
           <AceConfigEditor
-            lang={lang}
+            mode={hexView ? "text" : mode}
+            wrap={!hexView && WRAP_EXTS.test(path)}
             theme={aceTheme}
             value={value}
             onChange={setValue}
             onSave={handleSaveShortcut}
             error={shownError}
-            readOnly={!canWrite}
+            readOnly={!writable}
             onLoad={(ed) => {
               editorRef.current = ed;
             }}
@@ -257,7 +338,7 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--ws-border)] bg-error-lighter px-4 py-2 text-xs text-error-base">
           <RiErrorWarningLine className="size-4 shrink-0" />
           <span className="flex-1">文件已被其他程序（例如服务进程）修改，保存会覆盖对方的改动。</span>
-          <Button.Root size="xxsmall" variant="neutral" mode="stroke" onClick={load}>
+          <Button.Root size="xxsmall" variant="neutral" mode="stroke" onClick={() => load()}>
             放弃我的修改
           </Button.Root>
           <Button.Root size="xxsmall" variant="error" onClick={() => save(true)}>
@@ -292,11 +373,15 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
             <RiCheckboxCircleFill className="size-3.5" />
             已保存 {message.at.toLocaleTimeString("zh-CN", { hour12: false })}
           </span>
-        ) : (
+        ) : hexView ? (
+          <span>二进制文件，仅供查看</span>
+        ) : lang ? (
           <span className="flex items-center gap-1.5">
             <RiCheckboxCircleFill className="size-3.5 text-success-base" />
             语法正确
           </span>
+        ) : (
+          <span>{writable ? "可编辑" : "只读"}</span>
         )}
         <span className="flex-1" />
         {status.kind === "ready" && (
@@ -304,8 +389,9 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
             <span>
               行 {cursor.line}，列 {cursor.column}
             </span>
-            <span>{lang ? LANG_LABEL[lang] : ""}</span>
-            <span>{formatSize(new TextEncoder().encode(value).length)}</span>
+            <span>{hexView ? "Hex" : modeLabel(mode)}</span>
+            {!hexView && <span>{ENCODING_LABEL[encoding] ?? encoding}</span>}
+            {!hexView && <span>{formatSize(new TextEncoder().encode(value).length)}</span>}
           </span>
         )}
       </StatusBar>

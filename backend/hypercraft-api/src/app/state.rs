@@ -31,4 +31,6 @@ pub struct AppState {
     pub api_bind: SocketAddr,
     /// 运行环境安装器（内嵌 mise）
     pub runtimes: crate::runtime_installer::RuntimeInstaller,
+    /// 文件分片上传会话（断点续传）
+    pub uploads: Arc<crate::app::handlers::UploadStore>,
 }

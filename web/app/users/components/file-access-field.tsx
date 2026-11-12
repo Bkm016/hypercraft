@@ -6,7 +6,7 @@ import type { FileAccess } from "@/lib/api";
 
 const DESCRIPTIONS: Record<FileAccess, string> = {
   none: "看不到服务的「文件」标签",
-  read: "可浏览目录、查看配置、下载文件（≤ 25 MB）",
+  read: "可浏览目录、查看配置、下载文件（单个 ≤ 512 MB）",
   write: "另可编辑配置、上传、新建、重命名、移动和删除文件",
 };
 

@@ -38,7 +38,7 @@ import { notification } from "@/hooks/use-notification";
 import { api, type ApiError, type FileEntry } from "@/lib/api";
 import { FileDialog, type FileDialogState } from "./file-dialog";
 import { FileEditor } from "./file-editor";
-import { UploadQueue, useUploads, MAX_FILE_BYTES } from "./uploads";
+import { UploadQueue, useUploads, MAX_TRANSFER_BYTES } from "./uploads";
 import { useWorkspaceTheme, workspaceStyle, WorkspaceThemePicker } from "./workspace-theme";
 import { IconButton, StatusBar, ToolbarDivider } from "./workspace-ui";
 
@@ -113,8 +113,8 @@ export function FilesPanel({ serviceId, hasCwd, canWrite }: FilesPanelProps) {
 
   const download = async (node: Node) => {
     if (node.is_dir) return;
-    if (node.size > MAX_FILE_BYTES) {
-      notification({ status: "error", title: "文件超过 25 MB，无法下载" });
+    if (node.size > MAX_TRANSFER_BYTES) {
+      notification({ status: "error", title: "文件超过 512 MB，无法下载" });
       return;
     }
     try {
@@ -129,12 +129,9 @@ export function FilesPanel({ serviceId, hasCwd, canWrite }: FilesPanelProps) {
     uploadInputRef.current?.click();
   };
 
+  // 任何文件都尝试打开：文本直接编辑，二进制由编辑器提示并提供十六进制查看 / 下载
   const openFile = (node: Node) => {
     if (node.is_dir) return;
-    if (!node.editable) {
-      notification({ status: "information", title: "仅支持在线查看 YAML / JSON / TOML，其他文件可下载" });
-      return;
-    }
     if (node.path === openPath) return;
     if (!confirmLeave()) return;
     setOpenPath(node.path);
@@ -363,7 +360,7 @@ export function FilesPanel({ serviceId, hasCwd, canWrite }: FilesPanelProps) {
           {canWrite && (
             <>
               <IconButton label="上传文件（也可直接拖入）" icon={RiUpload2Line} onClick={() => pickUpload(currentDir())} />
-              <IconButton label="新建配置文件" icon={RiFileAddLine} onClick={() => setDialog({ kind: "create-file", dir: currentDir() })} />
+              <IconButton label="新建文件" icon={RiFileAddLine} onClick={() => setDialog({ kind: "create-file", dir: currentDir() })} />
               <IconButton label="新建文件夹" icon={RiFolderAddLine} onClick={() => setDialog({ kind: "create-dir", dir: currentDir() })} />
               <ToolbarDivider />
             </>
@@ -536,9 +533,9 @@ export function FilesPanel({ serviceId, hasCwd, canWrite }: FilesPanelProps) {
             <div className="flex size-12 items-center justify-center rounded-full bg-[var(--ws-hover)]">
               <RiFileCodeLine className="size-6 text-[var(--ws-muted)]" />
             </div>
-            <div className="text-sm font-medium text-[var(--ws-fg)]">选择一个配置文件{canWrite ? "开始编辑" : "查看"}</div>
+            <div className="text-sm font-medium text-[var(--ws-fg)]">选择一个文件{canWrite ? "开始编辑" : "查看"}</div>
             <div className="max-w-xs text-xs leading-relaxed text-[var(--ws-muted)]">
-              支持在线编辑 YAML、JSON、TOML，保存前自动校验语法。其他类型的文件可以下载；单个文件不超过 25 MB。
+              任何文本文件都可以在线编辑（自动识别 UTF-8 / GBK / UTF-16 等编码），YAML、JSON、TOML 保存前会校验语法；二进制文件可以十六进制查看。在线编辑不超过 25 MB；上传和下载单个文件不超过 512 MB，上传支持断点续传。
             </div>
           </div>
         )}
@@ -583,7 +580,6 @@ function TreeRow({
   const expanded = isDir && item.isExpanded();
   const loading = node?.loading || (isDir && expanded && item.isLoading());
   const isOpen = !!node && !node.is_dir && node.path === openPath;
-  const dimmed = !!node && !node.is_dir && !node.editable;
   const selected = item.isSelected();
   const dropTarget = item.isDragTarget() && isDir;
 
@@ -623,7 +619,7 @@ function TreeRow({
         />
       ) : (
         <span
-          className={`min-w-0 flex-1 truncate ${dimmed ? "text-[var(--ws-muted)]" : "text-[var(--ws-fg)]"} ${isOpen ? "font-medium" : ""}`}
+          className={`min-w-0 flex-1 truncate text-[var(--ws-fg)] ${isOpen ? "font-medium" : ""}`}
           title={node?.path}
         >
           {item.getItemName()}
@@ -643,9 +639,9 @@ function TreeRow({
                 type="button"
                 tabIndex={-1}
                 className={rowAction}
-                title={node.size > MAX_FILE_BYTES ? "超过 25 MB，无法下载" : `下载（${formatSize(node.size)}）`}
+                title={node.size > MAX_TRANSFER_BYTES ? "超过 512 MB，无法下载" : `下载（${formatSize(node.size)}）`}
                 aria-label="下载"
-                disabled={node.size > MAX_FILE_BYTES}
+                disabled={node.size > MAX_TRANSFER_BYTES}
                 onClick={(e) => {
                   e.stopPropagation();
                   onDownload(node);

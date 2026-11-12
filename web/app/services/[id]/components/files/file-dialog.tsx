@@ -18,7 +18,6 @@ export interface FileDialogProps {
   onSubmit: (state: NonNullable<FileDialogState>, name: string) => Promise<string | undefined>;
 }
 
-const CONFIG_EXT = /\.(ya?ml|json|toml)$/i;
 
 export function FileDialog({ state, onClose, onSubmit }: FileDialogProps) {
   const [name, setName] = useState("");
@@ -37,7 +36,7 @@ export function FileDialog({ state, onClose, onSubmit }: FileDialogProps) {
   if (!state) return null;
 
   const meta = {
-    "create-file": { icon: RiFileAddLine, title: "新建配置文件", desc: `位置：/${state.kind === "create-file" ? state.dir : ""}`, ok: "创建" },
+    "create-file": { icon: RiFileAddLine, title: "新建文件", desc: `位置：/${state.kind === "create-file" ? state.dir : ""}`, ok: "创建" },
     "create-dir": { icon: RiFolderAddLine, title: "新建文件夹", desc: `位置：/${state.kind === "create-dir" ? state.dir : ""}`, ok: "创建" },
     rename: { icon: RiEditLine, title: "重命名", desc: state.kind === "rename" ? `/${state.path}` : "", ok: "确定" },
     delete: {
@@ -54,7 +53,6 @@ export function FileDialog({ state, onClose, onSubmit }: FileDialogProps) {
     if (!n) return "名称不能为空";
     if (/[\\/:*?"<>|]/.test(n)) return "名称不能包含 \\ / : * ? \" < > |";
     if (n === "." || n === "..") return "非法名称";
-    if (state.kind === "create-file" && !CONFIG_EXT.test(n)) return "仅支持新建 .yml / .yaml / .json / .toml 文件";
     return null;
   };
 
