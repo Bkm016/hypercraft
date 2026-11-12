@@ -84,6 +84,22 @@ const ENCODING_LABEL: Record<TextEncoding, string> = {
   "windows-1252": "Latin-1",
 };
 
+type Eol = "\n" | "\r\n" | "\r";
+const EOL_LABEL: Record<Eol, string> = { "\n": "LF", "\r\n": "CRLF", "\r": "CR" };
+
+/**
+ * 统一换行符：编辑器内部一律使用 \n，保存时按文件原本占多数的换行风格写回。
+ * 混合换行（如 "\n\r\n"）若直接交给 Ace，Ace 会自行规整，导致编辑器内容与 React 状态
+ * 永远不一致而反复同步（React #185 无限更新）。
+ */
+function splitEol(text: string): { text: string; eol: Eol } {
+  const crlf = (text.match(/\r\n/g) ?? []).length;
+  const cr = (text.match(/\r(?!\n)/g) ?? []).length;
+  const lf = (text.match(/(?<!\r)\n/g) ?? []).length;
+  const eol: Eol = crlf > lf && crlf >= cr ? "\r\n" : cr > lf && cr > crlf ? "\r" : "\n";
+  return { text: text.replace(/\r\n?/g, "\n"), eol };
+}
+
 /** 超过这么多字符自动软换行之外，也作为日志类文件的判断依据 */
 const WRAP_EXTS = /\.(log|out|txt|md|csv)$/i;
 
@@ -111,6 +127,7 @@ export function FileEditor({
   const isMarkdown = mode === "markdown";
   const [preview, setPreview] = useState(isMarkdown);
   const [encoding, setEncoding] = useState<TextEncoding>("utf-8");
+  const [eol, setEol] = useState<Eol>("\n");
   /** 十六进制只读视图（二进制文件） */
   const [hexView, setHexView] = useState(false);
   const [status, setStatus] = useState<Status>({ kind: "loading" });
@@ -133,8 +150,10 @@ export function FileEditor({
         etagRef.current = file.etag;
         setEncoding(file.encoding ?? "utf-8");
         setHexView(!!file.binary);
-        setValue(file.content);
-        setOriginal(file.content);
+        const norm = splitEol(file.content);
+        setEol(norm.eol);
+        setValue(norm.text);
+        setOriginal(norm.text);
         setStatus({ kind: "ready" });
       } catch (err) {
         const e = err as ApiError;
@@ -192,7 +211,7 @@ export function FileEditor({
       }
       setSaving(true);
       try {
-        const res = await api.writeServiceFile(serviceId, path, value, force ? null : etagRef.current, encoding);
+        const res = await api.writeServiceFile(serviceId, path, eol === "\n" ? value : value.replace(/\n/g, eol), force ? null : etagRef.current, encoding);
         etagRef.current = res.etag;
         setOriginal(value);
         setMessage({ kind: "saved", at: new Date() });
@@ -211,7 +230,7 @@ export function FileEditor({
         setSaving(false);
       }
     },
-    [writable, dirty, saving, lang, serviceId, path, value, encoding, onSaved],
+    [writable, dirty, saving, lang, serviceId, path, value, eol, encoding, onSaved],
   );
 
   // Ace 的快捷键在挂载时绑定，用 ref 拿最新的 save
@@ -395,7 +414,9 @@ export function FileEditor({
             onLoad={(ed) => {
               editorRef.current = ed;
             }}
-            onCursorChange={(line, column) => setCursor({ line, column })}
+            onCursorChange={(line, column) =>
+              setCursor((c) => (c.line === line && c.column === column ? c : { line, column }))
+            }
           />
         )}
       </div>
@@ -458,6 +479,7 @@ export function FileEditor({
             </span>
             <span>{hexView ? "Hex" : modeLabel(mode)}</span>
             {!hexView && <span>{ENCODING_LABEL[encoding] ?? encoding}</span>}
+            {!hexView && <span>{EOL_LABEL[eol]}</span>}
             {!hexView && <span>{formatSize(new TextEncoder().encode(value).length)}</span>}
           </span>
         )}

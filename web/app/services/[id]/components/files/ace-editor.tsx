@@ -82,6 +82,8 @@ export default function AceConfigEditor({
       editorProps={{ $blockScrolling: true }}
       setOptions={{
         useWorker: false,
+        // 换行符已在外层统一为 \n，避免 Ace 自动探测后改写内容
+        newLineMode: "unix",
         tabSize: 2,
         useSoftTabs: true,
         fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
