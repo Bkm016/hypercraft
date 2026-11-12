@@ -15,8 +15,10 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   RiArrowDownSLine,
   RiArrowRightSLine,
+  RiCloseLine,
   RiDeleteBinLine,
   RiDownload2Line,
+  RiDragDropLine,
   RiEditLine,
   RiFile3Line,
   RiFileAddLine,
@@ -31,11 +33,14 @@ import {
   RiSearchLine,
   RiUpload2Line,
 } from "@remixicon/react";
+import * as Button from "@/components/ui/button";
 import { notification } from "@/hooks/use-notification";
 import { api, type ApiError, type FileEntry } from "@/lib/api";
 import { FileDialog, type FileDialogState } from "./file-dialog";
 import { FileEditor } from "./file-editor";
 import { UploadQueue, useUploads, MAX_FILE_BYTES } from "./uploads";
+import { useWorkspaceTheme, workspaceStyle, WorkspaceThemePicker } from "./workspace-theme";
+import { IconButton, StatusBar, ToolbarDivider } from "./workspace-ui";
 
 /** Headless Tree 的 item id 用 "/" + 相对路径，根为 "/" */
 const ROOT_ID = "/";
@@ -58,10 +63,10 @@ function formatSize(n: number) {
 function NodeIcon({ node, open }: { node: Node; open: boolean }) {
   if (node.is_dir) {
     const Icon = open ? RiFolderOpenFill : RiFolder3Fill;
-    return <Icon className="size-4 shrink-0 text-amber-400/90" />;
+    return <Icon className="size-4 shrink-0 text-[var(--ws-folder)]" />;
   }
   const Icon = node.editable ? RiFileCodeLine : RiFile3Line;
-  return <Icon className={`size-4 shrink-0 ${node.editable ? "text-sky-400" : "text-neutral-500"}`} />;
+  return <Icon className={`size-4 shrink-0 ${node.editable ? "text-[var(--ws-code)]" : "text-[var(--ws-muted)]"}`} />;
 }
 
 export interface FilesPanelProps {
@@ -80,6 +85,9 @@ export function FilesPanel({ serviceId, hasCwd, canWrite }: FilesPanelProps) {
   const [dialog, setDialog] = useState<FileDialogState>(null);
   const [rootError, setRootError] = useState<string | null>(null);
   const [truncatedDirs, setTruncatedDirs] = useState<string[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const dragDepth = useRef(0);
+  const { theme } = useWorkspaceTheme();
   const dirtyRef = useRef(false);
   const setDirty = useCallback((d: boolean) => {
     dirtyRef.current = d;
@@ -303,97 +311,104 @@ export function FilesPanel({ serviceId, hasCwd, canWrite }: FilesPanelProps) {
 
   if (!hasCwd) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-stroke-soft-200 bg-bg-white-0 p-10 text-center">
-        <RiFolderOpenLine className="size-10 text-text-soft-400" />
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-stroke-soft-200 bg-bg-white-0 p-10 text-center shadow-regular-xs">
+        <div className="flex size-12 items-center justify-center rounded-full bg-bg-weak-50">
+          <RiFolderOpenLine className="size-6 text-text-soft-400" />
+        </div>
         <div className="text-sm font-medium text-text-strong-950">未配置工作目录</div>
-        <div className="text-sm text-text-sub-600">在「编辑」中为服务设置工作目录后，即可在这里浏览和编辑配置文件。</div>
+        <div className="max-w-sm text-sm text-text-sub-600">在「编辑」中为服务设置工作目录后，即可在这里浏览、上传和编辑文件。</div>
       </div>
     );
   }
 
   const selected = tree.getSelectedItems();
   const singleSelected = selected.length === 1 ? selected[0].getItemData() : null;
-  const toolBtn =
-    "rounded p-1.5 text-neutral-400 hover:bg-white/10 hover:text-neutral-200 disabled:pointer-events-none disabled:opacity-30";
+  const searching = tree.isSearchOpen();
+  const rootLoading = items.length === 0 && !!tree.getItemInstance(ROOT_ID)?.isLoading();
+  const rootEmpty = items.length === 0 && !rootLoading && !rootError;
+
+  const hasFiles = (e: React.DragEvent) => canWrite && e.dataTransfer.types.includes("Files");
 
   return (
-    <div className="terminal-dark flex min-h-0 flex-1 overflow-hidden rounded-lg border border-stroke-soft-200">
+    <div
+      style={workspaceStyle(theme)}
+      className={`${theme.dark === null ? "" : theme.dark ? "dark" : "light"} relative flex min-h-0 flex-1 overflow-hidden rounded-xl border border-stroke-soft-200 bg-[var(--ws-bg)] shadow-regular-xs`}
+      // 桌面拖入时显示整体投放提示（真正的落点由行 / 空白区处理）
+      onDragEnter={(e) => {
+        if (!hasFiles(e)) return;
+        dragDepth.current += 1;
+        setDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!hasFiles(e)) return;
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (dragDepth.current === 0) setDragOver(false);
+      }}
+      onDrop={() => {
+        dragDepth.current = 0;
+        setDragOver(false);
+      }}
+    >
       {/* 左：文件树 */}
       <div
-        className={`flex min-h-0 w-full flex-col border-r border-white/10 md:w-72 md:shrink-0 lg:w-80 ${
+        className={`flex min-h-0 w-full flex-col border-r border-[var(--ws-border)] bg-[var(--ws-panel)] md:w-72 md:shrink-0 lg:w-80 ${
           openPath ? "hidden md:flex" : "flex"
         }`}
       >
-        <div className="flex shrink-0 items-center gap-1 border-b border-white/10 px-2 py-1.5">
-          {tree.isSearchOpen() ? (
-            <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded bg-black/40 px-2 py-1 ring-1 ring-white/10">
-              <RiSearchLine className="size-3.5 shrink-0 text-neutral-500" />
-              <input
-                {...tree.getSearchInputElementProps()}
-                placeholder="搜索已展开的文件"
-                className="min-w-0 flex-1 bg-transparent text-xs text-neutral-200 outline-none placeholder:text-neutral-600"
-              />
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => tree.openSearch()}
-              className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-2 py-1 text-left text-xs text-neutral-500 hover:bg-white/5"
-              title="在树中直接输入字符也可以搜索"
-            >
-              <RiSearchLine className="size-3.5 shrink-0" />
-              <span className="truncate">搜索</span>
-            </button>
-          )}
+        {/* 标题 + 操作 */}
+        <div className="flex h-11 shrink-0 items-center gap-0.5 border-b border-[var(--ws-border)] pl-3 pr-1.5 md:pl-4">
+          <span className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wider text-[var(--ws-muted)]">
+            文件
+          </span>
           {canWrite && (
             <>
-              <button type="button" className={toolBtn} title="上传文件（≤ 25 MB，也可直接拖入）" aria-label="上传文件" onClick={() => pickUpload(currentDir())}>
-                <RiUpload2Line className="size-4" />
-              </button>
-              <button type="button" className={toolBtn} title="新建配置文件" aria-label="新建配置文件" onClick={() => setDialog({ kind: "create-file", dir: currentDir() })}>
-                <RiFileAddLine className="size-4" />
-              </button>
-              <button type="button" className={toolBtn} title="新建文件夹" aria-label="新建文件夹" onClick={() => setDialog({ kind: "create-dir", dir: currentDir() })}>
-                <RiFolderAddLine className="size-4" />
-              </button>
-              <button
-                type="button"
-                className={toolBtn}
-                title="重命名（F2）"
-                aria-label="重命名"
-                disabled={!singleSelected}
-                onClick={() =>
-                  singleSelected &&
-                  setDialog({ kind: "rename", path: singleSelected.path, name: singleSelected.name, isDir: singleSelected.is_dir })
-                }
-              >
-                <RiEditLine className="size-4" />
-              </button>
-              <button
-                type="button"
-                className={toolBtn}
-                title="删除（Delete）"
-                aria-label="删除"
-                disabled={!selected.length}
-                onClick={() => setDialog({ kind: "delete", paths: selected.map((i) => toPath(i.getId())) })}
-              >
-                <RiDeleteBinLine className="size-4" />
-              </button>
+              <IconButton label="上传文件（也可直接拖入）" icon={RiUpload2Line} onClick={() => pickUpload(currentDir())} />
+              <IconButton label="新建配置文件" icon={RiFileAddLine} onClick={() => setDialog({ kind: "create-file", dir: currentDir() })} />
+              <IconButton label="新建文件夹" icon={RiFolderAddLine} onClick={() => setDialog({ kind: "create-dir", dir: currentDir() })} />
+              <ToolbarDivider />
             </>
           )}
-          <button
-            type="button"
-            className={toolBtn}
-            title="下载"
-            aria-label="下载"
-            disabled={!singleSelected || singleSelected.is_dir}
-            onClick={() => singleSelected && download(singleSelected)}
+          <IconButton label="刷新" icon={RiRefreshLine} onClick={refreshAll} />
+          <WorkspaceThemePicker />
+        </div>
+
+        {/* 搜索 */}
+        <div className="shrink-0 px-2 pb-1 pt-2">
+          <div
+            className={`flex h-8 items-center gap-2 rounded-lg px-2.5 text-xs transition-colors ${
+              searching
+                ? "bg-[var(--ws-bg)] ring-1 ring-[var(--ws-accent)]/50"
+                : "bg-[var(--ws-hover)] hover:ring-1 hover:ring-[var(--ws-border)]"
+            }`}
           >
-            <RiDownload2Line className="size-4" />
-          </button>
-          <button type="button" className={toolBtn} title="刷新" aria-label="刷新" onClick={refreshAll}>
-            <RiRefreshLine className="size-4" />
-          </button>
+            <RiSearchLine className="size-3.5 shrink-0 text-[var(--ws-muted)]" />
+            {searching ? (
+              <>
+                <input
+                  {...tree.getSearchInputElementProps()}
+                  placeholder="在已展开的目录中查找"
+                  className="min-w-0 flex-1 bg-transparent text-[var(--ws-fg)] outline-none placeholder:text-[var(--ws-muted)]"
+                />
+                <button
+                  type="button"
+                  aria-label="关闭搜索"
+                  className="text-[var(--ws-muted)] hover:text-[var(--ws-fg)]"
+                  onClick={() => tree.closeSearch()}
+                >
+                  <RiCloseLine className="size-3.5" />
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => tree.openSearch()}
+                className="min-w-0 flex-1 truncate text-left text-[var(--ws-muted)]"
+                title="在树中直接输入字符也可以查找"
+              >
+                查找文件
+              </button>
+            )}
+          </div>
         </div>
 
         <input
@@ -408,19 +423,19 @@ export function FilesPanel({ serviceId, hasCwd, canWrite }: FilesPanelProps) {
           }}
         />
         {rootError ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-neutral-400">
-            {rootError}
-            <button type="button" className="rounded bg-white/10 px-3 py-1 text-xs text-neutral-200 hover:bg-white/20" onClick={refreshAll}>
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+            <div className="text-sm text-[var(--ws-sub)]">{rootError}</div>
+            <Button.Root size="xxsmall" variant="neutral" mode="stroke" onClick={refreshAll}>
               重试
-            </button>
+            </Button.Root>
           </div>
         ) : (
           <div
             ref={scrollRef}
-            className="hc-terminal-surface relative min-h-0 flex-1 overflow-auto py-1"
+            className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-1.5 pb-2"
             // 拖到空白处 → 上传到根目录（行上的拖放由 Headless Tree 处理）
             onDragOver={(e) => {
-              if (canWrite && e.dataTransfer.types.includes("Files")) e.preventDefault();
+              if (hasFiles(e)) e.preventDefault();
             }}
             onDrop={(e) => {
               if (!canWrite || !e.dataTransfer.files.length) return;
@@ -437,27 +452,66 @@ export function FilesPanel({ serviceId, hasCwd, canWrite }: FilesPanelProps) {
               {virtualizer.getVirtualItems().map((vi) => {
                 const item = items[vi.index] as ItemInstance<Node> | undefined;
                 if (!item) return null;
-                return <TreeRow key={item.getId()} item={item} start={vi.start} openPath={openPath} onDownload={download} />;
+                return (
+                  <TreeRow
+                    key={item.getId()}
+                    item={item}
+                    start={vi.start}
+                    openPath={openPath}
+                    canWrite={canWrite}
+                    onDownload={download}
+                    onRename={(n) => setDialog({ kind: "rename", path: n.path, name: n.name, isDir: n.is_dir })}
+                    onDelete={(n) => setDialog({ kind: "delete", paths: [n.path] })}
+                  />
+                );
               })}
             </div>
-            <div style={tree.getDragLineStyle()} className="pointer-events-none h-0.5 bg-primary-base" />
-            {items.length === 0 && tree.getItemInstance(ROOT_ID)?.isLoading() && (
+            <div style={tree.getDragLineStyle()} className="pointer-events-none h-0.5 rounded-full bg-[var(--ws-accent)]" />
+            {rootLoading && (
               <div className="flex justify-center py-10">
-                <RiLoader4Line className="size-5 animate-spin text-neutral-500" />
+                <RiLoader4Line className="size-5 animate-spin text-[var(--ws-muted)]" />
+              </div>
+            )}
+            {rootEmpty && (
+              <div className="flex flex-col items-center gap-2 px-6 py-12 text-center text-xs text-[var(--ws-muted)]">
+                <RiFolderOpenLine className="size-8 opacity-60" />
+                目录为空
+                {canWrite && <span>把文件拖到这里即可上传</span>}
               </div>
             )}
           </div>
         )}
+
+        {/* 多选操作条 */}
+        {canWrite && selected.length > 1 && (
+          <div className="flex shrink-0 items-center gap-2 border-t border-[var(--ws-border)] px-3 py-1.5 text-xs md:px-4">
+            <span className="flex-1 text-[var(--ws-sub)]">已选 {selected.length} 项</span>
+            <Button.Root
+              size="xxsmall"
+              variant="error"
+              mode="lighter"
+              onClick={() => setDialog({ kind: "delete", paths: selected.map((i) => toPath(i.getId())) })}
+            >
+              <Button.Icon as={RiDeleteBinLine} />
+              删除
+            </Button.Root>
+          </div>
+        )}
+
         <UploadQueue state={uploads} />
-        <div className="flex min-h-8 shrink-0 items-center border-t border-white/10 bg-[#0a0a0a] px-3 text-[11px] text-neutral-500">
+        <StatusBar>
           {truncatedDirs.length > 0 ? (
-            <span className="truncate text-yellow-500/80">部分目录条目过多，仅显示前 10000 项</span>
+            <span className="truncate text-away-base">部分目录条目过多，仅显示前 10000 项</span>
           ) : (
             <span className="truncate">
-              单击打开{canWrite ? " · 拖入文件上传 · F2 重命名 · Delete 删除" : ""} · 直接输入可搜索
+              {canWrite ? "拖入上传 · F2 重命名 · Del 删除" : "单击查看 · 直接输入可查找"}
             </span>
           )}
-        </div>
+          <span className="flex-1" />
+          {singleSelected && !singleSelected.is_dir && (
+            <span className="shrink-0 tabular-nums">{formatSize(singleSelected.size)}</span>
+          )}
+        </StatusBar>
       </div>
 
       {/* 右：编辑器 */}
@@ -468,6 +522,7 @@ export function FilesPanel({ serviceId, hasCwd, canWrite }: FilesPanelProps) {
             serviceId={serviceId}
             path={openPath}
             canWrite={canWrite}
+            aceTheme={theme.ace}
             onDirtyChange={setDirty}
             onSaved={() => refreshDirs([parentOf(openPath)])}
             onClose={() => {
@@ -477,15 +532,27 @@ export function FilesPanel({ serviceId, hasCwd, canWrite }: FilesPanelProps) {
             }}
           />
         ) : (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-[#1e1e1e] text-center text-sm text-neutral-500">
-            <RiFileCodeLine className="size-10 text-neutral-600" />
-            <div>选择左侧的配置文件进行{canWrite ? "编辑" : "查看"}</div>
-            <div className="text-xs text-neutral-600">
-              在线编辑 YAML · JSON · TOML；其他文件可下载{canWrite ? "，拖入文件即可上传" : ""}（单文件 ≤ 25 MB）
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+            <div className="flex size-12 items-center justify-center rounded-full bg-[var(--ws-hover)]">
+              <RiFileCodeLine className="size-6 text-[var(--ws-muted)]" />
+            </div>
+            <div className="text-sm font-medium text-[var(--ws-fg)]">选择一个配置文件{canWrite ? "开始编辑" : "查看"}</div>
+            <div className="max-w-xs text-xs leading-relaxed text-[var(--ws-muted)]">
+              支持在线编辑 YAML、JSON、TOML，保存前自动校验语法。其他类型的文件可以下载；单个文件不超过 25 MB。
             </div>
           </div>
         )}
       </div>
+
+      {/* 拖入提示 */}
+      {dragOver && (
+        <div className="pointer-events-none absolute inset-2 z-10 flex items-end justify-center rounded-lg border-2 border-dashed border-[var(--ws-accent)] bg-[var(--ws-accent)]/5 pb-6">
+          <span className="flex items-center gap-2 rounded-full bg-[var(--ws-accent)] px-3 py-1.5 text-xs font-medium text-[var(--ws-on-accent)] shadow-regular-md">
+            <RiDragDropLine className="size-4" />
+            松开即可上传到所指的目录
+          </span>
+        </div>
+      )}
 
       <FileDialog state={dialog} onClose={() => setDialog(null)} onSubmit={handleDialogSubmit} />
     </div>
@@ -496,12 +563,18 @@ function TreeRow({
   item,
   start,
   openPath,
+  canWrite,
   onDownload,
+  onRename,
+  onDelete,
 }: {
   item: ItemInstance<Node>;
   start: number;
   openPath: string | null;
+  canWrite: boolean;
   onDownload: (node: Node) => void;
+  onRename: (node: Node) => void;
+  onDelete: (node: Node) => void;
 }) {
   "use no memo";
   const node = item.getItemData();
@@ -511,8 +584,11 @@ function TreeRow({
   const loading = node?.loading || (isDir && expanded && item.isLoading());
   const isOpen = !!node && !node.is_dir && node.path === openPath;
   const dimmed = !!node && !node.is_dir && !node.editable;
+  const selected = item.isSelected();
+  const dropTarget = item.isDragTarget() && isDir;
 
   const props = item.getProps();
+  const rowAction = "flex size-6 shrink-0 items-center justify-center rounded text-[var(--ws-muted)] hover:bg-[var(--ws-hover)] hover:text-[var(--ws-fg)]";
   return (
     <div
       {...props}
@@ -520,17 +596,15 @@ function TreeRow({
         item.registerElement(el);
       }}
       className={[
-        "group absolute inset-x-0 flex h-7 cursor-default select-none items-center gap-1.5 pr-3 text-[13px] outline-none",
-        item.isSelected() ? "bg-primary-base/25" : "hover:bg-white/5",
-        item.isFocused() ? "ring-1 ring-inset ring-primary-base/60" : "",
-        item.isDragTarget() && isDir ? "bg-primary-base/30 ring-1 ring-inset ring-primary-base" : "",
-        item.isDragTarget() && !isDir ? "bg-primary-base/10" : "",
-        item.isMatchingSearch() ? "bg-yellow-500/20" : "",
-        isOpen ? "shadow-[inset_2px_0_0_var(--color-primary-base,#3b82f6)]" : "",
+        "group absolute inset-x-0 flex h-7 cursor-default select-none items-center gap-1.5 rounded-md pr-1 text-[13px] outline-none transition-colors duration-100",
+        selected || isOpen ? "bg-[var(--ws-selected)]" : "hover:bg-[var(--ws-hover)]",
+        "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[var(--ws-accent)]/60",
+        dropTarget ? "bg-[var(--ws-selected)] ring-1 ring-inset ring-[var(--ws-accent)]" : "",
+        item.isMatchingSearch() ? "bg-away-lighter" : "",
       ].join(" ")}
-      style={{ transform: `translateY(${start}px)`, paddingLeft: level * 14 + 6 }}
+      style={{ transform: `translateY(${start}px)`, paddingLeft: level * 14 + 4 }}
     >
-      <span className="flex size-4 shrink-0 items-center justify-center text-neutral-500">
+      <span className="flex size-4 shrink-0 items-center justify-center text-[var(--ws-muted)]">
         {isDir &&
           (loading ? (
             <RiLoader4Line className="size-3.5 animate-spin" />
@@ -545,31 +619,72 @@ function TreeRow({
         <input
           {...item.getRenameInputProps()}
           autoFocus
-          className="min-w-0 flex-1 rounded bg-black px-1 text-[13px] text-neutral-100 outline-none ring-1 ring-primary-base"
+          className="h-6 min-w-0 flex-1 rounded bg-[var(--ws-bg)] px-1.5 text-[13px] text-[var(--ws-fg)] outline-none ring-1 ring-[var(--ws-accent)]"
         />
       ) : (
-        <span className={`min-w-0 flex-1 truncate ${dimmed ? "text-neutral-500" : "text-neutral-200"}`} title={node?.path}>
+        <span
+          className={`min-w-0 flex-1 truncate ${dimmed ? "text-[var(--ws-muted)]" : "text-[var(--ws-fg)]"} ${isOpen ? "font-medium" : ""}`}
+          title={node?.path}
+        >
           {item.getItemName()}
         </span>
       )}
-      {node?.is_symlink && <RiLinkM className="size-3.5 shrink-0 text-neutral-500" aria-label="软链接" />}
-      {node && !node.is_dir && !node.loading && (
+      {node?.is_symlink && <RiLinkM className="size-3.5 shrink-0 text-[var(--ws-muted)]" aria-label="软链接" />}
+      {node && !node.loading && !item.isRenaming() && (
         <>
-          <span className="shrink-0 text-[11px] tabular-nums text-neutral-600 group-hover:hidden">{formatSize(node.size)}</span>
-          <button
-            type="button"
-            tabIndex={-1}
-            className="hidden shrink-0 rounded p-0.5 text-neutral-400 hover:bg-white/10 hover:text-neutral-100 group-hover:block"
-            title={node.size > MAX_FILE_BYTES ? "超过 25 MB，无法下载" : `下载（${formatSize(node.size)}）`}
-            aria-label="下载"
-            disabled={node.size > MAX_FILE_BYTES}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDownload(node);
-            }}
-          >
-            <RiDownload2Line className="size-3.5" />
-          </button>
+          {!node.is_dir && (
+            <span className="shrink-0 pr-1 text-[11px] tabular-nums text-[var(--ws-muted)] group-hover:hidden">
+              {formatSize(node.size)}
+            </span>
+          )}
+          <span className="hidden shrink-0 items-center group-hover:flex">
+            {!node.is_dir && (
+              <button
+                type="button"
+                tabIndex={-1}
+                className={rowAction}
+                title={node.size > MAX_FILE_BYTES ? "超过 25 MB，无法下载" : `下载（${formatSize(node.size)}）`}
+                aria-label="下载"
+                disabled={node.size > MAX_FILE_BYTES}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDownload(node);
+                }}
+              >
+                <RiDownload2Line className="size-3.5" />
+              </button>
+            )}
+            {canWrite && (
+              <>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  className={rowAction}
+                  title="重命名（F2）"
+                  aria-label="重命名"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRename(node);
+                  }}
+                >
+                  <RiEditLine className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  className={`${rowAction} hover:text-error-base`}
+                  title="删除（Delete）"
+                  aria-label="删除"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(node);
+                  }}
+                >
+                  <RiDeleteBinLine className="size-3.5" />
+                </button>
+              </>
+            )}
+          </span>
         </>
       )}
     </div>

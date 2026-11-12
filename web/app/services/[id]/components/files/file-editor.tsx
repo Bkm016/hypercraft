@@ -5,24 +5,29 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Ace } from "ace-builds";
 import {
   RiArrowGoBackLine,
-  RiArrowLeftLine,
-  RiCheckLine,
+  RiArrowLeftSLine,
+  RiCheckboxCircleFill,
+  RiCloseCircleFill,
   RiCloseLine,
   RiErrorWarningLine,
+  RiFileCodeLine,
   RiLoader4Line,
+  RiLock2Line,
   RiRefreshLine,
   RiSave3Line,
 } from "@remixicon/react";
 import * as Button from "@/components/ui/button";
+import * as Tooltip from "@/components/ui/tooltip";
 import { notification } from "@/hooks/use-notification";
 import { api, type ApiError } from "@/lib/api";
 import { langOf, lintConfig, type LintError } from "./lint";
+import { IconButton, StatusBar } from "./workspace-ui";
 
 const AceConfigEditor = dynamic(() => import("./ace-editor"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center">
-      <RiLoader4Line className="size-6 animate-spin text-neutral-500" />
+      <RiLoader4Line className="size-5 animate-spin text-[var(--ws-muted)]" />
     </div>
   ),
 });
@@ -31,21 +36,18 @@ export interface FileEditorProps {
   serviceId: string;
   path: string;
   canWrite: boolean;
+  /** Ace 主题名 */
+  aceTheme: string;
   onDirtyChange: (dirty: boolean) => void;
   onSaved?: () => void;
   onClose: () => void;
 }
 
-type Status =
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "ready" };
+type Status = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready" };
 
-type Message =
-  | { kind: "saved"; at: Date }
-  | { kind: "conflict" }
-  | { kind: "error"; text: string }
-  | null;
+type Message = { kind: "saved"; at: Date } | { kind: "conflict" } | { kind: "error"; text: string } | null;
+
+const LANG_LABEL: Record<string, string> = { yaml: "YAML", json: "JSON", toml: "TOML" };
 
 function formatSize(n: number) {
   if (n < 1024) return `${n} B`;
@@ -53,7 +55,7 @@ function formatSize(n: number) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function FileEditor({ serviceId, path, canWrite, onDirtyChange, onSaved, onClose }: FileEditorProps) {
+export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange, onSaved, onClose }: FileEditorProps) {
   const lang = langOf(path);
   const [status, setStatus] = useState<Status>({ kind: "loading" });
   const [value, setValue] = useState("");
@@ -61,6 +63,7 @@ export function FileEditor({ serviceId, path, canWrite, onDirtyChange, onSaved, 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<Message>(null);
   const [serverError, setServerError] = useState<LintError | null>(null);
+  const [cursor, setCursor] = useState({ line: 1, column: 1 });
   const etagRef = useRef<string | null>(null);
   const editorRef = useRef<Ace.Editor | null>(null);
 
@@ -156,87 +159,86 @@ export function FileEditor({ serviceId, path, canWrite, onDirtyChange, onSaved, 
     notification({ status: "success", title: "已重新加载" });
   };
 
+  const gotoError = () => {
+    if (!shownError) return;
+    editorRef.current?.gotoLine(shownError.line, Math.max(0, shownError.column - 1), true);
+    editorRef.current?.focus();
+  };
+
   const fileName = path.split("/").pop() || path;
+  const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
 
   return (
-    <div className="terminal-dark flex min-h-0 flex-1 flex-col">
-      {/* 头部 */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="-ml-1 rounded p-1 text-neutral-400 hover:bg-white/10 hover:text-neutral-200 md:hidden"
-          aria-label="返回文件列表"
-        >
-          <RiArrowLeftLine className="size-4" />
-        </button>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="truncate text-sm font-medium text-neutral-100" title={path}>
+    <div className="flex min-h-0 flex-1 flex-col bg-[var(--ws-bg)]">
+      {/* 标题栏 */}
+      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--ws-border)] bg-[var(--ws-panel)] pl-2 pr-2 md:pl-4">
+        <IconButton label="返回文件列表" onClick={onClose} className="md:hidden" icon={RiArrowLeftSLine} />
+        <RiFileCodeLine className="hidden size-4 shrink-0 text-[var(--ws-code)] md:block" />
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className="truncate text-sm font-medium text-[var(--ws-fg)]" title={`/${path}`}>
             {fileName}
           </span>
-          {dirty && <span className="size-2 shrink-0 rounded-full bg-yellow-400" title="未保存" />}
-          <span className="hidden truncate text-xs text-neutral-500 lg:inline">/{path}</span>
-          {lang && (
-            <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[11px] uppercase text-neutral-400">{lang}</span>
+          {dirty && (
+            <span className="size-1.5 shrink-0 translate-y-[-2px] rounded-full bg-[var(--ws-accent)]" title="未保存" />
           )}
-          {!canWrite && <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[11px] text-neutral-400">只读</span>}
+          {dir && <span className="hidden truncate text-xs text-[var(--ws-muted)] lg:inline">/{dir}</span>}
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            onClick={reload}
-            className="rounded p-1.5 text-neutral-400 hover:bg-white/10 hover:text-neutral-200"
-            title="重新加载"
-            aria-label="重新加载"
-          >
-            <RiRefreshLine className="size-4" />
-          </button>
+        <div className="flex shrink-0 items-center gap-0.5">
+          {!canWrite && (
+            <span className="mr-1 inline-flex items-center gap-1 rounded-md bg-[var(--ws-hover)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--ws-sub)]">
+              <RiLock2Line className="size-3" />
+              只读
+            </span>
+          )}
+          <IconButton label="从磁盘重新加载" onClick={reload} icon={RiRefreshLine} />
           {canWrite && (
             <>
-              <button
-                type="button"
-                disabled={!dirty}
+              <IconButton
+                label="撤销全部修改"
                 onClick={() => setValue(original)}
-                className="rounded p-1.5 text-neutral-400 hover:bg-white/10 hover:text-neutral-200 disabled:pointer-events-none disabled:opacity-30"
-                title="撤销全部修改"
-                aria-label="撤销全部修改"
-              >
-                <RiArrowGoBackLine className="size-4" />
-              </button>
-              <Button.Root size="xsmall" disabled={!dirty || saving} onClick={() => save()}>
-                <Button.Icon as={saving ? RiLoader4Line : RiSave3Line} className={saving ? "animate-spin" : ""} />
-                保存
-              </Button.Root>
+                disabled={!dirty}
+                icon={RiArrowGoBackLine}
+              />
+              <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                  <button
+                    type="button"
+                    disabled={!dirty || saving}
+                    onClick={() => save()}
+                    className="ml-1 inline-flex h-7 items-center gap-1.5 rounded-md bg-[var(--ws-accent)] px-2.5 text-xs font-medium text-[var(--ws-on-accent)] shadow-regular-xs transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
+                  >
+                    {saving ? <RiLoader4Line className="size-3.5 animate-spin" /> : <RiSave3Line className="size-3.5" />}
+                    保存
+                  </button>
+                </Tooltip.Trigger>
+                <Tooltip.Content>⌘ / Ctrl + S</Tooltip.Content>
+              </Tooltip.Root>
             </>
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="hidden rounded p-1.5 text-neutral-400 hover:bg-white/10 hover:text-neutral-200 md:block"
-            title="关闭"
-            aria-label="关闭文件"
-          >
-            <RiCloseLine className="size-4" />
-          </button>
+          <IconButton label="关闭" onClick={onClose} className="hidden md:flex" icon={RiCloseLine} />
         </div>
       </div>
 
       {/* 编辑区 */}
-      <div className="relative min-h-0 flex-1 bg-[#282c34]">
+      <div className="relative min-h-0 flex-1">
         {status.kind === "loading" && (
           <div className="flex h-full items-center justify-center">
-            <RiLoader4Line className="size-6 animate-spin text-neutral-500" />
+            <RiLoader4Line className="size-5 animate-spin text-[var(--ws-muted)]" />
           </div>
         )}
         {status.kind === "error" && (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-neutral-400">
-            <RiErrorWarningLine className="size-8 text-neutral-500" />
-            {status.message}
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <RiErrorWarningLine className="size-8 text-[var(--ws-muted)]" />
+            <div className="text-sm text-[var(--ws-sub)]">{status.message}</div>
+            <Button.Root size="xxsmall" variant="neutral" mode="stroke" onClick={load}>
+              重试
+            </Button.Root>
           </div>
         )}
         {status.kind === "ready" && lang && (
           <AceConfigEditor
             lang={lang}
+            theme={aceTheme}
             value={value}
             onChange={setValue}
             onSave={handleSaveShortcut}
@@ -245,54 +247,68 @@ export function FileEditor({ serviceId, path, canWrite, onDirtyChange, onSaved, 
             onLoad={(ed) => {
               editorRef.current = ed;
             }}
+            onCursorChange={(line, column) => setCursor({ line, column })}
           />
         )}
       </div>
 
+      {/* 冲突提示条 */}
+      {status.kind === "ready" && message?.kind === "conflict" && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--ws-border)] bg-error-lighter px-4 py-2 text-xs text-error-base">
+          <RiErrorWarningLine className="size-4 shrink-0" />
+          <span className="flex-1">文件已被其他程序（例如服务进程）修改，保存会覆盖对方的改动。</span>
+          <Button.Root size="xxsmall" variant="neutral" mode="stroke" onClick={load}>
+            放弃我的修改
+          </Button.Root>
+          <Button.Root size="xxsmall" variant="error" onClick={() => save(true)}>
+            仍然覆盖
+          </Button.Root>
+        </div>
+      )}
+
       {/* 状态栏 */}
-      <div className="flex min-h-8 shrink-0 items-center gap-2 border-t border-white/10 bg-[#0a0a0a] px-3 py-1 text-xs">
+      <StatusBar>
         {status.kind !== "ready" ? (
-          <span className="text-neutral-500">{status.kind === "loading" ? "加载中…" : ""}</span>
-        ) : message?.kind === "conflict" ? (
-          <span className="flex flex-wrap items-center gap-2 text-red-400">
-            <RiErrorWarningLine className="size-3.5" />
-            文件已被其他程序（如服务进程）修改
-            <button type="button" className="rounded bg-white/10 px-2 py-0.5 text-neutral-200 hover:bg-white/20" onClick={load}>
-              放弃我的修改并重新加载
-            </button>
-            <button type="button" className="rounded bg-white/10 px-2 py-0.5 text-neutral-200 hover:bg-white/20" onClick={() => save(true)}>
-              仍然覆盖
-            </button>
-          </span>
+          <span>{status.kind === "loading" ? "加载中…" : ""}</span>
         ) : shownError ? (
           <button
             type="button"
-            className="truncate text-left text-red-400 hover:underline"
-            onClick={() => {
-              editorRef.current?.gotoLine(shownError.line, Math.max(0, shownError.column - 1), true);
-              editorRef.current?.focus();
-            }}
+            className="flex min-w-0 items-center gap-1.5 text-error-base hover:underline"
+            onClick={gotoError}
           >
-            ✕ 第 {shownError.line} 行 第 {shownError.column} 列：{shownError.message}
+            <RiCloseCircleFill className="size-3.5 shrink-0" />
+            <span className="truncate">
+              第 {shownError.line} 行，第 {shownError.column} 列：
+              {shownError.message.replace(/\s+at line \d+, column \d+:?[\s\S]*$/, "")}
+            </span>
           </button>
         ) : message?.kind === "error" ? (
-          <span className="truncate text-red-400">✕ {message.text}</span>
+          <span className="flex min-w-0 items-center gap-1.5 text-error-base">
+            <RiCloseCircleFill className="size-3.5 shrink-0" />
+            <span className="truncate">{message.text}</span>
+          </span>
         ) : message?.kind === "saved" && !dirty ? (
-          <span className="flex items-center gap-1 text-green-400">
-            <RiCheckLine className="size-3.5" />
+          <span className="flex items-center gap-1.5 text-success-base">
+            <RiCheckboxCircleFill className="size-3.5" />
             已保存 {message.at.toLocaleTimeString("zh-CN", { hour12: false })}
           </span>
         ) : (
-          <span className="text-green-400/80">✓ 语法正确</span>
+          <span className="flex items-center gap-1.5">
+            <RiCheckboxCircleFill className="size-3.5 text-success-base" />
+            语法正确
+          </span>
         )}
         <span className="flex-1" />
         {status.kind === "ready" && (
-          <span className="hidden shrink-0 text-neutral-500 sm:inline">
-            {canWrite ? "⌘/Ctrl+S 保存 · ⌘/Ctrl+F 搜索 · " : ""}
-            {formatSize(new TextEncoder().encode(value).length)}
+          <span className="hidden shrink-0 items-center gap-3 tabular-nums sm:flex">
+            <span>
+              行 {cursor.line}，列 {cursor.column}
+            </span>
+            <span>{lang ? LANG_LABEL[lang] : ""}</span>
+            <span>{formatSize(new TextEncoder().encode(value).length)}</span>
           </span>
         )}
-      </div>
+      </StatusBar>
     </div>
   );
 }

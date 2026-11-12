@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { RiCheckLine, RiCloseLine, RiErrorWarningLine, RiLoader4Line } from "@remixicon/react";
+import { RiCheckboxCircleFill, RiCheckLine, RiCloseLine, RiErrorWarningFill, RiLoader4Line } from "@remixicon/react";
 import { api, type ApiError } from "@/lib/api";
 
 /** 单文件上限，与后端一致 */
@@ -128,59 +128,85 @@ function fmt(n: number) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-/** 文件树底部的上传进度列表 */
+/** 文件树底部的上传进度面板 */
 export function UploadQueue({ state }: { state: UploadsState }) {
   if (!state.items.length) return null;
-  const active = state.items.some((it) => it.status === "uploading" || it.status === "queued");
+  const active = state.items.filter((it) => it.status === "uploading" || it.status === "queued");
+  const done = state.items.filter((it) => it.status === "done").length;
+  const failed = state.items.filter((it) => it.status === "error").length;
+  const totalSize = state.items.reduce((n, it) => n + it.size, 0);
+  const totalLoaded = state.items.reduce((n, it) => n + (it.status === "done" ? it.size : it.loaded), 0);
+  const overall = totalSize ? Math.round((totalLoaded / totalSize) * 100) : 100;
+
   return (
-    <div className="max-h-40 shrink-0 overflow-auto border-t border-white/10 bg-[#111] px-2 py-1.5 text-[11px]">
-      <div className="mb-1 flex items-center justify-between px-1 text-neutral-500">
-        <span>上传</span>
-        {active ? (
-          <button type="button" className="hover:text-neutral-200" onClick={state.cancel}>
-            取消
-          </button>
+    <div className="shrink-0 border-t border-[var(--ws-border)] bg-[var(--ws-panel)]">
+      <div className="flex h-9 items-center gap-2 px-3 text-xs md:px-4">
+        {active.length ? (
+          <RiLoader4Line className="size-3.5 shrink-0 animate-spin text-[var(--ws-accent)]" />
+        ) : failed ? (
+          <RiErrorWarningFill className="size-3.5 shrink-0 text-error-base" />
         ) : (
-          <button type="button" className="hover:text-neutral-200" onClick={state.clear} aria-label="清除上传记录">
-            <RiCloseLine className="size-3.5" />
-          </button>
+          <RiCheckboxCircleFill className="size-3.5 shrink-0 text-success-base" />
         )}
+        <span className="font-medium text-[var(--ws-fg)]">
+          {active.length ? `正在上传 ${active.length} 个文件` : "上传完成"}
+        </span>
+        <span className="text-[var(--ws-muted)]">
+          {active.length ? `${overall}%` : `${done} 成功${failed ? ` · ${failed} 失败` : ""}`}
+        </span>
+        <span className="flex-1" />
+        <button
+          type="button"
+          className="rounded px-1.5 py-0.5 text-[var(--ws-muted)] transition-colors hover:bg-[var(--ws-hover)] hover:text-[var(--ws-fg)]"
+          onClick={active.length ? state.cancel : state.clear}
+        >
+          {active.length ? "取消" : "清除"}
+        </button>
       </div>
-      {state.items.map((it) => {
-        const pct = it.size ? Math.min(100, Math.round((it.loaded / it.size) * 100)) : 100;
-        return (
-          <div key={it.id} className="flex items-center gap-2 rounded px-1 py-0.5" title={`/${joinPath(it.dir, it.name)}`}>
-            <span className="flex size-3.5 shrink-0 items-center justify-center">
-              {it.status === "uploading" || it.status === "queued" ? (
-                <RiLoader4Line className={`size-3.5 text-neutral-500 ${it.status === "uploading" ? "animate-spin" : ""}`} />
-              ) : it.status === "done" ? (
-                <RiCheckLine className="size-3.5 text-green-400" />
-              ) : (
-                <RiErrorWarningLine className={`size-3.5 ${it.status === "skipped" ? "text-neutral-500" : "text-red-400"}`} />
-              )}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-neutral-300">{it.name}</span>
-            {it.status === "uploading" ? (
-              <span className="relative h-1 w-16 shrink-0 overflow-hidden rounded bg-white/10">
-                <span className="absolute inset-y-0 left-0 bg-primary-base" style={{ width: `${pct}%` }} />
-              </span>
-            ) : null}
-            <span
-              className={`shrink-0 tabular-nums ${
-                it.status === "error" ? "text-red-400" : it.status === "skipped" ? "text-neutral-500" : "text-neutral-500"
-              }`}
+      {active.length > 0 && (
+        <div className="mx-3 mb-1 h-0.5 overflow-hidden rounded-full bg-[var(--ws-hover)] md:mx-4">
+          <div className="h-full rounded-full bg-[var(--ws-accent)] transition-[width] duration-300" style={{ width: `${overall}%` }} />
+        </div>
+      )}
+      <ul className="max-h-32 overflow-auto pb-1.5">
+        {state.items.map((it) => {
+          const pct = it.size ? Math.min(100, Math.round((it.loaded / it.size) * 100)) : 100;
+          const failedItem = it.status === "error";
+          return (
+            <li
+              key={it.id}
+              className="flex h-6 items-center gap-2 px-3 text-xs md:px-4"
+              title={`/${joinPath(it.dir, it.name)}`}
             >
-              {it.status === "error" || it.status === "skipped"
-                ? it.error
-                : it.status === "uploading"
-                  ? `${pct}%`
-                  : it.status === "queued"
-                    ? "等待中"
-                    : fmt(it.size)}
-            </span>
-          </div>
-        );
-      })}
+              <span className="flex size-3.5 shrink-0 items-center justify-center">
+                {it.status === "uploading" ? (
+                  <RiLoader4Line className="size-3.5 animate-spin text-[var(--ws-accent)]" />
+                ) : it.status === "queued" ? (
+                  <span className="size-1.5 rounded-full bg-[var(--ws-muted)]" />
+                ) : it.status === "done" ? (
+                  <RiCheckLine className="size-3.5 text-success-base" />
+                ) : (
+                  <RiCloseLine className={`size-3.5 ${failedItem ? "text-error-base" : "text-[var(--ws-muted)]"}`} />
+                )}
+              </span>
+              <span className={`min-w-0 flex-1 truncate ${it.status === "skipped" ? "text-[var(--ws-muted)]" : "text-[var(--ws-sub)]"}`}>
+                {it.name}
+              </span>
+              <span
+                className={`shrink-0 tabular-nums ${failedItem ? "text-error-base" : "text-[var(--ws-muted)]"}`}
+              >
+                {failedItem || it.status === "skipped"
+                  ? it.error
+                  : it.status === "uploading"
+                    ? `${pct}%`
+                    : it.status === "queued"
+                      ? "等待中"
+                      : fmt(it.size)}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
