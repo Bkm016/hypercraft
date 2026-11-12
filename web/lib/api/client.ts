@@ -771,6 +771,20 @@ class ApiClient {
     document.body.removeChild(a);
   }
 
+  /** 读取服务文件为 Blob（Markdown 预览中嵌入的相对路径图片等小文件） */
+  async fetchServiceFileBlob(id: string, path: string): Promise<Blob> {
+    const url = `${getApiBaseUrl()}/services/${id}/files/download?path=${encodeURIComponent(path)}`;
+    let response = await fetch(url, { credentials: "include" });
+    if (response.status === 401) {
+      await this.refreshSession(true);
+      response = await fetch(url, { credentials: "include" });
+    }
+    if (!response.ok) {
+      throw { error: "DownloadFailed", message: `读取失败（HTTP ${response.status}）`, status: response.status } satisfies ApiError;
+    }
+    return response.blob();
+  }
+
   async deleteServiceFile(id: string, path: string): Promise<void> {
     return this.request<void>(`/services/${id}/files?path=${encodeURIComponent(path)}`, {
       method: "DELETE",

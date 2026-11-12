@@ -137,6 +137,15 @@ export function FilesPanel({ serviceId, hasCwd, canWrite }: FilesPanelProps) {
     setOpenPath(node.path);
   };
 
+  /** 按路径打开文件（Markdown 中的相对链接），并在文件树中展开所在目录 */
+  const openByPath = (path: string) => {
+    if (!path || path === openPath) return;
+    if (!confirmLeave()) return;
+    const parts = path.split("/");
+    for (let i = 1; i < parts.length; i++) tree.getItemInstance(toId(parts.slice(0, i).join("/")))?.expand();
+    setOpenPath(path);
+  };
+
   const tree = useTree<Node>({
     rootItemId: ROOT_ID,
     getItemName: (item) => item.getItemData()?.name ?? "",
@@ -520,6 +529,8 @@ export function FilesPanel({ serviceId, hasCwd, canWrite }: FilesPanelProps) {
             path={openPath}
             canWrite={canWrite}
             aceTheme={theme.ace}
+            themeDark={theme.dark}
+            onOpenPath={openByPath}
             onDirtyChange={setDirty}
             onSaved={() => refreshDirs([parentOf(openPath)])}
             onClose={() => {

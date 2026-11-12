@@ -10,6 +10,8 @@ import {
   RiCloseCircleFill,
   RiCloseLine,
   RiDownload2Line,
+  RiEdit2Line,
+  RiEyeLine,
   RiErrorWarningLine,
   RiFileCodeLine,
   RiFileWarningLine,
@@ -26,6 +28,15 @@ import { langOf, lintConfig, type LintError } from "./lint";
 import { modeForPath, modeLabel } from "./ace-modes";
 import { IconButton, StatusBar } from "./workspace-ui";
 
+const MarkdownPreview = dynamic(() => import("./markdown-preview"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center">
+      <RiLoader4Line className="size-5 animate-spin text-[var(--ws-muted)]" />
+    </div>
+  ),
+});
+
 const AceConfigEditor = dynamic(() => import("./ace-editor"), {
   ssr: false,
   loading: () => (
@@ -41,6 +52,10 @@ export interface FileEditorProps {
   canWrite: boolean;
   /** Ace 主题名 */
   aceTheme: string;
+  /** 工作区主题是否暗色；null 表示跟随界面（Markdown 预览 / 图表配色） */
+  themeDark: boolean | null;
+  /** 打开工作目录内的其他文件（Markdown 相对链接） */
+  onOpenPath?: (path: string) => void;
   onDirtyChange: (dirty: boolean) => void;
   onSaved?: () => void;
   onClose: () => void;
@@ -78,10 +93,23 @@ function formatSize(n: number) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange, onSaved, onClose }: FileEditorProps) {
+export function FileEditor({
+  serviceId,
+  path,
+  canWrite,
+  aceTheme,
+  themeDark,
+  onOpenPath,
+  onDirtyChange,
+  onSaved,
+  onClose,
+}: FileEditorProps) {
   // 语法校验只针对 YAML / JSON / TOML；其他文本照常打开编辑，只做高亮
   const lang = langOf(path);
-  const [mode, setMode] = useState("text");
+  const mode = modeForPath(path);
+  // Markdown 默认渲染预览，点「编辑」切到源码模式
+  const isMarkdown = mode === "markdown";
+  const [preview, setPreview] = useState(isMarkdown);
   const [encoding, setEncoding] = useState<TextEncoding>("utf-8");
   /** 十六进制只读视图（二进制文件） */
   const [hexView, setHexView] = useState(false);
@@ -94,14 +122,6 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
   const etagRef = useRef<string | null>(null);
   const editorRef = useRef<Ace.Editor | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    modeForPath(path).then((m) => alive && setMode(m));
-    return () => {
-      alive = false;
-    };
-  }, [path]);
 
   const load = useCallback(
     async (asHex = false) => {
@@ -199,6 +219,19 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
   saveRef.current = save;
   const handleSaveShortcut = useCallback(() => saveRef.current(), []);
 
+  // 预览模式下没有 Ace，单独处理 ⌘/Ctrl + S
+  useEffect(() => {
+    if (!(isMarkdown && preview)) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        saveRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isMarkdown, preview]);
+
   const reload = async () => {
     if (dirty && !window.confirm("将放弃当前未保存的修改，重新加载磁盘上的版本？")) return;
     await load(hexView);
@@ -235,6 +268,31 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
               <RiLock2Line className="size-3" />
               {hexView ? "十六进制 · 只读" : "只读"}
             </span>
+          )}
+          {isMarkdown && !hexView && status.kind === "ready" && (
+            <div className="mr-1 flex items-center rounded-md bg-[var(--ws-hover)] p-0.5 text-xs font-medium">
+              {(
+                [
+                  [true, "预览", RiEyeLine],
+                  [false, writable ? "编辑" : "源码", RiEdit2Line],
+                ] as const
+              ).map(([v, label, Icon]) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-pressed={preview === v}
+                  onClick={() => setPreview(v)}
+                  className={`inline-flex h-6 items-center gap-1 rounded-[5px] px-2 transition-colors ${
+                    preview === v
+                      ? "bg-[var(--ws-bg)] text-[var(--ws-fg)] shadow-regular-xs"
+                      : "text-[var(--ws-muted)] hover:text-[var(--ws-fg)]"
+                  }`}
+                >
+                  <Icon className="size-3.5" />
+                  {label}
+                </button>
+              ))}
+            </div>
           )}
           <IconButton label="从磁盘重新加载" onClick={reload} icon={RiRefreshLine} />
           <IconButton
@@ -315,7 +373,16 @@ export function FileEditor({ serviceId, path, canWrite, aceTheme, onDirtyChange,
             </div>
           </div>
         )}
-        {status.kind === "ready" && (
+        {status.kind === "ready" && isMarkdown && preview && !hexView && (
+          <MarkdownPreview
+            serviceId={serviceId}
+            path={path}
+            content={value}
+            dark={themeDark}
+            onOpenPath={onOpenPath}
+          />
+        )}
+        {status.kind === "ready" && !(isMarkdown && preview && !hexView) && (
           <AceConfigEditor
             mode={hexView ? "text" : mode}
             wrap={!hexView && WRAP_EXTS.test(path)}
